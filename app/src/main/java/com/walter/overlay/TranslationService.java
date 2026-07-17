@@ -30,7 +30,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private static final String TAG = "DeepalTranslate";
     private static final int NOTIFICATION_ID = 1001;
     private static final String CHANNEL_ID = "translation_channel";
-    private static final long DEBOUNCE_MS = 800;
+    private static final long DEBOUNCE_MS = 350;
 
     private OverlayView statusView;
     private InlineOverlayManager inlineManager;
@@ -155,17 +155,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             }
         }
 
-        if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-            mainHandler.post(() -> {
-                if (inlineManager != null) inlineManager.clearAll();
-            });
-        }
-
-        // Debounced scan
+        // Debounced scan — no clearAll on scroll, positions update in-place
         long now = System.currentTimeMillis();
         if (now - lastScanTime < DEBOUNCE_MS) return;
         lastScanTime = now;
-        mainHandler.postDelayed(this::scanWindow, 100);
+        mainHandler.post(this::scanWindow);
     }
 
     private void scanWindow() {
