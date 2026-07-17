@@ -128,19 +128,39 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
 
-        long now = System.currentTimeMillis();
-        if (now - lastScanTime < DEBOUNCE_MS) return;
-
         int type = event.getEventType();
 
+        // On window change: check if we left the target app
+        if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            CharSequence pkg = event.getPackageName();
+            if (pkg != null) {
+                String packageName = pkg.toString();
+                SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+                boolean scanAll = prefs.getBoolean("scan_all", true);
+                boolean isTarget = scanAll ||
+                    packageName.contains("deepal") ||
+                    packageName.contains("changan") ||
+                    packageName.contains("cn.app");
+
+                if (!isTarget) {
+                    // Left target app — clear all overlays
+                    mainHandler.post(() -> {
+                        if (inlineManager != null) inlineManager.clearAll();
+                    });
+                    return;
+                }
+            }
+        }
+
         if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-            // On scroll: clear stale overlays immediately, scan will recreate
             mainHandler.post(() -> {
                 if (inlineManager != null) inlineManager.clearAll();
             });
         }
 
         // Debounced scan
+        long now = System.currentTimeMillis();
+        if (now - lastScanTime < DEBOUNCE_MS) return;
         lastScanTime = now;
         mainHandler.postDelayed(this::scanWindow, 100);
     }
@@ -239,8 +259,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         node.getBoundsInScreen(bounds);
         int height = bounds.height();
         float density = getResources().getDisplayMetrics().density;
+        // Height in dp, font size is roughly 80% of view height for single-line text
         float heightDp = height / density;
-        return Math.max(10, Math.min(heightDp / 1.3f, 28));
+        return Math.max(12, Math.min(heightDp * 0.85f, 30));
     }
 
     private void translateBatch(List<TextNodeInfo> nodes) {
