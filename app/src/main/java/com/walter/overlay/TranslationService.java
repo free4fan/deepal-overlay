@@ -292,12 +292,14 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         CharSequence text = node.getText();
         if (text != null && text.length() > 0) {
             String s = text.toString().trim();
-            if (hasChinese(s) && s.length() <= 200) {
+            // Strip HTML tags before checking
+            String clean = s.replaceAll("<[^>]+>", "").trim();
+            if (isTranslatable(clean)) {
                 Rect bounds = new Rect();
                 node.getBoundsInScreen(bounds);
                 float textSize = estimateTextSize(node);
                 int bgColor = detectBackgroundColor(node);
-                result.add(new TextNodeInfo(s, bounds, textSize, bgColor));
+                result.add(new TextNodeInfo(clean, bounds, textSize, bgColor));
             }
         }
 
@@ -308,6 +310,26 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 collectChineseNodes(child, result, depth + 1);
             }
         }
+    }
+
+    private boolean isTranslatable(String text) {
+        if (text == null || text.length() < 2 || text.length() > 200) return false;
+        // Skip text with HTML-like content
+        if (text.contains("<") || text.contains(">")) return false;
+        // Count Chinese characters
+        int chineseCount = 0;
+        int totalNonSpace = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (!Character.isWhitespace(c)) totalNonSpace++;
+            if ((c >= 0x4E00 && c <= 0x9FFF) ||
+                (c >= 0x3400 && c <= 0x4DBF) ||
+                (c >= 0xF900 && c <= 0xFAFF)) {
+                chineseCount++;
+            }
+        }
+        // At least 30% of non-space chars must be Chinese
+        return totalNonSpace > 0 && (chineseCount * 100 / totalNonSpace) >= 30;
     }
 
     private int detectBackgroundColor(AccessibilityNodeInfo node) {
@@ -389,19 +411,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             translating = false;
             updateNotification(translateCount + " translated (cache: " + translationCache.size() + ")");
         }).start();
-    }
-
-    private boolean hasChinese(String text) {
-        if (text == null || text.length() == 0) return false;
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if ((c >= 0x4E00 && c <= 0x9FFF) ||
-                (c >= 0x3400 && c <= 0x4DBF) ||
-                (c >= 0xF900 && c <= 0xFAFF)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private String translateText(String text, String langCode) throws IOException {
