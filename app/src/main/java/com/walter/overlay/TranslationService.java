@@ -25,6 +25,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import org.json.JSONObject;
+import org.json.JSONException;
 
 public class TranslationService extends android.accessibilityservice.AccessibilityService {
     private static final String TAG = "DeepalTranslate";
@@ -41,7 +44,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private long lastScanTime = 0;
     private String lastWindowPackage = "";
     private boolean translating = false;
-    private final Map<String, String> translationCache = new HashMap<>();
+    private final Map<String, String> translationCache = new ConcurrentHashMap<>();
+    private Map<String, String> dictEn = new HashMap<>();
+    private Map<String, String> dictRu = new HashMap<>();
+    private boolean dictLoaded = false;
 
     @Override
     public void onServiceConnected() {
@@ -73,6 +79,42 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
         inlineManager = new InlineOverlayManager(this);
         setupStatusOverlay();
+        loadDictionary();
+    }
+
+    private void loadDictionary() {
+        new Thread(() -> {
+            try {
+                dictEn = loadDictFromAssets("dict_zh_en.json");
+                dictRu = loadDictFromAssets("dict_zh_ru.json");
+                dictLoaded = true;
+                Log.i(TAG, "Dictionary loaded: EN=" + dictEn.size() + " RU=" + dictRu.size());
+                updateNotification("Dict loaded: " + dictEn.size() + " entries");
+            } catch (Exception e) {
+                Log.e(TAG, "Dictionary load failed: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private Map<String, String> loadDictFromAssets(String filename) throws IOException {
+        Map<String, String> dict = new HashMap<>();
+        try {
+            InputStream is = getAssets().open(filename);
+            BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = r.readLine()) != null) sb.append(line);
+            r.close();
+            JSONObject json = new JSONObject(sb.toString());
+            java.util.Iterator<String> keys = json.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                dict.put(key, json.getString(key));
+            }
+        } catch (JSONException e) {
+            throw new IOException("JSON parse error: " + e.getMessage());
+        }
+        return dict;
     }
 
     private int getStatusBarHeight() {
@@ -196,15 +238,19 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             return;
         }
 
-        // Show cached translations immediately
+        int targetLang = prefs.getInt("target_lang", 0);
+        final Map<String, String> dict = (targetLang == 0) ? dictEn : dictRu;
+
+        // Lookup in dictionary first — instant, no API needed
         final Set<String> currentTexts = new HashSet<>();
         final List<TextNodeInfo> toTranslate = new ArrayList<>();
 
         for (TextNodeInfo node : chineseNodes) {
-            String cached = translationCache.get(node.text);
-            String display = cached != null ? cached : node.text;
+            String dictResult = dictLoaded ? dict.get(node.text) : null;
+            if (dictResult == null) dictResult = translationCache.get(node.text);
+            String display = dictResult != null ? dictResult : node.text;
             currentTexts.add(display);
-            if (cached == null) {
+            if (dictResult == null) {
                 toTranslate.add(node);
             }
         }
@@ -213,8 +259,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         mainHandler.post(() -> {
             inlineManager.removeNotIn(currentTexts);
             for (TextNodeInfo node : nodesToShow) {
-                String cached = translationCache.get(node.text);
-                String display = cached != null ? cached : node.text;
+                String dictResult = dictLoaded ? dict.get(node.text) : null;
+                if (dictResult == null) dictResult = translationCache.get(node.text);
+                String display = dictResult != null ? dictResult : node.text;
                 inlineManager.showTranslation(
                     node.bounds.left, node.bounds.top,
                     node.bounds.width(), node.bounds.height(),

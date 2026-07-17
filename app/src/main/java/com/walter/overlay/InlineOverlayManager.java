@@ -67,13 +67,14 @@ public class InlineOverlayManager {
 
         TextView tv = new TextView(context);
         tv.setText(translatedText);
-        tv.setTextColor(Color.BLACK);
-        tv.setBackgroundColor(Color.WHITE);
-        tv.setTypeface(Typeface.DEFAULT);
+        tv.setTextColor(Color.WHITE);
+        tv.setBackgroundColor(0xCC222222);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         tv.setSingleLine(true);
         tv.setEllipsize(TextUtils.TruncateAt.END);
         tv.setIncludeFontPadding(false);
+        tv.setShadowLayer(3f, 1f, 1f, 0xFF000000);
 
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize);
 
