@@ -48,6 +48,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private Map<String, String> dictEn = new HashMap<>();
     private Map<String, String> dictRu = new HashMap<>();
     private boolean dictLoaded = false;
+    private int lastTargetLang = -1;
 
     @Override
     public void onServiceConnected() {
@@ -239,6 +240,12 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
 
         int targetLang = prefs.getInt("target_lang", 0);
+        // Clear cache when language changes
+        if (targetLang != lastTargetLang) {
+            lastTargetLang = targetLang;
+            translationCache.clear();
+            mainHandler.post(() -> inlineManager.clearAll());
+        }
         final Map<String, String> dict = (targetLang == 0) ? dictEn : dictRu;
 
         // Lookup in dictionary first — instant, no API needed
