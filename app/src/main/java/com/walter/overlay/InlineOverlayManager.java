@@ -9,8 +9,12 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.TextView;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class InlineOverlayManager {
     private final Context context;
@@ -29,40 +33,22 @@ public class InlineOverlayManager {
         activeViews.clear();
     }
 
-    private String makeKey(int left, int top, int w, int h) {
-        return left + "," + top + "," + w + "," + h;
-    }
-
     public void showTranslation(int left, int top, int width, int height, 
                                  String translatedText, float origTextSize) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
-        String key = makeKey(left, top, width, height);
-
-        // If already showing same text at same position, skip
-        TextView existing = activeViews.get(key);
+        TextView existing = activeViews.get(translatedText);
         if (existing != null) {
-            CharSequence cur = existing.getText();
-            if (cur != null && cur.toString().equals(translatedText)) {
-                return; // no change
+            // Update position if it moved
+            WindowManager.LayoutParams lp = (WindowManager.LayoutParams) existing.getLayoutParams();
+            if (lp.x != left || lp.y != top) {
+                lp.x = left;
+                lp.y = top;
+                lp.width = Math.max(width, 40);
+                lp.height = Math.max(height, 20);
+                try { windowManager.updateViewLayout(existing, lp); } catch (Exception ignored) {}
             }
-            // Update text in-place (no remove/add)
-            existing.setText(translatedText);
             return;
-        }
-
-        // Remove any old view that overlaps significantly
-        for (Map.Entry<String, TextView> entry : new HashMap<>(activeViews).entrySet()) {
-            String[] parts = entry.getKey().split(",");
-            int oldL = Integer.parseInt(parts[0]);
-            int oldT = Integer.parseInt(parts[1]);
-            int oldW = Integer.parseInt(parts[2]);
-            int oldH = Integer.parseInt(parts[3]);
-            // Check overlap
-            if (left < oldL + oldW && left + width > oldL && top < oldT + oldH && top + height > oldT) {
-                try { windowManager.removeViewImmediate(entry.getValue()); } catch (Exception ignored) {}
-                activeViews.remove(entry.getKey());
-            }
         }
 
         TextView tv = new TextView(context);
@@ -101,20 +87,23 @@ public class InlineOverlayManager {
 
         try {
             windowManager.addView(tv, params);
-            activeViews.put(key, tv);
+            activeViews.put(translatedText, tv);
         } catch (Exception e) {
             // ignore
         }
     }
 
-    public void removeStale(int screenW, int screenH) {
-        for (Map.Entry<String, TextView> entry : new HashMap<>(activeViews).entrySet()) {
-            String[] parts = entry.getKey().split(",");
-            int top = Integer.parseInt(parts[1]);
-            // Remove if way off screen
-            if (top > screenH + 200 || top < -200) {
-                try { windowManager.removeViewImmediate(entry.getValue()); } catch (Exception ignored) {}
-                activeViews.remove(entry.getKey());
+    public void removeNotIn(Set<String> currentTexts) {
+        List<String> toRemove = new ArrayList<>();
+        for (String key : activeViews.keySet()) {
+            if (!currentTexts.contains(key)) {
+                toRemove.add(key);
+            }
+        }
+        for (String key : toRemove) {
+            TextView v = activeViews.remove(key);
+            if (v != null) {
+                try { windowManager.removeViewImmediate(v); } catch (Exception ignored) {}
             }
         }
     }

@@ -20,7 +20,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -155,9 +157,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             return;
         }
 
-        // Package changed — clear old overlays
+        // Package changed — clear all overlays
         if (!packageName.equals(lastPackage)) {
             lastPackage = packageName;
+            translationCache.clear();
             mainHandler.post(() -> inlineManager.clearAll());
         }
 
@@ -174,9 +177,15 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             return;
         }
 
-        // Show text — use cache if available
+        // Show text — use cache if available, remove stale overlays
         final List<TextNodeInfo> nodesToDisplay = new ArrayList<>(chineseNodes);
+        final Set<String> currentTexts = new HashSet<>();
+        for (TextNodeInfo n : nodesToDisplay) {
+            String cached = translationCache.get(n.text);
+            currentTexts.add(cached != null ? cached : n.text);
+        }
         mainHandler.post(() -> {
+            inlineManager.removeNotIn(currentTexts);
             for (TextNodeInfo node : nodesToDisplay) {
                 String cached = translationCache.get(node.text);
                 String display = cached != null ? cached : node.text;
@@ -369,16 +378,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null) return;
-        int type = event.getEventType();
-        // On scroll or content change: clear overlays immediately, next scan will recreate
-        if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
-            type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
-            type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            mainHandler.post(() -> {
-                if (inlineManager != null) inlineManager.clearAll();
-            });
-        }
+        // Don't clear overlays here — causes flicker.
+        // Stale overlays are handled during scanWindow.
     }
 
     @Override
