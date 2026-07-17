@@ -165,6 +165,27 @@ public class MainActivity extends AppCompatActivity {
             ok.setTextColor(0xFF4CAF50);
             ok.setPadding(0, 12, 0, 8);
             root.addView(ok);
+
+            // Open Deepal button
+            Button openDeepalBtn = new Button(this);
+            openDeepalBtn.setText("Open Deepal (深蓝汽车)");
+            openDeepalBtn.setBackgroundColor(0xFF1C58F6);
+            openDeepalBtn.setTextColor(0xFFFFFFFF);
+            openDeepalBtn.setTextSize(15f);
+            openDeepalBtn.setPadding(0, 12, 0, 12);
+            openDeepalBtn.setOnClickListener(v -> {
+                try {
+                    Intent launch = getPackageManager().getLaunchIntentForPackage("deepal.com.cn.app");
+                    if (launch != null) {
+                        startActivity(launch);
+                    } else {
+                        Toast.makeText(this, "Deepal app not installed", Toast.LENGTH_SHORT).show();
+                    }
+                } catch (Exception e) {
+                    Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
+            root.addView(openDeepalBtn);
         }
 
         // Separator

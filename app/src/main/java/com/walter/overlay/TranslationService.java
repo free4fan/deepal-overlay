@@ -49,6 +49,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private Map<String, String> dictRu = new HashMap<>();
     private boolean dictLoaded = false;
     private int lastTargetLang = -1;
+    private boolean translationEnabled = true;
+    private android.widget.TextView toggleButton;
+    private android.view.WindowManager toggleWm;
 
     @Override
     public void onServiceConnected() {
@@ -80,6 +83,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
         inlineManager = new InlineOverlayManager(this);
         setupStatusOverlay();
+        setupToggleButton();
         loadDictionary();
     }
 
@@ -151,6 +155,58 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
     }
 
+    private void setupToggleButton() {
+        try {
+            toggleWm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+            android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+            toggleWm.getDefaultDisplay().getMetrics(dm);
+
+            toggleButton = new android.widget.TextView(this);
+            updateToggleButtonAppearance();
+
+            int size = (int)(48 * dm.density);
+            android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
+                size, size,
+                android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                android.graphics.PixelFormat.TRANSLUCENT);
+            params.gravity = android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL;
+            params.x = (int)(10 * dm.density);
+
+            toggleButton.setOnClickListener(v -> {
+                translationEnabled = !translationEnabled;
+                updateToggleButtonAppearance();
+                if (!translationEnabled) {
+                    mainHandler.post(() -> {
+                        if (inlineManager != null) inlineManager.clearAll();
+                    });
+                    updateNotification("Translation OFF");
+                } else {
+                    updateNotification("Translation ON");
+                }
+            });
+
+            toggleWm.addView(toggleButton, params);
+        } catch (Exception e) {
+            Log.e(TAG, "Toggle button failed: " + e.getMessage());
+        }
+    }
+
+    private void updateToggleButtonAppearance() {
+        if (toggleButton == null) return;
+        if (translationEnabled) {
+            toggleButton.setText("T");
+            toggleButton.setTextSize(16);
+            toggleButton.setTextColor(0xFFFFFFFF);
+            toggleButton.setBackgroundColor(0xCC4CAF50);
+        } else {
+            toggleButton.setText("T");
+            toggleButton.setTextSize(16);
+            toggleButton.setTextColor(0xFFFFFFFF);
+            toggleButton.setBackgroundColor(0xCC999999);
+        }
+    }
+
     private void updateNotification(String text) {
         if (notificationManager == null) return;
         Intent intent = new Intent(this, MainActivity.class);
@@ -170,7 +226,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null) return;
+        if (event == null || !translationEnabled) return;
 
         int type = event.getEventType();
 
@@ -508,6 +564,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
                     wm.removeViewImmediate(statusView);
                 } catch (Exception ignored) {}
+            }
+            if (toggleButton != null && toggleWm != null) {
+                try { toggleWm.removeViewImmediate(toggleButton); } catch (Exception ignored) {}
             }
         });
     }
