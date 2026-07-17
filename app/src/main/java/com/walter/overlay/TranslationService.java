@@ -39,6 +39,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private int translateCount = 0;
     private String lastPackage = "";
     private long lastScanTime = 0;
+    private String lastWindowPackage = "";
     private boolean translating = false;
     private final Map<String, String> translationCache = new HashMap<>();
 
@@ -130,24 +131,26 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
         int type = event.getEventType();
 
-        // On window change: check if we left the target app
+        // Detect leaving target app — only clear when package actually changes
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             CharSequence pkg = event.getPackageName();
             if (pkg != null) {
                 String packageName = pkg.toString();
-                SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
-                boolean scanAll = prefs.getBoolean("scan_all", true);
-                boolean isTarget = scanAll ||
-                    packageName.contains("deepal") ||
-                    packageName.contains("changan") ||
-                    packageName.contains("cn.app");
+                if (!packageName.equals(lastWindowPackage)) {
+                    lastWindowPackage = packageName;
+                    SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+                    boolean scanAll = prefs.getBoolean("scan_all", true);
+                    boolean isTarget = scanAll ||
+                        packageName.contains("deepal") ||
+                        packageName.contains("changan") ||
+                        packageName.contains("cn.app");
 
-                if (!isTarget) {
-                    // Left target app — clear all overlays
-                    mainHandler.post(() -> {
-                        if (inlineManager != null) inlineManager.clearAll();
-                    });
-                    return;
+                    if (!isTarget) {
+                        mainHandler.post(() -> {
+                            if (inlineManager != null) inlineManager.clearAll();
+                        });
+                        return;
+                    }
                 }
             }
         }
@@ -259,9 +262,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         node.getBoundsInScreen(bounds);
         int height = bounds.height();
         float density = getResources().getDisplayMetrics().density;
-        // Height in dp, font size is roughly 80% of view height for single-line text
         float heightDp = height / density;
-        return Math.max(12, Math.min(heightDp * 0.85f, 30));
+        return Math.max(10, Math.min(heightDp * 0.65f, 26));
     }
 
     private void translateBatch(List<TextNodeInfo> nodes) {
