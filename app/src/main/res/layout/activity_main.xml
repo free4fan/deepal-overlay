@@ -187,23 +187,43 @@
                     android:textColor="?attr/colorOnSurface"
                     android:layout_marginBottom="12dp" />
 
-                <!-- Language dropdown -->
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/langDropdownLayout"
+                <!-- Language toggle -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Translation language"
+                    android:textAppearance="?attr/textAppearanceBodyLarge"
+                    android:textColor="?attr/colorOnSurface"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/langToggle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Translation language"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                    android:layout_marginBottom="12dp">
+                    app:singleSelection="true"
+                    app:selectionRequired="true"
+                    app:layout_constraintWidth_percent="1.0"
+                    android:layout_marginBottom="16dp">
 
-                    <AutoCompleteTextView
-                        android:id="@+id/langDropdown"
-                        android:layout_width="match_parent"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/langEn"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:inputType="none"
-                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+                        android:text="English"
+                        android:textAllCaps="false"
+                        style="?attr/materialButtonOutlinedStyle"
+                        android:layout_weight="1" />
 
-                </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/langRu"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text="Русский"
+                        android:textAllCaps="false"
+                        style="?attr/materialButtonOutlinedStyle"
+                        android:layout_weight="1" />
+
+                </com.google.android.material.button.MaterialButtonToggleGroup>
 
                 <!-- Scan all switch -->
                 <LinearLayout

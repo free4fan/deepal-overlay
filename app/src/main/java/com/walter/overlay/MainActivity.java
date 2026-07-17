@@ -13,8 +13,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowCompat;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.materialswitch.MaterialSwitch;
-import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.card.MaterialCardView;
 
 public class MainActivity extends AppCompatActivity {
@@ -32,9 +32,10 @@ public class MainActivity extends AppCompatActivity {
         MaterialButton openDeepalBtn = findViewById(R.id.openDeepalBtn);
         MaterialButton testOverlayBtn = findViewById(R.id.testOverlayBtn);
         MaterialCardView actionsCard = findViewById(R.id.actionsCard);
-        TextInputLayout langDropdownLayout = findViewById(R.id.langDropdownLayout);
-        AutoCompleteTextView langDropdown = findViewById(R.id.langDropdown);
         MaterialSwitch scanAllSwitch = findViewById(R.id.scanAllSwitch);
+        MaterialButtonToggleGroup langToggle = findViewById(R.id.langToggle);
+        MaterialButton langEn = findViewById(R.id.langEn);
+        MaterialButton langRu = findViewById(R.id.langRu);
 
         android.content.SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
 
@@ -149,16 +150,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Settings
-        String[] languages = {"English", "Русский"};
-        ArrayAdapter<String> langAdapter = new ArrayAdapter<>(this,
-            android.R.layout.simple_dropdown_item_1line, languages);
-        langDropdown.setAdapter(langAdapter);
-        langDropdown.setText(prefs.getInt("target_lang", 0) == 0 ? "English" : "Русский", false);
+        if (prefs.getInt("target_lang", 0) == 0) {
+            langToggle.check(R.id.langEn);
+        } else {
+            langToggle.check(R.id.langRu);
+        }
 
         scanAllSwitch.setChecked(prefs.getBoolean("scan_all", true));
 
         applyBtn.setOnClickListener(v -> {
-            int langPos = langDropdown.getText().toString().equals("Русский") ? 1 : 0;
+            int langPos = langToggle.getCheckedButtonId() == R.id.langRu ? 1 : 0;
             prefs.edit()
                 .putInt("target_lang", langPos)
                 .putBoolean("scan_all", scanAllSwitch.isChecked())
