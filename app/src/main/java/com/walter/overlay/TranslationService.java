@@ -40,6 +40,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private int translateCount = 0;
     private String lastPackage = "";
     private int statusBarHeight = 0;
+    private final java.util.Map<String, String> translationCache = new java.util.HashMap<>();
+    private volatile boolean translating = false;
 
     @Override
     public void onServiceConnected() {
@@ -172,24 +174,38 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             return;
         }
 
-        // Show Chinese text immediately (before translation)
+        // Show text — use cache if available
         final List<TextNodeInfo> nodesToDisplay = new ArrayList<>(chineseNodes);
         mainHandler.post(() -> {
             for (TextNodeInfo node : nodesToDisplay) {
+                String cached = translationCache.get(node.text);
+                String display = cached != null ? cached : node.text;
                 inlineManager.showTranslation(
                     node.bounds.left, node.bounds.top,
                     node.bounds.width(), node.bounds.height(),
-                    node.text, node.estimatedTextSize);
+                    display, node.estimatedTextSize);
             }
         });
 
-        updateNotification("Translating " + chineseNodes.size() + " texts...");
-        if (statusView != null) {
-            mainHandler.post(() -> statusView.setText("Found " + chineseNodes.size() + " CN texts"));
+        // Find texts that need translation
+        List<TextNodeInfo> needTranslation = new ArrayList<>();
+        for (TextNodeInfo node : chineseNodes) {
+            if (!translationCache.containsKey(node.text)) {
+                needTranslation.add(node);
+            }
         }
 
-        // Translate in background
-        translateBatch(chineseNodes);
+        if (needTranslation.isEmpty()) {
+            updateNotification(chineseNodes.size() + " texts (all cached)");
+            return;
+        }
+
+        updateNotification("Translating " + needTranslation.size() + " new texts...");
+        if (statusView != null) {
+            mainHandler.post(() -> statusView.setText("Translating " + needTranslation.size() + "..."));
+        }
+
+        translateBatch(needTranslation);
     }
 
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result) {
@@ -225,6 +241,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     }
 
     private void translateBatch(List<TextNodeInfo> nodes) {
+        if (translating) return;
+        translating = true;
+
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         int targetLang = prefs.getInt("target_lang", 0);
         final String langCode = (targetLang == 0) ? "en" : "ru";
@@ -234,9 +253,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 try {
                     String result = translateText(node.text, langCode);
                     node.translated = result;
+                    translationCache.put(node.text, result);
                     translateCount++;
                     
-                    // Update overlay immediately for this node
                     final String translated = result;
                     final int l = node.bounds.left;
                     final int t = node.bounds.top;
@@ -252,12 +271,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 }
             }
             
+            translating = false;
             mainHandler.post(() -> {
                 if (statusView != null) {
-                    statusView.setText("Translated " + nodes.size() + " texts");
+                    statusView.setText("Done: " + translateCount + " translated");
                 }
             });
-            updateNotification(nodes.size() + " texts translated (#" + translateCount + ")");
+            updateNotification(translateCount + " translated (cache: " + translationCache.size() + ")");
         }).start();
     }
 
@@ -349,6 +369,16 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null) return;
+        int type = event.getEventType();
+        // On scroll or content change: clear overlays immediately, next scan will recreate
+        if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
+            type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+            type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            mainHandler.post(() -> {
+                if (inlineManager != null) inlineManager.clearAll();
+            });
+        }
     }
 
     @Override
