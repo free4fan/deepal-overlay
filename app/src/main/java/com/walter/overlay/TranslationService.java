@@ -311,60 +311,37 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     }
 
     private int detectBackgroundColor(AccessibilityNodeInfo node) {
-        // Walk up parent tree to find background hints
-        AccessibilityNodeInfo parent = node.getParent();
-        while (parent != null) {
-            String viewId = parent.getViewIdResourceName();
-            if (viewId != null) {
-                String id = viewId.toLowerCase();
-                // Dark backgrounds: toolbars, headers, status bars, nav bars
-                if (id.contains("toolbar") || id.contains("action_bar") ||
-                    id.contains("header") || id.contains("status_bar") ||
-                    id.contains("appbar") || id.contains("nav_bar") ||
-                    id.contains("title_bar") || id.contains("top_bar")) {
-                    return 0xFF202020; // dark
-                }
-                // Car control area - usually dark
-                if (id.contains("carcontrol") || id.contains("vehicle")) {
-                    return 0xFF1A1A2E; // dark blue-black
-                }
-            }
-            // Check class name for common patterns
-            CharSequence className = parent.getClassName();
-            if (className != null) {
-                String cn = className.toString();
-                if (cn.contains("Toolbar") || cn.contains("AppBar") ||
-                    cn.contains("StatusBar") || cn.contains("NavigationBar")) {
-                    return 0xFF202020;
-                }
-            }
-            // Check content description for hints
-            CharSequence desc = parent.getContentDescription();
-            if (desc != null) {
-                String d = desc.toString().toLowerCase();
-                if (d.contains("toolbar") || d.contains("header") || d.contains("导航")) {
-                    return 0xFF202020;
-                }
-            }
-            parent = parent.getParent();
-        }
-
-        // Position-based fallback
         Rect bounds = new Rect();
         node.getBoundsInScreen(bounds);
         float density = getResources().getDisplayMetrics().density;
 
-        // Near status bar (< 80dp from top) → likely dark header area
+        // Only check nearest 3 parents
+        AccessibilityNodeInfo parent = node.getParent();
+        int levels = 0;
+        while (parent != null && levels < 3) {
+            String viewId = parent.getViewIdResourceName();
+            if (viewId != null) {
+                String id = viewId.toLowerCase();
+                if (id.contains("toolbar") || id.contains("appbar")) {
+                    return 0xFF202020;
+                }
+            }
+            CharSequence className = parent.getClassName();
+            if (className != null) {
+                String cn = className.toString();
+                if (cn.endsWith("Toolbar") || cn.endsWith("AppBarLayout")) {
+                    return 0xFF202020;
+                }
+            }
+            parent = parent.getParent();
+            levels++;
+        }
+
+        // Top 80dp — likely in header/toolbar zone
         if (bounds.top < 80 * density) {
             return 0xFF202020;
         }
-        // Near bottom nav bar (< 60dp from bottom) → likely white/light nav
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        if (bounds.bottom > screenHeight - 60 * density) {
-            return 0xFFFFFFFF;
-        }
 
-        // Default: white content background
         return 0xFFFFFFFF;
     }
 
