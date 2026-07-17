@@ -242,14 +242,14 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         final Map<String, String> dict = (targetLang == 0) ? dictEn : dictRu;
 
         // Lookup in dictionary first — instant, no API needed
-        final Set<String> currentTexts = new HashSet<>();
+        final Set<String> currentPositions = new HashSet<>();
         final List<TextNodeInfo> toTranslate = new ArrayList<>();
 
         for (TextNodeInfo node : chineseNodes) {
             String dictResult = dictLoaded ? dict.get(node.text) : null;
             if (dictResult == null) dictResult = translationCache.get(node.text);
             String display = dictResult != null ? dictResult : node.text;
-            currentTexts.add(display);
+            currentPositions.add(node.bounds.left + "," + node.bounds.top);
             if (dictResult == null) {
                 toTranslate.add(node);
             }
@@ -257,7 +257,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
         final List<TextNodeInfo> nodesToShow = new ArrayList<>(chineseNodes);
         mainHandler.post(() -> {
-            inlineManager.removeNotIn(currentTexts);
+            inlineManager.removeNotIn(currentPositions);
             for (TextNodeInfo node : nodesToShow) {
                 String dictResult = dictLoaded ? dict.get(node.text) : null;
                 if (dictResult == null) dictResult = translationCache.get(node.text);

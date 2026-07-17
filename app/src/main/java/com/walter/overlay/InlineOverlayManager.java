@@ -21,10 +21,13 @@ public class InlineOverlayManager {
     private final Context context;
     private final WindowManager windowManager;
     private final Map<String, TextView> activeViews = new HashMap<>();
+    private int statusBarHeight = 0;
 
     public InlineOverlayManager(Context context) {
         this.context = context;
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+        int resourceId = context.getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) statusBarHeight = context.getResources().getDimensionPixelSize(resourceId);
     }
 
     public void clearAll() {
@@ -34,28 +37,36 @@ public class InlineOverlayManager {
         activeViews.clear();
     }
 
-    public void showTranslation(int left, int top, int width, int height, 
+    public void showTranslation(int left, int top, int width, int height,
                                  String translatedText, float origTextSize) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenWidth = dm.widthPixels;
 
-        // Calculate width based on translated text length
+        // Key by position — same text at different positions gets separate overlays
+        String key = left + "," + top;
+
         float textSize = Math.max(10, Math.min(origTextSize, 24));
-        float charWidth = textSize * dm.density * 0.6f; // approx char width
-        int textWidth = (int)(translatedText.length() * charWidth) + 40;
-        // Don't exceed 90% of screen, don't be smaller than original
+
+        // Calculate width to fully cover original text
+        float charWidth = textSize * dm.density * 0.6f;
+        int textWidth = (int)(translatedText.length() * charWidth) + 24;
         int overlayWidth = Math.max(width, Math.min(textWidth, (int)(screenWidth * 0.9)));
-        // Make sure it fits on screen from left edge
         if (left + overlayWidth > screenWidth) {
             overlayWidth = screenWidth - left - 10;
         }
 
-        TextView existing = activeViews.get(translatedText);
+        // Update existing overlay at this position
+        TextView existing = activeViews.get(key);
         if (existing != null) {
+            // Update text if translation changed
+            String currentText = existing.getText().toString();
+            if (!currentText.equals(translatedText)) {
+                existing.setText(translatedText);
+            }
             WindowManager.LayoutParams lp = (WindowManager.LayoutParams) existing.getLayoutParams();
-            if (lp.x != left || lp.y != top || lp.width != overlayWidth) {
+            if (lp.x != left || lp.y != top || lp.width != overlayWidth || lp.height != Math.max(height, 20)) {
                 lp.x = left;
                 lp.y = top;
                 lp.width = overlayWidth;
@@ -65,21 +76,22 @@ public class InlineOverlayManager {
             return;
         }
 
+        // Create new overlay — matches native app appearance
         TextView tv = new TextView(context);
         tv.setText(translatedText);
-        tv.setTextColor(Color.WHITE);
-        tv.setBackgroundColor(0xCC222222);
-        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTextColor(0xFF333333);   // dark text, like native app
+        tv.setBackgroundColor(Color.WHITE);  // solid white, covers original
+        tv.setTypeface(Typeface.DEFAULT);    // regular weight, not bold
         tv.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         tv.setSingleLine(true);
         tv.setEllipsize(TextUtils.TruncateAt.END);
         tv.setIncludeFontPadding(false);
-        tv.setShadowLayer(3f, 1f, 1f, 0xFF000000);
 
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize);
 
-        int padH = Math.max(4, width / 20);
-        int padV = Math.max(0, height / 8);
+        // Minimal padding — match native text view feel
+        int padH = Math.max(2, width / 30);
+        int padV = Math.max(0, height / 10);
         tv.setPadding(padH, padV, padH, padV);
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -93,7 +105,7 @@ public class InlineOverlayManager {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            android.graphics.PixelFormat.TRANSLUCENT);
+            android.graphics.PixelFormat.OPAQUE);
 
         params.x = left;
         params.y = top;
@@ -101,7 +113,7 @@ public class InlineOverlayManager {
 
         try {
             windowManager.addView(tv, params);
-            activeViews.put(translatedText, tv);
+            activeViews.put(key, tv);
         } catch (Exception e) {
             // ignore
         }
