@@ -79,9 +79,9 @@ public class InlineOverlayManager {
         // Create new overlay — matches native app appearance
         TextView tv = new TextView(context);
         tv.setText(translatedText);
-        tv.setTextColor(0xFF333333);   // dark text, like native app
-        tv.setBackgroundColor(Color.WHITE);  // solid white, covers original
-        tv.setTypeface(Typeface.DEFAULT);    // regular weight, not bold
+        tv.setTextColor(0xFF333333);        // dark text
+        tv.setBackgroundColor(0xFFF5F5F5);   // light gray, matches typical app bg
+        tv.setTypeface(Typeface.DEFAULT);
         tv.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         tv.setSingleLine(true);
         tv.setEllipsize(TextUtils.TruncateAt.END);
@@ -89,9 +89,9 @@ public class InlineOverlayManager {
 
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize);
 
-        // Minimal padding — match native text view feel
+        // Padding matching native text view
         int padH = Math.max(2, width / 30);
-        int padV = Math.max(0, height / 10);
+        int padV = Math.max(1, height / 10);
         tv.setPadding(padH, padV, padH, padV);
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -99,8 +99,8 @@ public class InlineOverlayManager {
             : WindowManager.LayoutParams.TYPE_PHONE;
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-            overlayWidth,
-            Math.max(height, 20),
+            overlayWidth + padH * 2,
+            Math.max(height + padV * 2, 20),
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
