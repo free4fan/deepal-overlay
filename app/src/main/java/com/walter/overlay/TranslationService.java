@@ -68,7 +68,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
         config.feedbackType = android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_SPOKEN;
         config.flags = android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS |
-            android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS |
+            android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
         config.notificationTimeout = 100;
         setServiceInfo(config);
 
@@ -186,7 +187,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         
         if (allTexts.isEmpty()) {
             final String pkg = packageName;
-            mainHandler.post(() -> updateStatus("📱 " + pkg + "\nТекстов нет"));
+            mainHandler.post(() -> {
+                if (overlayView != null) {
+                    overlayView.setText("📱 " + pkg + "\n⚠️ Текстов нет (WebView?)");
+                    overlayView.show();
+                }
+                updateStatus("📱 " + pkg + " — текстов нет", 3000);
+            });
             return;
         }
 
@@ -245,17 +252,23 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 }).start();
             }
         } else {
-            // No Chinese text - show all detected texts for debugging
-            if (allTexts.size() < 15) {
-                String combined = "🔍 Text:\n" + String.join("\n", allTexts);
-                mainHandler.post(() -> {
-                    if (overlayView != null) {
-                        overlayView.setText(combined.length() > 200 ? 
-                            combined.substring(0, 197)+"..." : combined);
-                        overlayView.show();
-                    }
-                });
+            // No Chinese text - show debug info
+            final String pkg = packageName;
+            final int textCount = allTexts.size();
+            StringBuilder debug = new StringBuilder();
+            debug.append("📱 ").append(pkg).append("\n");
+            debug.append("📝 Текстов: ").append(textCount).append("\n");
+            for (int i = 0; i < Math.min(5, textCount); i++) {
+                String t = allTexts.get(i);
+                debug.append(i+1).append(". ").append(t.length() > 40 ? t.substring(0,37)+"..." : t).append("\n");
             }
+            final String debugText = debug.toString();
+            mainHandler.post(() -> {
+                if (overlayView != null) {
+                    overlayView.setText(debugText);
+                    overlayView.show();
+                }
+            });
         }
         
         lastScanTime = System.currentTimeMillis();
