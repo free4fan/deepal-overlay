@@ -52,9 +52,16 @@ public class InlineOverlayManager {
         float singleLineHeight = textSize * density * 1.4f;
         boolean allowWrap = height > singleLineHeight * 1.5f;
 
-        // Calculate width to fully cover original text
+        // Smart line break: max ~13 chars per line
+        String displayText = wrapText(translatedText, 13);
+
+        // Calculate width based on longest line
+        int longestLine = 0;
+        for (String line : displayText.split("\n")) {
+            longestLine = Math.max(longestLine, line.length());
+        }
         float charWidth = textSize * density * 0.6f;
-        int textWidth = (int)(translatedText.length() * charWidth) + 24;
+        int textWidth = (int)(longestLine * charWidth) + 24;
         int overlayWidth = Math.max(width, Math.min(textWidth, (int)(screenWidth * 0.9)));
         if (left + overlayWidth > screenWidth) {
             overlayWidth = screenWidth - left - 10;
@@ -64,8 +71,8 @@ public class InlineOverlayManager {
         TextView existing = activeViews.get(key);
         if (existing != null) {
             String currentText = existing.getText().toString();
-            if (!currentText.equals(translatedText)) {
-                existing.setText(translatedText);
+            if (!currentText.equals(displayText)) {
+                existing.setText(displayText);
             }
             WindowManager.LayoutParams lp = (WindowManager.LayoutParams) existing.getLayoutParams();
             int newHeight = allowWrap ? WindowManager.LayoutParams.WRAP_CONTENT : Math.max(height, 20);
@@ -81,7 +88,7 @@ public class InlineOverlayManager {
 
         // Create new overlay — matches native app appearance
         TextView tv = new TextView(context);
-        tv.setText(translatedText);
+        tv.setText(displayText);
         int textColor = isLightColor(bgColor) ? 0xFF333333 : 0xFFFFFFFF;
         tv.setTextColor(textColor);
         tv.setBackgroundColor(bgColor);
@@ -155,5 +162,25 @@ public class InlineOverlayManager {
         int b = color & 0xFF;
         double luminance = (0.299 * r + 0.587 * g + 0.114 * b);
         return luminance > 128;
+    }
+
+    private String wrapText(String text, int maxChars) {
+        if (text == null || text.length() <= maxChars) return text;
+
+        StringBuilder result = new StringBuilder();
+        String remaining = text;
+
+        while (remaining.length() > maxChars) {
+            // Look for last space before maxChars
+            int breakAt = remaining.lastIndexOf(' ', maxChars);
+            if (breakAt <= 0) {
+                // No space found — force break at maxChars
+                breakAt = maxChars;
+            }
+            result.append(remaining, 0, breakAt).append("\n");
+            remaining = remaining.substring(breakAt).trim();
+        }
+        result.append(remaining);
+        return result.toString();
     }
 }

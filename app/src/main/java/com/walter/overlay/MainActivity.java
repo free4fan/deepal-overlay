@@ -149,16 +149,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Settings
-        String[] languages = {"English", "Russian"};
+        String[] languages = {"English", "Русский"};
         ArrayAdapter<String> langAdapter = new ArrayAdapter<>(this,
             android.R.layout.simple_dropdown_item_1line, languages);
         langDropdown.setAdapter(langAdapter);
-        langDropdown.setText(prefs.getInt("target_lang", 0) == 0 ? "English" : "Russian", false);
+        langDropdown.setText(prefs.getInt("target_lang", 0) == 0 ? "English" : "Русский", false);
 
         scanAllSwitch.setChecked(prefs.getBoolean("scan_all", true));
 
         applyBtn.setOnClickListener(v -> {
-            int langPos = langDropdown.getText().toString().equals("Russian") ? 1 : 0;
+            int langPos = langDropdown.getText().toString().equals("Русский") ? 1 : 0;
             prefs.edit()
                 .putInt("target_lang", langPos)
                 .putBoolean("scan_all", scanAllSwitch.isChecked())
