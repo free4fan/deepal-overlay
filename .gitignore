@@ -1,0 +1,22 @@
+# Build outputs
+app/build/
+build/
+.gradle/
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Generated files
+app/build/intermediates/
+app/build/generated/
+app/build/tmp/

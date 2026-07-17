@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_desc">Переводит текст китайского приложения Deepal на русский/английский в реальном времени</string>
+    <string name="app_name">Deepal Translate</string>
+    <string name="service_enabled">Сервис включён\nОткройте китайское приложение Deepal</string>
+    <string name="service_disabled">Необходимо включить сервис доступности</string>
+    <string name="btn_enable_settings">Настройки доступности</string>
+    <string name="translate_target_lang">Перевод на: </string>
+    <string name="scan_interval">Интервал сканирования (мс):</string>
+    <string name="overlay_opacity">Прозрачность оверлея:</string>
+    <string name="btn_apply">Применить</string>
+    <string name="usage_instructions">\nУстановка:\n1. Перейдите в Настройки → Доступность\n2. Включите «Deepal Translate»\n3. Откройте Deepal (китайское приложение)\n4. Перевод появится на экране\n\nПеревод с китайского → английский/русский</string>
+</resources>
