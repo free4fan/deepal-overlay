@@ -34,18 +34,21 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private InlineOverlayManager inlineManager;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
     private ScheduledExecutorService scheduler;
+    private ScheduledExecutorService translatePool;
     private NotificationManager notificationManager;
     private int scanCount = 0;
     private int translateCount = 0;
     private String lastPackage = "";
-
-    // Dedup: don't re-translate same text at same position
-    private final List<String> translatedKeys = new ArrayList<>();
+    private int statusBarHeight = 0;
 
     @Override
     public void onServiceConnected() {
         Log.i(TAG, "Service started");
         
+        // Get status bar height for coordinate correction
+        statusBarHeight = getStatusBarHeight();
+        Log.i(TAG, "Status bar height: " + statusBarHeight);
+
         notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
@@ -54,7 +57,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             notificationManager.createNotificationChannel(channel);
         }
         
-        updateNotification("Ready — open Deepal");
+        updateNotification("Ready");
 
         android.accessibilityservice.AccessibilityServiceInfo config = 
             new android.accessibilityservice.AccessibilityServiceInfo();
@@ -73,7 +76,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         setupStatusOverlay();
         
         scheduler = Executors.newSingleThreadScheduledExecutor();
-        scheduler.scheduleAtFixedRate(this::scanWindow, 0, 2000, TimeUnit.MILLISECONDS);
+        scheduler.scheduleAtFixedRate(this::scanWindow, 0, 2500, TimeUnit.MILLISECONDS);
+    }
+
+    private int getStatusBarHeight() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) return getResources().getDimensionPixelSize(resourceId);
+        return 0;
     }
 
     private void setupStatusOverlay() {
@@ -95,7 +104,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 android.graphics.PixelFormat.TRANSLUCENT);
             params.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
             params.x = 10;
-            params.y = 100;
+            params.y = statusBarHeight + 10;
             params.alpha = 0.7f;
             wm.addView(statusView, params);
         } catch (Exception e) {
@@ -148,7 +157,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         if (!packageName.equals(lastPackage)) {
             lastPackage = packageName;
             mainHandler.post(() -> inlineManager.clearAll());
-            translatedKeys.clear();
         }
 
         // Collect all Chinese text nodes with bounds
@@ -158,43 +166,30 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
         if (chineseNodes.isEmpty()) {
             mainHandler.post(() -> {
-                if (statusView != null) {
-                    statusView.setText(packageName + ": no Chinese text");
-                }
+                if (statusView != null) statusView.setText(packageName + ": no Chinese");
             });
-            updateNotification(packageName + ": no Chinese text");
+            updateNotification(packageName + ": no Chinese");
             return;
         }
 
-        // Clear old overlays and show new translations
-        final List<TextNodeInfo> nodes = chineseNodes;
+        // Show Chinese text immediately (before translation)
+        final List<TextNodeInfo> nodesToDisplay = new ArrayList<>(chineseNodes);
         mainHandler.post(() -> {
-            inlineManager.clearAll();
-            translatedKeys.clear();
-            
-            StringBuilder notifText = new StringBuilder();
-            notifText.append(nodes.size()).append(" texts translated");
-            
-            for (TextNodeInfo node : nodes) {
-                String key = node.text + "|" + node.bounds.toShortString();
-                if (!translatedKeys.contains(key)) {
-                    translatedKeys.add(key);
-                    inlineManager.showTranslation(
-                        node.bounds.left, node.bounds.top,
-                        node.bounds.width(), node.bounds.height(),
-                        node.translated, node.estimatedTextSize);
-                    notifText.append(" | ").append(node.translated);
-                }
-            }
-            
-            updateNotification(notifText.toString());
-            if (statusView != null) {
-                statusView.setText("Translated " + nodes.size() + " texts");
+            for (TextNodeInfo node : nodesToDisplay) {
+                inlineManager.showTranslation(
+                    node.bounds.left, node.bounds.top,
+                    node.bounds.width(), node.bounds.height(),
+                    node.text, node.estimatedTextSize);
             }
         });
 
-        // Translate in background (all at once)
-        translateAll(chineseNodes);
+        updateNotification("Translating " + chineseNodes.size() + " texts...");
+        if (statusView != null) {
+            mainHandler.post(() -> statusView.setText("Found " + chineseNodes.size() + " CN texts"));
+        }
+
+        // Translate in background
+        translateBatch(chineseNodes);
     }
 
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result) {
@@ -224,58 +219,45 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         Rect bounds = new Rect();
         node.getBoundsInScreen(bounds);
         int height = bounds.height();
-        // Typical text height is ~1.2x font size in px
-        // Convert px to sp roughly (assuming ~2.75 density)
         float density = getResources().getDisplayMetrics().density;
         float heightDp = height / density;
-        float estimatedSp = (float)(heightDp / 1.3);
-        return Math.max(10, Math.min(estimatedSp, 28));
+        return Math.max(10, Math.min(heightDp / 1.3f, 28));
     }
 
-    private void translateAll(List<TextNodeInfo> nodes) {
+    private void translateBatch(List<TextNodeInfo> nodes) {
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         int targetLang = prefs.getInt("target_lang", 0);
         final String langCode = (targetLang == 0) ? "en" : "ru";
 
-        // Translate sequentially to avoid rate limiting
         new Thread(() -> {
             for (TextNodeInfo node : nodes) {
                 try {
                     String result = translateText(node.text, langCode);
                     node.translated = result;
                     translateCount++;
+                    
+                    // Update overlay immediately for this node
+                    final String translated = result;
+                    final int l = node.bounds.left;
+                    final int t = node.bounds.top;
+                    final int w = node.bounds.width();
+                    final int h = node.bounds.height();
+                    final float sz = node.estimatedTextSize;
+                    
+                    mainHandler.post(() -> {
+                        inlineManager.showTranslation(l, t, w, h, translated, sz);
+                    });
                 } catch (Exception e) {
-                    node.translated = "[err: " + e.getMessage() + "]";
                     Log.e(TAG, "Translate error: " + e.getMessage());
                 }
             }
             
-            // Update overlays with translations
             mainHandler.post(() -> {
-                inlineManager.clearAll();
-                translatedKeys.clear();
-                
-                StringBuilder notifText = new StringBuilder();
-                notifText.append(nodes.size()).append(" texts");
-                
-                for (TextNodeInfo node : nodes) {
-                    String display = node.translated != null ? node.translated : node.text;
-                    String key = node.text + "|" + node.bounds.toShortString();
-                    if (!translatedKeys.contains(key)) {
-                        translatedKeys.add(key);
-                        inlineManager.showTranslation(
-                            node.bounds.left, node.bounds.top,
-                            node.bounds.width(), node.bounds.height(),
-                            display, node.estimatedTextSize);
-                        notifText.append(" | ").append(display.substring(0, Math.min(20, display.length())));
-                    }
-                }
-                
-                updateNotification(notifText.toString());
                 if (statusView != null) {
                     statusView.setText("Translated " + nodes.size() + " texts");
                 }
             });
+            updateNotification(nodes.size() + " texts translated (#" + translateCount + ")");
         }).start();
     }
 
