@@ -84,6 +84,12 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         inlineManager = new InlineOverlayManager(this);
         setupStatusOverlay();
         setupToggleButton();
+
+        // Read saved translation state
+        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+        translationEnabled = prefs.getBoolean("translation_enabled", true);
+        updateToggleButtonAppearance();
+
         loadDictionary();
     }
 
@@ -177,6 +183,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             toggleButton.setOnClickListener(v -> {
                 translationEnabled = !translationEnabled;
                 updateToggleButtonAppearance();
+                getSharedPreferences("deepal", MODE_PRIVATE)
+                    .edit().putBoolean("translation_enabled", translationEnabled).apply();
                 if (!translationEnabled) {
                     mainHandler.post(() -> {
                         if (inlineManager != null) inlineManager.clearAll();

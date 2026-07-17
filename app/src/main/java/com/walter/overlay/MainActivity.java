@@ -175,14 +175,19 @@ public class MainActivity extends AppCompatActivity {
             openDeepalBtn.setPadding(0, 12, 0, 12);
             openDeepalBtn.setOnClickListener(v -> {
                 try {
+                    // Try standard launch intent first
                     Intent launch = getPackageManager().getLaunchIntentForPackage("deepal.com.cn.app");
                     if (launch != null) {
                         startActivity(launch);
                     } else {
-                        Toast.makeText(this, "Deepal app not installed", Toast.LENGTH_SHORT).show();
+                        // Fallback: try known SplashActivity
+                        Intent intent = new Intent();
+                        intent.setClassName("deepal.com.cn.app", "deepal.com.cn.app.SplashActivity");
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
                     }
                 } catch (Exception e) {
-                    Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Deepal app not found", Toast.LENGTH_SHORT).show();
                 }
             });
             root.addView(openDeepalBtn);
@@ -259,16 +264,8 @@ public class MainActivity extends AppCompatActivity {
         quitBtn.setTextSize(14f);
         quitBtn.setPadding(0, 20, 0, 16);
         quitBtn.setOnClickListener(v -> {
-            // Disable accessibility service so Android doesn't restart it
-            String enabledNow = Settings.Secure.getString(getContentResolver(),
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (enabledNow != null && enabledNow.contains(serviceId)) {
-                String newServices = enabledNow.replace(serviceId, "").replace("::", "");
-                Settings.Secure.putString(getContentResolver(),
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newServices);
-                Settings.Secure.putInt(getContentResolver(),
-                    Settings.Secure.ACCESSIBILITY_ENABLED, 0);
-            }
+            // Disable translation via preference, then close
+            prefs.edit().putBoolean("translation_enabled", false).apply();
             stopService(new Intent(this, TranslationService.class));
             finishAffinity();
             System.exit(0);
