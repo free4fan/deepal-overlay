@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.WindowManager;
@@ -37,14 +38,27 @@ public class InlineOverlayManager {
                                  String translatedText, float origTextSize) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
+        DisplayMetrics dm = context.getResources().getDisplayMetrics();
+        int screenWidth = dm.widthPixels;
+
+        // Calculate width based on translated text length
+        float textSize = Math.max(10, Math.min(origTextSize, 24));
+        float charWidth = textSize * dm.density * 0.6f; // approx char width
+        int textWidth = (int)(translatedText.length() * charWidth) + 40;
+        // Don't exceed 90% of screen, don't be smaller than original
+        int overlayWidth = Math.max(width, Math.min(textWidth, (int)(screenWidth * 0.9)));
+        // Make sure it fits on screen from left edge
+        if (left + overlayWidth > screenWidth) {
+            overlayWidth = screenWidth - left - 10;
+        }
+
         TextView existing = activeViews.get(translatedText);
         if (existing != null) {
-            // Update position if it moved
             WindowManager.LayoutParams lp = (WindowManager.LayoutParams) existing.getLayoutParams();
-            if (lp.x != left || lp.y != top) {
+            if (lp.x != left || lp.y != top || lp.width != overlayWidth) {
                 lp.x = left;
                 lp.y = top;
-                lp.width = Math.max(width, 40);
+                lp.width = overlayWidth;
                 lp.height = Math.max(height, 20);
                 try { windowManager.updateViewLayout(existing, lp); } catch (Exception ignored) {}
             }
@@ -61,10 +75,9 @@ public class InlineOverlayManager {
         tv.setEllipsize(TextUtils.TruncateAt.END);
         tv.setIncludeFontPadding(false);
 
-        float textSize = Math.max(10, Math.min(origTextSize, 24));
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize);
 
-        int padH = Math.max(2, width / 20);
+        int padH = Math.max(4, width / 20);
         int padV = Math.max(0, height / 8);
         tv.setPadding(padH, padV, padH, padV);
 
@@ -73,7 +86,7 @@ public class InlineOverlayManager {
             : WindowManager.LayoutParams.TYPE_PHONE;
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-            Math.max(width, 40),
+            overlayWidth,
             Math.max(height, 20),
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
