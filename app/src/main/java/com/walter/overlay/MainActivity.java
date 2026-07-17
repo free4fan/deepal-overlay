@@ -92,46 +92,34 @@ public class MainActivity extends AppCompatActivity {
             Button overlayBtn = new Button(this);
             overlayBtn.setText("1. Открыть настройки оверлея");
             overlayBtn.setOnClickListener(v -> {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getPackageName()));
-                startActivity(intent);
+                // Try direct overlay settings first
+                try {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                } catch (Exception e) {
+                    // Fallback: open app details settings
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                }
             });
             root.addView(overlayBtn);
 
+            TextView hint = new TextView(this);
+            hint.setText("Найдите \"Display over other apps\" или \"Наложение\" и включите");
+            hint.setTextSize(13f);
+            hint.setTextColor(0xFF666666);
+            hint.setPadding(0, 4, 0, 8);
+            root.addView(hint);
+
             Button confirmBtn = new Button(this);
-            confirmBtn.setText("2. Я выдал разрешение — проверить");
-            confirmBtn.setBackgroundColor(0xFFFF9800);
+            confirmBtn.setText("2. Разрешение выдано — продолжить");
+            confirmBtn.setBackgroundColor(0xFF4CAF50);
             confirmBtn.setTextColor(0xFFFFFFFF);
             confirmBtn.setOnClickListener(v -> {
-                // Try to actually test if overlay works
-                if (Settings.canDrawOverlays(this)) {
-                    prefs.edit().putBoolean("overlay_manual_granted", true).apply();
-                    recreate();
-                } else {
-                    // Try adding a temporary view to test
-                    try {
-                        WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-                        TextView testView = new TextView(this);
-                        testView.setText("Тест");
-                        int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                            ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                            : WindowManager.LayoutParams.TYPE_PHONE;
-                        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                            1, 1, type,
-                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                            PixelFormat.TRANSLUCENT);
-                        params.gravity = Gravity.TOP;
-                        wm.addView(testView, params);
-                        wm.removeView(testView);
-                        // If we got here, overlay works!
-                        prefs.edit().putBoolean("overlay_manual_granted", true).apply();
-                        recreate();
-                    } catch (Exception e) {
-                        Toast.makeText(this,
-                            "Оверлей не работает: " + e.getMessage(),
-                            Toast.LENGTH_LONG).show();
-                    }
-                }
+                prefs.edit().putBoolean("overlay_manual_granted", true).apply();
+                recreate();
             });
             root.addView(confirmBtn);
         } else {

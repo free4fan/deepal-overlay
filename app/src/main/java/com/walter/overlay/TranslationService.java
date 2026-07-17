@@ -135,6 +135,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             Log.i(TAG, "Overlay added successfully");
         } catch (Exception e) {
             Log.e(TAG, "Overlay failed: " + e.getMessage());
+            overlayView = null;
+            mainHandler.post(() -> updateStatus("⚠️ Оверлей: " + e.getMessage(), 10000));
         }
     }
 
