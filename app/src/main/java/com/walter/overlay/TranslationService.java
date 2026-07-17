@@ -20,38 +20,31 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 public class TranslationService extends android.accessibilityservice.AccessibilityService {
     private static final String TAG = "DeepalTranslate";
     private static final int NOTIFICATION_ID = 1001;
     private static final String CHANNEL_ID = "translation_channel";
+    private static final long DEBOUNCE_MS = 800;
 
     private OverlayView statusView;
     private InlineOverlayManager inlineManager;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
-    private ScheduledExecutorService scheduler;
-    private ScheduledExecutorService translatePool;
     private NotificationManager notificationManager;
-    private int scanCount = 0;
     private int translateCount = 0;
     private String lastPackage = "";
-    private int statusBarHeight = 0;
-    private final java.util.Map<String, String> translationCache = new java.util.HashMap<>();
-    private volatile boolean translating = false;
+    private long lastScanTime = 0;
+    private boolean translating = false;
+    private final Map<String, String> translationCache = new HashMap<>();
 
     @Override
     public void onServiceConnected() {
         Log.i(TAG, "Service started");
-        
-        // Get status bar height for coordinate correction
-        statusBarHeight = getStatusBarHeight();
-        Log.i(TAG, "Status bar height: " + statusBarHeight);
 
         notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -60,27 +53,25 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 NotificationManager.IMPORTANCE_LOW);
             notificationManager.createNotificationChannel(channel);
         }
-        
-        updateNotification("Ready");
 
-        android.accessibilityservice.AccessibilityServiceInfo config = 
+        updateNotification("Ready — open Deepal");
+
+        android.accessibilityservice.AccessibilityServiceInfo config =
             new android.accessibilityservice.AccessibilityServiceInfo();
         config.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED |
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED |
             AccessibilityEvent.TYPE_VIEW_FOCUSED |
-            AccessibilityEvent.TYPE_VIEW_SCROLLED;
+            AccessibilityEvent.TYPE_VIEW_SCROLLED |
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED;
         config.feedbackType = android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_GENERIC;
         config.flags = android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS |
             android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS |
             android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
-        config.notificationTimeout = 50;
+        config.notificationTimeout = 100;
         setServiceInfo(config);
 
         inlineManager = new InlineOverlayManager(this);
         setupStatusOverlay();
-        
-        scheduler = Executors.newSingleThreadScheduledExecutor();
-        scheduler.scheduleAtFixedRate(this::scanWindow, 0, 2500, TimeUnit.MILLISECONDS);
     }
 
     private int getStatusBarHeight() {
@@ -95,10 +86,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             statusView = new OverlayView(this);
             statusView.setText("Deepal Translate ready");
             statusView.show();
-            
+
             android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
             wm.getDefaultDisplay().getMetrics(dm);
-            
+
             android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
                 dm.widthPixels / 2,
                 android.view.WindowManager.LayoutParams.WRAP_CONTENT,
@@ -108,7 +99,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 android.graphics.PixelFormat.TRANSLUCENT);
             params.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
             params.x = 10;
-            params.y = statusBarHeight + 10;
+            params.y = getStatusBarHeight() + 10;
             params.alpha = 0.7f;
             wm.addView(statusView, params);
         } catch (Exception e) {
@@ -119,9 +110,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private void updateNotification(String text) {
         if (notificationManager == null) return;
         Intent intent = new Intent(this, MainActivity.class);
-        PendingIntent pi = PendingIntent.getActivity(this, 0, intent, 
+        PendingIntent pi = PendingIntent.getActivity(this, 0, intent,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        
+
         Notification notification = new Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Deepal Translate v" + BuildConfig.VERSION_NAME)
             .setContentText(text)
@@ -129,26 +120,42 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             .setOngoing(true)
             .setContentIntent(pi)
             .build();
-        
+
         notificationManager.notify(NOTIFICATION_ID, notification);
+    }
+
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null) return;
+
+        long now = System.currentTimeMillis();
+        if (now - lastScanTime < DEBOUNCE_MS) return;
+
+        int type = event.getEventType();
+
+        if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            // On scroll: clear stale overlays immediately, scan will recreate
+            mainHandler.post(() -> {
+                if (inlineManager != null) inlineManager.clearAll();
+            });
+        }
+
+        // Debounced scan
+        lastScanTime = now;
+        mainHandler.postDelayed(this::scanWindow, 100);
     }
 
     private void scanWindow() {
         AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) {
-            scanCount++;
-            return;
-        }
+        if (root == null) return;
 
-        String packageName = root.getPackageName() != null ? 
+        String packageName = root.getPackageName() != null ?
             root.getPackageName().toString() : "";
-        
-        scanCount++;
 
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         boolean scanAll = prefs.getBoolean("scan_all", true);
         boolean isTarget = scanAll ||
-            packageName.contains("deepal") || 
+            packageName.contains("deepal") ||
             packageName.contains("changan") ||
             packageName.contains("cn.app");
 
@@ -157,36 +164,38 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             return;
         }
 
-        // Package changed — clear all overlays
         if (!packageName.equals(lastPackage)) {
             lastPackage = packageName;
             translationCache.clear();
             mainHandler.post(() -> inlineManager.clearAll());
         }
 
-        // Collect all Chinese text nodes with bounds
         List<TextNodeInfo> chineseNodes = new ArrayList<>();
         collectChineseNodes(root, chineseNodes);
         root.recycle();
 
         if (chineseNodes.isEmpty()) {
-            mainHandler.post(() -> {
-                if (statusView != null) statusView.setText(packageName + ": no Chinese");
-            });
-            updateNotification(packageName + ": no Chinese");
+            updateNotification(packageName + ": no Chinese text");
             return;
         }
 
-        // Show text — use cache if available, remove stale overlays
-        final List<TextNodeInfo> nodesToDisplay = new ArrayList<>(chineseNodes);
+        // Show cached translations immediately
         final Set<String> currentTexts = new HashSet<>();
-        for (TextNodeInfo n : nodesToDisplay) {
-            String cached = translationCache.get(n.text);
-            currentTexts.add(cached != null ? cached : n.text);
+        final List<TextNodeInfo> toTranslate = new ArrayList<>();
+
+        for (TextNodeInfo node : chineseNodes) {
+            String cached = translationCache.get(node.text);
+            String display = cached != null ? cached : node.text;
+            currentTexts.add(display);
+            if (cached == null) {
+                toTranslate.add(node);
+            }
         }
+
+        final List<TextNodeInfo> nodesToShow = new ArrayList<>(chineseNodes);
         mainHandler.post(() -> {
             inlineManager.removeNotIn(currentTexts);
-            for (TextNodeInfo node : nodesToDisplay) {
+            for (TextNodeInfo node : nodesToShow) {
                 String cached = translationCache.get(node.text);
                 String display = cached != null ? cached : node.text;
                 inlineManager.showTranslation(
@@ -196,25 +205,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             }
         });
 
-        // Find texts that need translation
-        List<TextNodeInfo> needTranslation = new ArrayList<>();
-        for (TextNodeInfo node : chineseNodes) {
-            if (!translationCache.containsKey(node.text)) {
-                needTranslation.add(node);
-            }
+        if (!toTranslate.isEmpty() && !translating) {
+            updateNotification("Translating " + toTranslate.size() + " new...");
+            translateBatch(toTranslate);
         }
-
-        if (needTranslation.isEmpty()) {
-            updateNotification(chineseNodes.size() + " texts (all cached)");
-            return;
-        }
-
-        updateNotification("Translating " + needTranslation.size() + " new texts...");
-        if (statusView != null) {
-            mainHandler.post(() -> statusView.setText("Translating " + needTranslation.size() + "..."));
-        }
-
-        translateBatch(needTranslation);
     }
 
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result) {
@@ -264,14 +258,14 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     node.translated = result;
                     translationCache.put(node.text, result);
                     translateCount++;
-                    
+
                     final String translated = result;
                     final int l = node.bounds.left;
                     final int t = node.bounds.top;
                     final int w = node.bounds.width();
                     final int h = node.bounds.height();
                     final float sz = node.estimatedTextSize;
-                    
+
                     mainHandler.post(() -> {
                         inlineManager.showTranslation(l, t, w, h, translated, sz);
                     });
@@ -279,13 +273,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     Log.e(TAG, "Translate error: " + e.getMessage());
                 }
             }
-            
+
             translating = false;
-            mainHandler.post(() -> {
-                if (statusView != null) {
-                    statusView.setText("Done: " + translateCount + " translated");
-                }
-            });
             updateNotification(translateCount + " translated (cache: " + translationCache.size() + ")");
         }).start();
     }
@@ -324,7 +313,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(15000);
         conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-        
+
         int code = conn.getResponseCode();
         if (code != 200) throw new IOException("HTTP " + code);
 
@@ -354,7 +343,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(15000);
         conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-        
+
         int code = conn.getResponseCode();
         if (code != 200) throw new IOException("HTTP " + code);
 
@@ -377,18 +366,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {
-        // Don't clear overlays here — causes flicker.
-        // Stale overlays are handled during scanWindow.
-    }
-
-    @Override
     public void onInterrupt() {}
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (scheduler != null) scheduler.shutdownNow();
         mainHandler.post(() -> {
             if (inlineManager != null) inlineManager.clearAll();
             if (statusView != null) {
