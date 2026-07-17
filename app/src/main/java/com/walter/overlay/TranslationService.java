@@ -272,7 +272,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 inlineManager.showTranslation(
                     node.bounds.left, node.bounds.top,
                     node.bounds.width(), node.bounds.height(),
-                    display, node.estimatedTextSize);
+                    display, node.estimatedTextSize, node.bgColor);
             }
         });
 
@@ -283,7 +283,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     }
 
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result) {
-        if (node == null) return;
+        collectChineseNodes(node, result, 0);
+    }
+
+    private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result, int depth) {
+        if (node == null || depth > 50) return;
 
         CharSequence text = node.getText();
         if (text != null && text.length() > 0) {
@@ -292,7 +296,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 Rect bounds = new Rect();
                 node.getBoundsInScreen(bounds);
                 float textSize = estimateTextSize(node);
-                result.add(new TextNodeInfo(s, bounds, textSize));
+                int bgColor = detectBackgroundColor(node);
+                result.add(new TextNodeInfo(s, bounds, textSize, bgColor));
             }
         }
 
@@ -300,9 +305,67 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         for (int i = 0; i < childCount; i++) {
             AccessibilityNodeInfo child = node.getChild(i);
             if (child != null) {
-                collectChineseNodes(child, result);
+                collectChineseNodes(child, result, depth + 1);
             }
         }
+    }
+
+    private int detectBackgroundColor(AccessibilityNodeInfo node) {
+        // Walk up parent tree to find background hints
+        AccessibilityNodeInfo parent = node.getParent();
+        while (parent != null) {
+            String viewId = parent.getViewIdResourceName();
+            if (viewId != null) {
+                String id = viewId.toLowerCase();
+                // Dark backgrounds: toolbars, headers, status bars, nav bars
+                if (id.contains("toolbar") || id.contains("action_bar") ||
+                    id.contains("header") || id.contains("status_bar") ||
+                    id.contains("appbar") || id.contains("nav_bar") ||
+                    id.contains("title_bar") || id.contains("top_bar")) {
+                    return 0xFF202020; // dark
+                }
+                // Car control area - usually dark
+                if (id.contains("carcontrol") || id.contains("vehicle")) {
+                    return 0xFF1A1A2E; // dark blue-black
+                }
+            }
+            // Check class name for common patterns
+            CharSequence className = parent.getClassName();
+            if (className != null) {
+                String cn = className.toString();
+                if (cn.contains("Toolbar") || cn.contains("AppBar") ||
+                    cn.contains("StatusBar") || cn.contains("NavigationBar")) {
+                    return 0xFF202020;
+                }
+            }
+            // Check content description for hints
+            CharSequence desc = parent.getContentDescription();
+            if (desc != null) {
+                String d = desc.toString().toLowerCase();
+                if (d.contains("toolbar") || d.contains("header") || d.contains("导航")) {
+                    return 0xFF202020;
+                }
+            }
+            parent = parent.getParent();
+        }
+
+        // Position-based fallback
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        float density = getResources().getDisplayMetrics().density;
+
+        // Near status bar (< 80dp from top) → likely dark header area
+        if (bounds.top < 80 * density) {
+            return 0xFF202020;
+        }
+        // Near bottom nav bar (< 60dp from bottom) → likely white/light nav
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        if (bounds.bottom > screenHeight - 60 * density) {
+            return 0xFFFFFFFF;
+        }
+
+        // Default: white content background
+        return 0xFFFFFFFF;
     }
 
     private float estimateTextSize(AccessibilityNodeInfo node) {
@@ -336,9 +399,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     final int w = node.bounds.width();
                     final int h = node.bounds.height();
                     final float sz = node.estimatedTextSize;
+                    final int bg = node.bgColor;
 
                     mainHandler.post(() -> {
-                        inlineManager.showTranslation(l, t, w, h, translated, sz);
+                        inlineManager.showTranslation(l, t, w, h, translated, sz, bg);
                     });
                 } catch (Exception e) {
                     Log.e(TAG, "Translate error: " + e.getMessage());
@@ -464,11 +528,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         Rect bounds;
         float estimatedTextSize;
         String translated;
+        int bgColor;
 
-        TextNodeInfo(String text, Rect bounds, float estimatedTextSize) {
+        TextNodeInfo(String text, Rect bounds, float estimatedTextSize, int bgColor) {
             this.text = text;
             this.bounds = bounds;
             this.estimatedTextSize = estimatedTextSize;
+            this.bgColor = bgColor;
         }
     }
 }

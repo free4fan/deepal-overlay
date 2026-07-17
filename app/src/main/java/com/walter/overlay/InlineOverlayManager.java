@@ -38,7 +38,7 @@ public class InlineOverlayManager {
     }
 
     public void showTranslation(int left, int top, int width, int height,
-                                 String translatedText, float origTextSize) {
+                                 String translatedText, float origTextSize, int bgColor) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
@@ -79,8 +79,10 @@ public class InlineOverlayManager {
         // Create new overlay — matches native app appearance
         TextView tv = new TextView(context);
         tv.setText(translatedText);
-        tv.setTextColor(0xFF333333);        // dark text
-        tv.setBackgroundColor(0xFFF5F5F5);   // light gray, matches typical app bg
+        // Determine text color based on background luminance
+        int textColor = isLightColor(bgColor) ? 0xFF333333 : 0xFFFFFFFF;
+        tv.setTextColor(textColor);
+        tv.setBackgroundColor(bgColor);
         tv.setTypeface(Typeface.DEFAULT);
         tv.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         tv.setSingleLine(true);
@@ -119,10 +121,10 @@ public class InlineOverlayManager {
         }
     }
 
-    public void removeNotIn(Set<String> currentTexts) {
+    public void removeNotIn(Set<String> currentPositions) {
         List<String> toRemove = new ArrayList<>();
         for (String key : activeViews.keySet()) {
-            if (!currentTexts.contains(key)) {
+            if (!currentPositions.contains(key)) {
                 toRemove.add(key);
             }
         }
@@ -132,5 +134,13 @@ public class InlineOverlayManager {
                 try { windowManager.removeViewImmediate(v); } catch (Exception ignored) {}
             }
         }
+    }
+
+    private boolean isLightColor(int color) {
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+        double luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+        return luminance > 128;
     }
 }
