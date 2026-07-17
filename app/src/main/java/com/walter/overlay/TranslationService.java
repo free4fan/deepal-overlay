@@ -164,14 +164,15 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             toggleButton = new android.widget.TextView(this);
             updateToggleButtonAppearance();
 
-            int size = (int)(48 * dm.density);
+            int size = (int)(40 * dm.density);
             android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
                 size, size,
                 android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 android.graphics.PixelFormat.TRANSLUCENT);
-            params.gravity = android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL;
-            params.x = (int)(10 * dm.density);
+            params.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+            params.x = (int)(20 * dm.density);
+            params.y = (int)(120 * dm.density);
 
             toggleButton.setOnClickListener(v -> {
                 translationEnabled = !translationEnabled;
@@ -194,15 +195,16 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
     private void updateToggleButtonAppearance() {
         if (toggleButton == null) return;
+        toggleButton.setTextSize(10);
+        toggleButton.setTextColor(0xFFFFFFFF);
+        toggleButton.setGravity(android.view.Gravity.CENTER);
+        int pad = (int)(8 * getResources().getDisplayMetrics().density);
+        toggleButton.setPadding(pad, pad, pad, pad);
         if (translationEnabled) {
-            toggleButton.setText("T");
-            toggleButton.setTextSize(16);
-            toggleButton.setTextColor(0xFFFFFFFF);
+            toggleButton.setText("ON");
             toggleButton.setBackgroundColor(0xCC4CAF50);
         } else {
-            toggleButton.setText("T");
-            toggleButton.setTextSize(16);
-            toggleButton.setTextColor(0xFFFFFFFF);
+            toggleButton.setText("OFF");
             toggleButton.setBackgroundColor(0xCC999999);
         }
     }

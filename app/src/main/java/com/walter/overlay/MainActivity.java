@@ -259,6 +259,16 @@ public class MainActivity extends AppCompatActivity {
         quitBtn.setTextSize(14f);
         quitBtn.setPadding(0, 20, 0, 16);
         quitBtn.setOnClickListener(v -> {
+            // Disable accessibility service so Android doesn't restart it
+            String enabledNow = Settings.Secure.getString(getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (enabledNow != null && enabledNow.contains(serviceId)) {
+                String newServices = enabledNow.replace(serviceId, "").replace("::", "");
+                Settings.Secure.putString(getContentResolver(),
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newServices);
+                Settings.Secure.putInt(getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_ENABLED, 0);
+            }
             stopService(new Intent(this, TranslationService.class));
             finishAffinity();
             System.exit(0);
