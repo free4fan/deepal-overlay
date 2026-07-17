@@ -2,6 +2,7 @@
 <resources>
     <string name="accessibility_desc">Переводит текст китайского приложения Deepal на русский/английский в реальном времени</string>
     <string name="app_name">Deepal Translate</string>
+    <string name="app_version">v2.4.0</string>
     <string name="service_enabled">Сервис включён\nОткройте китайское приложение Deepal</string>
     <string name="service_disabled">Необходимо включить сервис доступности</string>
     <string name="btn_enable_settings">Настройки доступности</string>

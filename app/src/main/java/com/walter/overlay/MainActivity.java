@@ -2,15 +2,20 @@ package com.walter.overlay;
 
 import android.content.Intent;
 import android.graphics.PixelFormat;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
-import android.view.View;
 import android.view.WindowManager;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.textfield.TextInputLayout;
+import com.google.android.material.card.MaterialCardView;
 
 public class MainActivity extends AppCompatActivity {
     private boolean resumed = false;
@@ -18,74 +23,63 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        buildUI();
-    }
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        setContentView(R.layout.activity_main);
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (resumed) recreate();
-        resumed = true;
-    }
+        MaterialButton accBtn = findViewById(R.id.accBtn);
+        MaterialButton applyBtn = findViewById(R.id.applyBtn);
+        MaterialButton quitBtn = findViewById(R.id.quitBtn);
+        MaterialButton openDeepalBtn = findViewById(R.id.openDeepalBtn);
+        MaterialButton testOverlayBtn = findViewById(R.id.testOverlayBtn);
+        MaterialCardView actionsCard = findViewById(R.id.actionsCard);
+        TextInputLayout langDropdownLayout = findViewById(R.id.langDropdownLayout);
+        AutoCompleteTextView langDropdown = findViewById(R.id.langDropdown);
+        MaterialSwitch scanAllSwitch = findViewById(R.id.scanAllSwitch);
 
-    private boolean checkOverlayPermission() {
-        if (Settings.canDrawOverlays(this)) return true;
-        return getSharedPreferences("deepal", MODE_PRIVATE)
-            .getBoolean("overlay_manual_granted", false);
-    }
-
-    private void buildUI() {
         android.content.SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
 
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(32, 48, 32, 32);
+        // Status icons
+        ImageView accIcon = findViewById(R.id.accIcon);
+        ImageView overlayIcon = findViewById(R.id.overlayIcon);
+        TextView accStatusLabel = findViewById(R.id.accStatusLabel);
+        TextView overlayStatusLabel = findViewById(R.id.overlayStatusLabel);
 
-        // Title + version
-        TextView title = new TextView(this);
-        title.setText("Deepal Translate v" + BuildConfig.VERSION_NAME);
-        title.setTextSize(24f);
-        title.setPadding(0, 0, 0, 16);
-        root.addView(title);
-
-        // === Permissions section ===
+        // Check permissions
         String serviceId = getPackageName() + "/" + TranslationService.class.getName();
         String enabledServices = Settings.Secure.getString(getContentResolver(),
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         boolean isAccEnabled = enabledServices != null && enabledServices.contains(serviceId);
         boolean hasOverlay = checkOverlayPermission();
 
-        // Accessibility
-        TextView accLabel = new TextView(this);
-        accLabel.setText(isAccEnabled ? "✅ Accessibility service ON" : "⛔ Accessibility service OFF");
-        accLabel.setTextSize(15f);
-        accLabel.setPadding(0, 8, 0, 4);
-        root.addView(accLabel);
-
-        Button accBtn = new Button(this);
-        if (!isAccEnabled) {
-            accBtn.setText("Enable Accessibility");
-            accBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        } else {
-            accBtn.setText("Accessibility OK");
+        // Accessibility status
+        if (isAccEnabled) {
+            accIcon.setImageResource(android.R.drawable.ic_menu_info_details);
+            accIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_success));
+            accStatusLabel.setText("Accessibility service active");
+            accBtn.setText("Enabled");
             accBtn.setEnabled(false);
-            accBtn.setBackgroundColor(0xFF4CAF50);
-            accBtn.setTextColor(0xFFFFFFFF);
+            accBtn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.status_success));
+        } else {
+            accIcon.setImageResource(android.R.drawable.ic_dialog_alert);
+            accIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
+            accStatusLabel.setText("Accessibility service required");
+            accBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         }
-        root.addView(accBtn);
 
-        // Overlay
-        TextView overlayLabel = new TextView(this);
-        overlayLabel.setText(hasOverlay ? "✅ Overlay permission OK" : "⛔ Overlay permission NOT granted");
-        overlayLabel.setTextSize(15f);
-        overlayLabel.setPadding(0, 12, 0, 4);
-        root.addView(overlayLabel);
+        // Overlay status
+        if (hasOverlay) {
+            overlayIcon.setImageResource(android.R.drawable.ic_menu_info_details);
+            overlayIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_success));
+            overlayStatusLabel.setText("Overlay permission granted");
+        } else {
+            overlayIcon.setImageResource(android.R.drawable.ic_dialog_alert);
+            overlayIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
+            overlayStatusLabel.setText("Overlay permission required");
 
-        if (!hasOverlay) {
-            Button overlayBtn = new Button(this);
-            overlayBtn.setText("1. Grant overlay permission");
-            overlayBtn.setOnClickListener(v -> {
+            LinearLayout container = findViewById(R.id.overlayButtonsContainer);
+            MaterialButton grantBtn = new MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            grantBtn.setText("Grant overlay permission");
+            grantBtn.setOnClickListener(v -> {
                 try {
                     startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:" + getPackageName())));
@@ -94,42 +88,38 @@ public class MainActivity extends AppCompatActivity {
                         Uri.parse("package:" + getPackageName())));
                 }
             });
-            root.addView(overlayBtn);
+            container.addView(grantBtn);
 
-            TextView hint = new TextView(this);
-            hint.setText("Find \"Display over other apps\" and enable it, then press Continue below");
-            hint.setTextSize(12f);
-            hint.setTextColor(0xFF666666);
-            hint.setPadding(0, 4, 0, 8);
-            root.addView(hint);
-
-            Button confirmBtn = new Button(this);
-            confirmBtn.setText("2. Permission granted — continue");
-            confirmBtn.setBackgroundColor(0xFF4CAF50);
-            confirmBtn.setTextColor(0xFFFFFFFF);
+            MaterialButton confirmBtn = new MaterialButton(this);
+            confirmBtn.setText("Permission granted — continue");
             confirmBtn.setOnClickListener(v -> {
                 prefs.edit().putBoolean("overlay_manual_granted", true).apply();
                 recreate();
             });
-            root.addView(confirmBtn);
-        } else {
-            // Overlay settings (always visible when permission granted)
-            Button overlaySettingsBtn = new Button(this);
-            overlaySettingsBtn.setText("Overlay settings");
-            overlaySettingsBtn.setOnClickListener(v -> {
+            container.addView(confirmBtn);
+        }
+
+        // Actions card — only show when permissions OK
+        if (isAccEnabled && hasOverlay) {
+            actionsCard.setVisibility(android.view.View.VISIBLE);
+
+            openDeepalBtn.setOnClickListener(v -> {
                 try {
-                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName())));
+                    Intent launch = getPackageManager().getLaunchIntentForPackage("deepal.com.cn.app");
+                    if (launch != null) {
+                        startActivity(launch);
+                    } else {
+                        Intent intent = new Intent();
+                        intent.setClassName("deepal.com.cn.app", "deepal.com.cn.app.SplashActivity");
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                    }
                 } catch (Exception e) {
-                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:" + getPackageName())));
+                    Toast.makeText(this, "Deepal app not found", Toast.LENGTH_SHORT).show();
                 }
             });
-            root.addView(overlaySettingsBtn);
 
-            Button testBtn = new Button(this);
-            testBtn.setText("Test overlay");
-            testBtn.setOnClickListener(v -> {
+            testOverlayBtn.setOnClickListener(v -> {
                 try {
                     WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
                     TextView testView = new TextView(this);
@@ -154,125 +144,48 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
-            root.addView(testBtn);
+        } else {
+            actionsCard.setVisibility(android.view.View.GONE);
         }
 
-        // All good indicator
-        if (isAccEnabled && hasOverlay) {
-            TextView ok = new TextView(this);
-            ok.setText("\nAll permissions OK — open Deepal app (深蓝汽车)");
-            ok.setTextSize(14f);
-            ok.setTextColor(0xFF4CAF50);
-            ok.setPadding(0, 12, 0, 8);
-            root.addView(ok);
-
-            // Open Deepal button
-            Button openDeepalBtn = new Button(this);
-            openDeepalBtn.setText("Open Deepal (深蓝汽车)");
-            openDeepalBtn.setBackgroundColor(0xFF1C58F6);
-            openDeepalBtn.setTextColor(0xFFFFFFFF);
-            openDeepalBtn.setTextSize(15f);
-            openDeepalBtn.setPadding(0, 12, 0, 12);
-            openDeepalBtn.setOnClickListener(v -> {
-                try {
-                    // Try standard launch intent first
-                    Intent launch = getPackageManager().getLaunchIntentForPackage("deepal.com.cn.app");
-                    if (launch != null) {
-                        startActivity(launch);
-                    } else {
-                        // Fallback: try known SplashActivity
-                        Intent intent = new Intent();
-                        intent.setClassName("deepal.com.cn.app", "deepal.com.cn.app.SplashActivity");
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        startActivity(intent);
-                    }
-                } catch (Exception e) {
-                    Toast.makeText(this, "Deepal app not found", Toast.LENGTH_SHORT).show();
-                }
-            });
-            root.addView(openDeepalBtn);
-        }
-
-        // Separator
-        View sep = new View(this);
-        sep.setLayoutParams(new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 1));
-        sep.setBackgroundColor(0xFFCCCCCC);
-        sep.setPadding(0, 16, 0, 16);
-        root.addView(sep);
-
-        // === Settings ===
-        TextView settingsTitle = new TextView(this);
-        settingsTitle.setText("Settings");
-        settingsTitle.setTextSize(18f);
-        settingsTitle.setPadding(0, 8, 0, 12);
-        root.addView(settingsTitle);
-
-        // Language
-        TextView langLabel = new TextView(this);
-        langLabel.setText("Translation language:");
-        langLabel.setTextSize(14f);
-        root.addView(langLabel);
-
+        // Settings
         String[] languages = {"English", "Russian"};
-        Spinner langSpinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
-            android.R.layout.simple_spinner_item, languages);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        langSpinner.setAdapter(adapter);
-        langSpinner.setSelection(prefs.getInt("target_lang", 0));
-        root.addView(langSpinner);
+        ArrayAdapter<String> langAdapter = new ArrayAdapter<>(this,
+            android.R.layout.simple_dropdown_item_1line, languages);
+        langDropdown.setAdapter(langAdapter);
+        langDropdown.setText(prefs.getInt("target_lang", 0) == 0 ? "English" : "Russian", false);
 
-        // Scan all
-        CheckBox scanAllBox = new CheckBox(this);
-        scanAllBox.setText("Scan ALL apps (debug)");
-        scanAllBox.setTextSize(14f);
-        scanAllBox.setChecked(prefs.getBoolean("scan_all", true));
-        scanAllBox.setPadding(0, 12, 0, 8);
-        root.addView(scanAllBox);
+        scanAllSwitch.setChecked(prefs.getBoolean("scan_all", true));
 
-        // Save
-        Button saveBtn = new Button(this);
-        saveBtn.setText("Apply");
-        saveBtn.setPadding(0, 20, 0, 16);
-        saveBtn.setBackgroundColor(0xFF4CAF50);
-        saveBtn.setTextColor(0xFFFFFFFF);
-        saveBtn.setTextSize(16f);
-        saveBtn.setOnClickListener(v -> {
+        applyBtn.setOnClickListener(v -> {
+            int langPos = langDropdown.getText().toString().equals("Russian") ? 1 : 0;
             prefs.edit()
-                .putInt("target_lang", langSpinner.getSelectedItemPosition())
-                .putBoolean("scan_all", scanAllBox.isChecked())
+                .putInt("target_lang", langPos)
+                .putBoolean("scan_all", scanAllSwitch.isChecked())
                 .apply();
-            Toast.makeText(this, "Applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Settings applied", Toast.LENGTH_SHORT).show();
             stopService(new Intent(this, TranslationService.class));
             startService(new Intent(this, TranslationService.class));
         });
-        root.addView(saveBtn);
 
-        // Debug log
-        TextView logLabel = new TextView(this);
-        logLabel.setText("\nCheck notification for scan details");
-        logLabel.setTextSize(12f);
-        logLabel.setTextColor(0xFF999999);
-        root.addView(logLabel);
-
-        // Quit button
-        Button quitBtn = new Button(this);
-        quitBtn.setText("Quit");
-        quitBtn.setBackgroundColor(0xFFE53935);
-        quitBtn.setTextColor(0xFFFFFFFF);
-        quitBtn.setTextSize(14f);
-        quitBtn.setPadding(0, 20, 0, 16);
         quitBtn.setOnClickListener(v -> {
-            // Disable translation via preference, then close
             prefs.edit().putBoolean("translation_enabled", false).apply();
             stopService(new Intent(this, TranslationService.class));
             finishAffinity();
             System.exit(0);
         });
-        root.addView(quitBtn);
+    }
 
-        scroll.addView(root);
-        setContentView(scroll);
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (resumed) recreate();
+        resumed = true;
+    }
+
+    private boolean checkOverlayPermission() {
+        if (Settings.canDrawOverlays(this)) return true;
+        return getSharedPreferences("deepal", MODE_PRIVATE)
+            .getBoolean("overlay_manual_granted", false);
     }
 }

@@ -11,7 +11,7 @@
         android:icon="@drawable/ic_launcher"
         android:label="Deepal Translate"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.Light">
+        android:theme="@style/Theme.DeepalTranslate">
 
         <activity
             android:name=".MainActivity"
