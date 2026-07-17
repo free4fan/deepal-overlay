@@ -2,7 +2,6 @@ package com.walter.overlay;
 
 import android.content.Context;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.util.Log;
 import android.view.Gravity;
@@ -25,16 +24,15 @@ public class OverlayView extends LinearLayout {
 
     private void init(Context context) {
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundResource(android.R.drawable.toast_frame);
-        
-        // Создаём полупрозрачный фон вручную
-        setPadding(16, 8, 16, 8);
+        setBackgroundColor(0xDD000000);
+        setPadding(20, 12, 20, 12);
 
         textView = new TextView(context);
-        textView.setTextSize(14f);
+        textView.setTextSize(15f);
         textView.setTextColor(Color.WHITE);
         textView.setTypeface(Typeface.MONOSPACE);
-        textView.setGravity(Gravity.CENTER);
+        textView.setGravity(Gravity.START);
+        textView.setMaxLines(8);
         
         addView(textView, new LayoutParams(
             LayoutParams.MATCH_PARENT,
@@ -49,12 +47,11 @@ public class OverlayView extends LinearLayout {
                 textView.setText(text);
                 show();
                 
-                // Сбросить таймер затухания
                 if (fadeScheduler != null) {
                     fadeScheduler.shutdownNow();
                 }
                 fadeScheduler = Executors.newSingleThreadScheduledExecutor();
-                fadeScheduler.schedule(this::hide, 8000, TimeUnit.MILLISECONDS);
+                fadeScheduler.schedule(this::hide, 15000, TimeUnit.MILLISECONDS);
             });
         }
     }
@@ -62,8 +59,8 @@ public class OverlayView extends LinearLayout {
     public void setError() {
         if (textView != null) {
             textView.post(() -> {
-                textView.setTextColor(Color.YELLOW);
-                textView.setText("⚠ Ошибка перевода");
+                textView.setTextColor(Color.RED);
+                textView.setText("Translation error");
                 show();
             });
         }
@@ -72,7 +69,6 @@ public class OverlayView extends LinearLayout {
     public void show() {
         if (getVisibility() != View.VISIBLE) {
             setVisibility(View.VISIBLE);
-            Log.d(TAG, "Overlay visible");
         }
     }
 
@@ -80,7 +76,6 @@ public class OverlayView extends LinearLayout {
         textView.post(() -> {
             if (getVisibility() == View.VISIBLE) {
                 setVisibility(View.GONE);
-                Log.d(TAG, "Overlay hidden");
             }
         });
     }

@@ -29,9 +29,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean checkOverlayPermission() {
-        // Try standard API first
         if (Settings.canDrawOverlays(this)) return true;
-        // Fallback: check our manual flag
         return getSharedPreferences("deepal", MODE_PRIVATE)
             .getBoolean("overlay_manual_granted", false);
     }
@@ -39,82 +37,74 @@ public class MainActivity extends AppCompatActivity {
     private void buildUI() {
         android.content.SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
 
+        ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(32, 48, 32, 32);
-        root.setLayoutParams(new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        // Title
+        // Title + version
         TextView title = new TextView(this);
         title.setText("Deepal Translate v" + BuildConfig.VERSION_NAME);
         title.setTextSize(24f);
-        title.setPadding(0, 0, 0, 8);
+        title.setPadding(0, 0, 0, 16);
         root.addView(title);
 
-        // Accessibility service status
+        // === Permissions section ===
         String serviceId = getPackageName() + "/" + TranslationService.class.getName();
         String enabledServices = Settings.Secure.getString(getContentResolver(),
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        boolean isAccessibilityEnabled = enabledServices != null && enabledServices.contains(serviceId);
+        boolean isAccEnabled = enabledServices != null && enabledServices.contains(serviceId);
+        boolean hasOverlay = checkOverlayPermission();
 
+        // Accessibility
         TextView accLabel = new TextView(this);
-        accLabel.setText(isAccessibilityEnabled ? "✅ Сервис доступности включён" : "⛔ Сервис доступности выключен");
-        accLabel.setTextSize(16f);
-        accLabel.setPadding(0, 8, 0, 8);
+        accLabel.setText(isAccEnabled ? "✅ Accessibility service ON" : "⛔ Accessibility service OFF");
+        accLabel.setTextSize(15f);
+        accLabel.setPadding(0, 8, 0, 4);
         root.addView(accLabel);
 
         Button accBtn = new Button(this);
-        if (!isAccessibilityEnabled) {
-            accBtn.setText("Включить сервис доступности");
-            accBtn.setOnClickListener(v -> {
-                Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                startActivity(intent);
-            });
+        if (!isAccEnabled) {
+            accBtn.setText("Enable Accessibility");
+            accBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         } else {
-            accBtn.setText("Доступность OK");
+            accBtn.setText("Accessibility OK");
             accBtn.setEnabled(false);
             accBtn.setBackgroundColor(0xFF4CAF50);
             accBtn.setTextColor(0xFFFFFFFF);
         }
         root.addView(accBtn);
 
-        // Overlay permission
-        boolean hasOverlay = checkOverlayPermission();
+        // Overlay
         TextView overlayLabel = new TextView(this);
-        overlayLabel.setText(hasOverlay ? "✅ Разрешение на оверлей получено" : "⛔ Разрешение на оверлей НЕ выдано");
-        overlayLabel.setTextSize(16f);
-        overlayLabel.setPadding(0, 16, 0, 8);
+        overlayLabel.setText(hasOverlay ? "✅ Overlay permission OK" : "⛔ Overlay permission NOT granted");
+        overlayLabel.setTextSize(15f);
+        overlayLabel.setPadding(0, 12, 0, 4);
         root.addView(overlayLabel);
 
         if (!hasOverlay) {
             Button overlayBtn = new Button(this);
-            overlayBtn.setText("1. Открыть настройки оверлея");
+            overlayBtn.setText("1. Grant overlay permission");
             overlayBtn.setOnClickListener(v -> {
-                // Try direct overlay settings first
                 try {
-                    Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
+                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName())));
                 } catch (Exception e) {
-                    // Fallback: open app details settings
-                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
+                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())));
                 }
             });
             root.addView(overlayBtn);
 
             TextView hint = new TextView(this);
-            hint.setText("Найдите \"Display over other apps\" или \"Наложение\" и включите");
-            hint.setTextSize(13f);
+            hint.setText("Find \"Display over other apps\" and enable it, then press Continue below");
+            hint.setTextSize(12f);
             hint.setTextColor(0xFF666666);
             hint.setPadding(0, 4, 0, 8);
             root.addView(hint);
 
             Button confirmBtn = new Button(this);
-            confirmBtn.setText("2. Разрешение выдано — продолжить");
+            confirmBtn.setText("2. Permission granted — continue");
             confirmBtn.setBackgroundColor(0xFF4CAF50);
             confirmBtn.setTextColor(0xFFFFFFFF);
             confirmBtn.setOnClickListener(v -> {
@@ -123,67 +113,82 @@ public class MainActivity extends AppCompatActivity {
             });
             root.addView(confirmBtn);
         } else {
-            // Test overlay button
+            // Overlay settings (always visible when permission granted)
+            Button overlaySettingsBtn = new Button(this);
+            overlaySettingsBtn.setText("Overlay settings");
+            overlaySettingsBtn.setOnClickListener(v -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName())));
+                } catch (Exception e) {
+                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())));
+                }
+            });
+            root.addView(overlaySettingsBtn);
+
             Button testBtn = new Button(this);
-            testBtn.setText("Тест оверлея");
+            testBtn.setText("Test overlay");
             testBtn.setOnClickListener(v -> {
                 try {
                     WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
                     TextView testView = new TextView(this);
-                    testView.setText(" Тест оверлея работает! ");
-                    testView.setTextSize(20f);
-                    testView.setBackgroundColor(0xCC000000);
-                    testView.setTextColor(0xFFFFFFFF);
-                    testView.setPadding(24, 16, 24, 16);
-                    int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                        ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                        : WindowManager.LayoutParams.TYPE_PHONE;
+                    testView.setText(" Overlay works! ");
+                    testView.setTextSize(22f);
+                    testView.setBackgroundColor(0xDD000000);
+                    testView.setTextColor(0xFF00FF00);
+                    testView.setPadding(32, 24, 32, 24);
                     WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                         WindowManager.LayoutParams.WRAP_CONTENT,
                         WindowManager.LayoutParams.WRAP_CONTENT,
-                        type,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                         PixelFormat.TRANSLUCENT);
                     params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-                    params.y = 200;
+                    params.y = 100;
                     wm.addView(testView, params);
                     testView.postDelayed(() -> {
                         try { wm.removeView(testView); } catch (Exception ignored) {}
                     }, 3000);
-                    Toast.makeText(this, "Оверлей работает!", Toast.LENGTH_SHORT).show();
                 } catch (Exception e) {
-                    Toast.makeText(this, "Ошибка: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
             root.addView(testBtn);
         }
 
-        // Status summary
-        if (isAccessibilityEnabled && hasOverlay) {
+        // All good indicator
+        if (isAccEnabled && hasOverlay) {
             TextView ok = new TextView(this);
-            ok.setText("\n✅ Все разрешения выданы!\nНажмите \"Применить\" и откройте Deepal");
+            ok.setText("\nAll permissions OK — open Deepal app (深蓝汽车)");
             ok.setTextSize(14f);
             ok.setTextColor(0xFF4CAF50);
-            ok.setPadding(0, 16, 0, 8);
+            ok.setPadding(0, 12, 0, 8);
             root.addView(ok);
         }
 
         // Separator
         View sep = new View(this);
         sep.setLayoutParams(new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 2));
+            LinearLayout.LayoutParams.MATCH_PARENT, 1));
         sep.setBackgroundColor(0xFFCCCCCC);
         sep.setPadding(0, 16, 0, 16);
         root.addView(sep);
 
-        // Language selection
+        // === Settings ===
+        TextView settingsTitle = new TextView(this);
+        settingsTitle.setText("Settings");
+        settingsTitle.setTextSize(18f);
+        settingsTitle.setPadding(0, 8, 0, 12);
+        root.addView(settingsTitle);
+
+        // Language
         TextView langLabel = new TextView(this);
-        langLabel.setText("Язык перевода:");
-        langLabel.setTextSize(16f);
-        langLabel.setPadding(0, 8, 0, 8);
+        langLabel.setText("Translation language:");
+        langLabel.setTextSize(14f);
         root.addView(langLabel);
 
-        String[] languages = {"English", "Русский"};
+        String[] languages = {"English", "Russian"};
         Spinner langSpinner = new Spinner(this);
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
             android.R.layout.simple_spinner_item, languages);
@@ -192,33 +197,40 @@ public class MainActivity extends AppCompatActivity {
         langSpinner.setSelection(prefs.getInt("target_lang", 0));
         root.addView(langSpinner);
 
-        // Scan all apps checkbox
+        // Scan all
         CheckBox scanAllBox = new CheckBox(this);
-        scanAllBox.setText("Сканировать ВСЕ приложения (для отладки)");
+        scanAllBox.setText("Scan ALL apps (debug)");
         scanAllBox.setTextSize(14f);
         scanAllBox.setChecked(prefs.getBoolean("scan_all", true));
-        scanAllBox.setPadding(0, 16, 0, 8);
+        scanAllBox.setPadding(0, 12, 0, 8);
         root.addView(scanAllBox);
 
-        // Save button
+        // Save
         Button saveBtn = new Button(this);
-        saveBtn.setText("Применить");
-        saveBtn.setPadding(0, 24, 0, 16);
+        saveBtn.setText("Apply");
+        saveBtn.setPadding(0, 20, 0, 16);
         saveBtn.setBackgroundColor(0xFF4CAF50);
         saveBtn.setTextColor(0xFFFFFFFF);
-        saveBtn.setTextSize(18f);
+        saveBtn.setTextSize(16f);
         saveBtn.setOnClickListener(v -> {
             prefs.edit()
                 .putInt("target_lang", langSpinner.getSelectedItemPosition())
                 .putBoolean("scan_all", scanAllBox.isChecked())
                 .apply();
-            Toast.makeText(this, "Настройки применены", Toast.LENGTH_SHORT).show();
-
+            Toast.makeText(this, "Applied", Toast.LENGTH_SHORT).show();
             stopService(new Intent(this, TranslationService.class));
             startService(new Intent(this, TranslationService.class));
         });
         root.addView(saveBtn);
 
-        setContentView(root);
+        // Debug log
+        TextView logLabel = new TextView(this);
+        logLabel.setText("\nCheck notification for scan details");
+        logLabel.setTextSize(12f);
+        logLabel.setTextColor(0xFF999999);
+        root.addView(logLabel);
+
+        scroll.addView(root);
+        setContentView(scroll);
     }
 }
