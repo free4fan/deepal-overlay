@@ -437,11 +437,19 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
         conn.disconnect();
 
-        String json = sb.toString();
-        int start = json.indexOf("\"");
-        if (start > 0) {
-            int end = json.indexOf("\"", start + 1);
-            if (end > start + 1) return json.substring(start + 1, end);
+        // Proper JSON parsing — handles \u003c etc.
+        try {
+            org.json.JSONArray arr = new org.json.JSONArray(sb.toString());
+            org.json.JSONArray first = arr.getJSONArray(0);
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < first.length(); i++) {
+                org.json.JSONArray pair = first.getJSONArray(i);
+                String translated = pair.optString(0, "");
+                if (!translated.isEmpty()) result.append(translated);
+            }
+            if (result.length() > 0) return result.toString();
+        } catch (Exception e) {
+            // fall through
         }
         throw new IOException("Parse error");
     }
@@ -467,12 +475,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
         conn.disconnect();
 
-        String json = sb.toString();
-        int idx = json.indexOf("\"translatedText\":\"");
-        if (idx > 0) {
-            int start = idx + 17;
-            int end = json.indexOf("\"", start);
-            if (end > start) return json.substring(start, end);
+        try {
+            org.json.JSONObject obj = new org.json.JSONObject(sb.toString());
+            org.json.JSONObject data = obj.getJSONObject("responseData");
+            String result = data.getString("translatedText");
+            if (result != null && !result.isEmpty()) return result;
+        } catch (Exception e) {
+            // fall through
         }
         throw new IOException("Parse error");
     }
