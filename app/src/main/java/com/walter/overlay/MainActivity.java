@@ -230,6 +230,20 @@ public class MainActivity extends AppCompatActivity {
         logLabel.setTextColor(0xFF999999);
         root.addView(logLabel);
 
+        // Quit button
+        Button quitBtn = new Button(this);
+        quitBtn.setText("Quit");
+        quitBtn.setBackgroundColor(0xFFE53935);
+        quitBtn.setTextColor(0xFFFFFFFF);
+        quitBtn.setTextSize(14f);
+        quitBtn.setPadding(0, 20, 0, 16);
+        quitBtn.setOnClickListener(v -> {
+            stopService(new Intent(this, TranslationService.class));
+            finishAffinity();
+            System.exit(0);
+        });
+        root.addView(quitBtn);
+
         scroll.addView(root);
         setContentView(scroll);
     }
