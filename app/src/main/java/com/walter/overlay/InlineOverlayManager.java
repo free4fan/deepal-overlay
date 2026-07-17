@@ -48,9 +48,12 @@ public class InlineOverlayManager {
         String key = left + "," + top;
 
         float textSize = Math.max(10, Math.min(origTextSize, 24));
+        float density = dm.density;
+        float singleLineHeight = textSize * density * 1.4f;
+        boolean allowWrap = height > singleLineHeight * 1.5f;
 
         // Calculate width to fully cover original text
-        float charWidth = textSize * dm.density * 0.6f;
+        float charWidth = textSize * density * 0.6f;
         int textWidth = (int)(translatedText.length() * charWidth) + 24;
         int overlayWidth = Math.max(width, Math.min(textWidth, (int)(screenWidth * 0.9)));
         if (left + overlayWidth > screenWidth) {
@@ -60,17 +63,17 @@ public class InlineOverlayManager {
         // Update existing overlay at this position
         TextView existing = activeViews.get(key);
         if (existing != null) {
-            // Update text if translation changed
             String currentText = existing.getText().toString();
             if (!currentText.equals(translatedText)) {
                 existing.setText(translatedText);
             }
             WindowManager.LayoutParams lp = (WindowManager.LayoutParams) existing.getLayoutParams();
-            if (lp.x != left || lp.y != top || lp.width != overlayWidth || lp.height != Math.max(height, 20)) {
+            int newHeight = allowWrap ? WindowManager.LayoutParams.WRAP_CONTENT : Math.max(height, 20);
+            if (lp.x != left || lp.y != top || lp.width != overlayWidth || lp.height != newHeight) {
                 lp.x = left;
                 lp.y = top;
                 lp.width = overlayWidth;
-                lp.height = Math.max(height, 20);
+                lp.height = newHeight;
                 try { windowManager.updateViewLayout(existing, lp); } catch (Exception ignored) {}
             }
             return;
@@ -79,19 +82,25 @@ public class InlineOverlayManager {
         // Create new overlay — matches native app appearance
         TextView tv = new TextView(context);
         tv.setText(translatedText);
-        // Determine text color based on background luminance
         int textColor = isLightColor(bgColor) ? 0xFF333333 : 0xFFFFFFFF;
         tv.setTextColor(textColor);
         tv.setBackgroundColor(bgColor);
         tv.setTypeface(Typeface.DEFAULT);
-        tv.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
-        tv.setSingleLine(true);
-        tv.setEllipsize(TextUtils.TruncateAt.END);
         tv.setIncludeFontPadding(false);
+
+        if (allowWrap) {
+            tv.setSingleLine(false);
+            tv.setMaxLines(Math.max(2, (int)(height / singleLineHeight) + 1));
+            tv.setEllipsize(TextUtils.TruncateAt.END);
+            tv.setGravity(Gravity.TOP | Gravity.START);
+        } else {
+            tv.setSingleLine(true);
+            tv.setEllipsize(TextUtils.TruncateAt.END);
+            tv.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        }
 
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize);
 
-        // Padding matching native text view
         int padH = Math.max(2, width / 30);
         int padV = Math.max(1, height / 10);
         tv.setPadding(padH, padV, padH, padV);
@@ -100,9 +109,13 @@ public class InlineOverlayManager {
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             : WindowManager.LayoutParams.TYPE_PHONE;
 
+        int overlayHeight = allowWrap
+            ? WindowManager.LayoutParams.WRAP_CONTENT
+            : Math.max(height + padV * 2, 20);
+
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
             overlayWidth + padH * 2,
-            Math.max(height + padV * 2, 20),
+            overlayHeight,
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
