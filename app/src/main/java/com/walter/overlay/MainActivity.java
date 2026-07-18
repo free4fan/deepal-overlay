@@ -23,7 +23,11 @@ import com.google.android.material.card.MaterialCardView;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
-    private boolean resumed = false;
+    private MaterialButton accBtn, grantOverlayBtn, quitBtn, openDeepalBtn, testOverlayBtn;
+    private MaterialCardView actionsCard;
+    private ImageView accIcon, overlayIcon;
+    private TextView accStatusLabel, overlayStatusLabel;
+    private SharedPreferences prefs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,11 +37,11 @@ public class MainActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);
 
-        MaterialButton accBtn = findViewById(R.id.accBtn);
-        MaterialButton quitBtn = findViewById(R.id.quitBtn);
-        MaterialButton openDeepalBtn = findViewById(R.id.openDeepalBtn);
-        MaterialButton testOverlayBtn = findViewById(R.id.testOverlayBtn);
-        MaterialCardView actionsCard = findViewById(R.id.actionsCard);
+        accBtn = findViewById(R.id.accBtn);
+        quitBtn = findViewById(R.id.quitBtn);
+        openDeepalBtn = findViewById(R.id.openDeepalBtn);
+        testOverlayBtn = findViewById(R.id.testOverlayBtn);
+        actionsCard = findViewById(R.id.actionsCard);
         MaterialSwitch scanAllSwitch = findViewById(R.id.scanAllSwitch);
         MaterialSwitch wordWrapSwitch = findViewById(R.id.wordWrapSwitch);
         MaterialSwitch darkOverlaySwitch = findViewById(R.id.darkOverlaySwitch);
@@ -52,51 +56,19 @@ public class MainActivity extends AppCompatActivity {
         MaterialButton themeDark = findViewById(R.id.themeDark);
         MaterialButton themeSystem = findViewById(R.id.themeSystem);
 
-        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+        prefs = getSharedPreferences("deepal", MODE_PRIVATE);
 
         // Status icons
-        ImageView accIcon = findViewById(R.id.accIcon);
-        ImageView overlayIcon = findViewById(R.id.overlayIcon);
-        TextView accStatusLabel = findViewById(R.id.accStatusLabel);
-        TextView overlayStatusLabel = findViewById(R.id.overlayStatusLabel);
+        accIcon = findViewById(R.id.accIcon);
+        overlayIcon = findViewById(R.id.overlayIcon);
+        accStatusLabel = findViewById(R.id.accStatusLabel);
+        overlayStatusLabel = findViewById(R.id.overlayStatusLabel);
 
-        // Check permissions
-        String serviceId = getPackageName() + "/" + TranslationService.class.getName();
-        String enabledServices = Settings.Secure.getString(getContentResolver(),
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        boolean isAccEnabled = enabledServices != null && enabledServices.contains(serviceId);
-        boolean hasOverlay = checkOverlayPermission();
+        refreshStatus();
 
-        // Accessibility status
-        if (isAccEnabled) {
-            accIcon.setImageResource(android.R.drawable.ic_menu_info_details);
-            accIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_success));
-            accStatusLabel.setText(R.string.acc_active);
-            accBtn.setText(R.string.btn_enabled);
-            accBtn.setEnabled(false);
-            accBtn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.status_success));
-            accBtn.setTextColor(ContextCompat.getColor(this, android.R.color.white));
-        } else {
-            accIcon.setImageResource(android.R.drawable.ic_dialog_alert);
-            accIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
-            accStatusLabel.setText(R.string.acc_required);
-            accBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        }
-
-        // Overlay status
-        MaterialButton grantOverlayBtn = findViewById(R.id.grantOverlayBtn);
-        if (hasOverlay) {
-            overlayIcon.setImageResource(android.R.drawable.ic_menu_info_details);
-            overlayIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_success));
-            overlayStatusLabel.setText(R.string.overlay_granted);
-            grantOverlayBtn.setText(R.string.btn_overlay_granted);
-            grantOverlayBtn.setEnabled(false);
-            grantOverlayBtn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.status_success));
-            grantOverlayBtn.setTextColor(ContextCompat.getColor(this, android.R.color.white));
-        } else {
-            overlayIcon.setImageResource(android.R.drawable.ic_dialog_alert);
-            overlayIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
-            overlayStatusLabel.setText(R.string.overlay_required);
+        // Overlay permission button
+        grantOverlayBtn = findViewById(R.id.grantOverlayBtn);
+        if (!checkOverlayPermission()) {
             grantOverlayBtn.setOnClickListener(v -> {
                 try {
                     startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -107,55 +79,48 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
         }
-
-        // Actions card
-        if (isAccEnabled && hasOverlay) {
-            actionsCard.setVisibility(android.view.View.VISIBLE);
-
-            openDeepalBtn.setOnClickListener(v -> {
-                try {
-                    Intent launch = getPackageManager().getLaunchIntentForPackage("deepal.com.cn.app");
-                    if (launch != null) {
-                        startActivity(launch);
-                    } else {
-                        Intent intent = new Intent();
-                        intent.setClassName("deepal.com.cn.app", "deepal.com.cn.app.SplashActivity");
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        startActivity(intent);
-                    }
-                } catch (Exception e) {
-                    Toast.makeText(this, R.string.deepal_not_found, Toast.LENGTH_SHORT).show();
+        // Actions card button listeners (visibility set in refreshStatus)
+        openDeepalBtn.setOnClickListener(v -> {
+            try {
+                Intent launch = getPackageManager().getLaunchIntentForPackage("deepal.com.cn.app");
+                if (launch != null) {
+                    startActivity(launch);
+                } else {
+                    Intent intent = new Intent();
+                    intent.setClassName("deepal.com.cn.app", "deepal.com.cn.app.SplashActivity");
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
                 }
-            });
+            } catch (Exception e) {
+                Toast.makeText(this, R.string.deepal_not_found, Toast.LENGTH_SHORT).show();
+            }
+        });
 
-            testOverlayBtn.setOnClickListener(v -> {
-                try {
-                    WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-                    TextView testView = new TextView(this);
-                    testView.setText(R.string.test_overlay_text);
-                    testView.setTextSize(22f);
-                    testView.setBackgroundColor(0xDD000000);
-                    testView.setTextColor(0xFF00FF00);
-                    testView.setPadding(32, 24, 32, 24);
-                    WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.WRAP_CONTENT,
-                        WindowManager.LayoutParams.WRAP_CONTENT,
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                        PixelFormat.TRANSLUCENT);
-                    params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-                    params.y = 100;
-                    wm.addView(testView, params);
-                    testView.postDelayed(() -> {
-                        try { wm.removeView(testView); } catch (Exception ignored) {}
-                    }, 3000);
-                } catch (Exception e) {
-                    Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
-                }
-            });
-        } else {
-            actionsCard.setVisibility(android.view.View.GONE);
-        }
+        testOverlayBtn.setOnClickListener(v -> {
+            try {
+                WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+                TextView testView = new TextView(this);
+                testView.setText(R.string.test_overlay_text);
+                testView.setTextSize(22f);
+                testView.setBackgroundColor(0xDD000000);
+                testView.setTextColor(0xFF00FF00);
+                testView.setPadding(32, 24, 32, 24);
+                WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    PixelFormat.TRANSLUCENT);
+                params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+                params.y = 100;
+                wm.addView(testView, params);
+                testView.postDelayed(() -> {
+                    try { wm.removeView(testView); } catch (Exception ignored) {}
+                }, 3000);
+            } catch (Exception e) {
+                Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
 
         // UI language toggle
         String uiLang = prefs.getString("ui_lang", "en");
@@ -248,8 +213,53 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         sendBroadcast(new Intent(TranslationService.ACTION_SHOW));
-        if (resumed) recreate();
-        resumed = true;
+        refreshStatus();
+    }
+
+    private void refreshStatus() {
+        String serviceId = getPackageName() + "/" + TranslationService.class.getName();
+        String enabledServices = Settings.Secure.getString(getContentResolver(),
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        boolean isAccEnabled = enabledServices != null && enabledServices.contains(serviceId);
+        boolean hasOverlay = checkOverlayPermission();
+
+        if (isAccEnabled) {
+            accIcon.setImageResource(android.R.drawable.ic_menu_info_details);
+            accIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_success));
+            accStatusLabel.setText(R.string.acc_active);
+            accBtn.setText(R.string.btn_enabled);
+            accBtn.setEnabled(false);
+            accBtn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.status_success));
+            accBtn.setTextColor(ContextCompat.getColor(this, android.R.color.white));
+        } else {
+            accIcon.setImageResource(android.R.drawable.ic_dialog_alert);
+            accIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
+            accStatusLabel.setText(R.string.acc_required);
+            accBtn.setEnabled(true);
+            accBtn.setBackgroundTintList(null);
+            accBtn.setTextColor(ContextCompat.getColor(this, R.color.md_theme_error));
+            accBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        }
+
+        if (hasOverlay) {
+            overlayIcon.setImageResource(android.R.drawable.ic_menu_info_details);
+            overlayIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_success));
+            overlayStatusLabel.setText(R.string.overlay_granted);
+            grantOverlayBtn.setText(R.string.btn_overlay_granted);
+            grantOverlayBtn.setEnabled(false);
+            grantOverlayBtn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.status_success));
+            grantOverlayBtn.setTextColor(ContextCompat.getColor(this, android.R.color.white));
+        } else {
+            overlayIcon.setImageResource(android.R.drawable.ic_dialog_alert);
+            overlayIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
+            overlayStatusLabel.setText(R.string.overlay_required);
+            grantOverlayBtn.setText(R.string.btn_grant_overlay);
+            grantOverlayBtn.setEnabled(true);
+            grantOverlayBtn.setBackgroundTintList(null);
+            grantOverlayBtn.setTextColor(ContextCompat.getColor(this, R.color.md_theme_error));
+        }
+
+        actionsCard.setVisibility(isAccEnabled && hasOverlay ? android.view.View.VISIBLE : android.view.View.GONE);
     }
 
     private void applyLocale() {

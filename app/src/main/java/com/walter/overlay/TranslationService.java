@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 import org.json.JSONObject;
 import org.json.JSONException;
 
@@ -51,11 +52,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private String lastPackage = "";
     private long lastScanTime = 0;
     private String lastWindowPackage = "";
-    private boolean translating = false;
+    private volatile boolean translating = false;
     private final Map<String, String> translationCache = new ConcurrentHashMap<>();
     private Map<String, String> dictEn = new HashMap<>();
     private Map<String, String> dictRu = new HashMap<>();
-    private boolean dictLoaded = false;
+    private volatile boolean dictLoaded = false;
     private int lastTargetLang = -1;
     private boolean translationEnabled = true;
     private android.widget.TextView toggleButton;
@@ -64,6 +65,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private ExecutorService translateExecutor;
     private final Runnable retryRunnable = this::retryOverlaysIfNeeded;
     private long lastNotificationTime = 0;
+    private static final Pattern HTML_PATTERN = Pattern.compile("<[^>]+>");
 
     @Override
     public void onServiceConnected() {
@@ -199,13 +201,15 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
     private Map<String, String> loadDictFromAssets(String filename) throws IOException {
         Map<String, String> dict = new HashMap<>();
-        try {
-            InputStream is = getAssets().open(filename);
-            BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
+        try (InputStream is = getAssets().open(filename);
+             BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) sb.append(line);
-            r.close();
+        } catch (IOException e) {
+            throw e;
+        }
+        try {
             JSONObject json = new JSONObject(sb.toString());
             java.util.Iterator<String> keys = json.keys();
             while (keys.hasNext()) {
@@ -313,8 +317,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
     }
 
-    private void setToggleVisible(boolean visible) {}
-
     private void updateNotification(String text) {
         if (notificationManager == null) return;
         long now = System.currentTimeMillis();
@@ -381,6 +383,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         boolean scanAll = prefs.getBoolean("scan_all", false);
+        int targetLang = prefs.getInt("target_lang", 0);
+        boolean wordWrap = prefs.getBoolean("word_wrap", false);
+        boolean darkOverlay = prefs.getBoolean("dark_overlay", false);
+
         boolean isTarget = scanAll ||
             packageName.contains("deepal") ||
             packageName.contains("changan") ||
@@ -406,7 +412,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             return;
         }
 
-        int targetLang = prefs.getInt("target_lang", 0);
         // Clear cache when language changes
         if (targetLang != lastTargetLang) {
             lastTargetLang = targetLang;
@@ -414,8 +419,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             mainHandler.post(() -> inlineManager.clearAll());
         }
         final Map<String, String> dict = (targetLang == 0) ? dictEn : dictRu;
-        final boolean wordWrap = prefs.getBoolean("word_wrap", false);
-        final boolean darkOverlay = prefs.getBoolean("dark_overlay", false);
 
         // Lookup in dictionary first — instant, no API needed
         final Set<String> currentPositions = new HashSet<>();
@@ -462,7 +465,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         if (text != null && text.length() > 0) {
             String s = text.toString().trim();
             // Strip HTML tags before checking
-            String clean = s.replaceAll("<[^>]+>", "").trim();
+            String clean = HTML_PATTERN.matcher(s).replaceAll("").trim();
             if (isTranslatable(clean)) {
                 Rect bounds = new Rect();
                 node.getBoundsInScreen(bounds);
@@ -563,27 +566,26 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                         node.translated = result;
                         translationCache.put(node.text, result);
                         translateCount++;
-
-                        final String translated = result;
-                        final int l = node.bounds.left;
-                        final int t = node.bounds.top;
-                        final int w = node.bounds.width();
-                        final int h = node.bounds.height();
-                        final float sz = node.estimatedTextSize;
-                        final int bg = node.bgColor;
-
-                        mainHandler.post(() -> {
-                            SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
-                            boolean ww = p.getBoolean("word_wrap", false);
-                            boolean dk = p.getBoolean("dark_overlay", false);
-                            inlineManager.showTranslation(l, t, w, h, translated, sz, bg, ww, dk);
-                        });
                     } catch (Exception e) {
                         Log.e(TAG, "Translate error: " + e.getMessage());
                     }
                 }
             } finally {
                 translating = false;
+                final List<TextNodeInfo> batch = new ArrayList<>(nodes);
+                mainHandler.post(() -> {
+                    SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
+                    boolean ww = p.getBoolean("word_wrap", false);
+                    boolean dk = p.getBoolean("dark_overlay", false);
+                    for (TextNodeInfo n : batch) {
+                        if (n.translated != null) {
+                            inlineManager.showTranslation(
+                                n.bounds.left, n.bounds.top,
+                                n.bounds.width(), n.bounds.height(),
+                                n.translated, n.estimatedTextSize, n.bgColor, ww, dk);
+                        }
+                    }
+                });
                 updateNotification(translateCount + " translated (cache: " + translationCache.size() + ")");
             }
         });
@@ -607,36 +609,38 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             "client=gtx&sl=zh-CN&tl=" + langCode + "&dt=t&q=" + encoded;
 
         HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(15000);
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-
-        int code = conn.getResponseCode();
-        if (code != 200) throw new IOException("HTTP " + code);
-
-        InputStream is = conn.getInputStream();
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) sb.append(line);
-        }
-        conn.disconnect();
-
-        // Proper JSON parsing — handles \u003c etc.
         try {
-            org.json.JSONArray arr = new org.json.JSONArray(sb.toString());
-            org.json.JSONArray first = arr.getJSONArray(0);
-            StringBuilder result = new StringBuilder();
-            for (int i = 0; i < first.length(); i++) {
-                org.json.JSONArray pair = first.getJSONArray(i);
-                String translated = pair.optString(0, "");
-                if (!translated.isEmpty()) result.append(translated);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(15000);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+
+            int code = conn.getResponseCode();
+            if (code != 200) throw new IOException("HTTP " + code);
+
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader r = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line);
             }
-            if (result.length() > 0) return result.toString();
-        } catch (Exception e) {
-            // fall through
+
+            try {
+                org.json.JSONArray arr = new org.json.JSONArray(sb.toString());
+                org.json.JSONArray first = arr.getJSONArray(0);
+                StringBuilder result = new StringBuilder();
+                for (int i = 0; i < first.length(); i++) {
+                    org.json.JSONArray pair = first.getJSONArray(i);
+                    String translated = pair.optString(0, "");
+                    if (!translated.isEmpty()) result.append(translated);
+                }
+                if (result.length() > 0) return result.toString();
+            } catch (Exception e) {
+                // fall through
+            }
+            throw new IOException("Parse error");
+        } finally {
+            conn.disconnect();
         }
-        throw new IOException("Parse error");
     }
 
     private String translateAlternative(String text, String langCode) throws IOException {
@@ -645,30 +649,33 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             "&langpair=zh-CN|" + langCode;
 
         HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(15000);
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-
-        int code = conn.getResponseCode();
-        if (code != 200) throw new IOException("HTTP " + code);
-
-        InputStream is = conn.getInputStream();
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) sb.append(line);
-        }
-        conn.disconnect();
-
         try {
-            org.json.JSONObject obj = new org.json.JSONObject(sb.toString());
-            org.json.JSONObject data = obj.getJSONObject("responseData");
-            String result = data.getString("translatedText");
-            if (result != null && !result.isEmpty()) return result;
-        } catch (Exception e) {
-            // fall through
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(15000);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+
+            int code = conn.getResponseCode();
+            if (code != 200) throw new IOException("HTTP " + code);
+
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader r = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line);
+            }
+
+            try {
+                org.json.JSONObject obj = new org.json.JSONObject(sb.toString());
+                org.json.JSONObject data = obj.getJSONObject("responseData");
+                String result = data.getString("translatedText");
+                if (result != null && !result.isEmpty()) return result;
+            } catch (Exception e) {
+                // fall through
+            }
+            throw new IOException("Parse error");
+        } finally {
+            conn.disconnect();
         }
-        throw new IOException("Parse error");
     }
 
     @Override
