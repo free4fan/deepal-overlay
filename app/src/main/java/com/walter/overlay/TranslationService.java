@@ -685,12 +685,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         });
     }
 
-    @Override
-    public void onTaskRemoved(Intent rootIntent) {
-        super.onTaskRemoved(rootIntent);
-        disableSelf();
-    }
-
     private static class TextNodeInfo {
         String text;
         Rect bounds;
