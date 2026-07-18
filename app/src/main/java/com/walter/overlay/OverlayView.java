@@ -3,19 +3,15 @@ package com.walter.overlay;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 public class OverlayView extends LinearLayout {
-    private static final String TAG = "OverlayView";
     private TextView textView;
-    private ScheduledExecutorService fadeScheduler;
+    private final Runnable hideRunnable = this::hide;
+    private boolean hidePosted = false;
 
     public OverlayView(Context context) {
         super(context);
@@ -38,7 +34,7 @@ public class OverlayView extends LinearLayout {
             LayoutParams.MATCH_PARENT,
             LayoutParams.WRAP_CONTENT));
 
-        hide();
+        setVisibility(View.GONE);
     }
 
     public void setText(String text) {
@@ -46,12 +42,8 @@ public class OverlayView extends LinearLayout {
             textView.post(() -> {
                 textView.setText(text);
                 show();
-                
-                if (fadeScheduler != null) {
-                    fadeScheduler.shutdownNow();
-                }
-                fadeScheduler = Executors.newSingleThreadScheduledExecutor();
-                fadeScheduler.schedule(this::hide, 15000, TimeUnit.MILLISECONDS);
+                cancelScheduledHide();
+                scheduleHide();
             });
         }
     }
@@ -72,17 +64,24 @@ public class OverlayView extends LinearLayout {
         }
     }
 
-    private void hide() {
-        textView.post(() -> {
-            if (getVisibility() == View.VISIBLE) {
-                setVisibility(View.GONE);
-            }
-        });
+    private void scheduleHide() {
+        if (!hidePosted) {
+            hidePosted = true;
+            textView.postDelayed(hideRunnable, 15000);
+        }
     }
 
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        if (fadeScheduler != null) fadeScheduler.shutdownNow();
+    private void cancelScheduledHide() {
+        if (hidePosted) {
+            hidePosted = false;
+            textView.removeCallbacks(hideRunnable);
+        }
+    }
+
+    private void hide() {
+        hidePosted = false;
+        if (getVisibility() == View.VISIBLE) {
+            setVisibility(View.GONE);
+        }
     }
 }

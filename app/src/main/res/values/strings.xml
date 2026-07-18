@@ -1,14 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="accessibility_desc">Переводит текст китайского приложения Deepal на русский/английский в реальном времени</string>
     <string name="app_name">Deepal Translate</string>
-    <string name="app_version">v2.4.0</string>
-    <string name="service_enabled">Сервис включён\nОткройте китайское приложение Deepal</string>
-    <string name="service_disabled">Необходимо включить сервис доступности</string>
-    <string name="btn_enable_settings">Настройки доступности</string>
-    <string name="translate_target_lang">Перевод на: </string>
-    <string name="scan_interval">Интервал сканирования (мс):</string>
-    <string name="overlay_opacity">Прозрачность оверлея:</string>
-    <string name="btn_apply">Применить</string>
-    <string name="usage_instructions">\nУстановка:\n1. Перейдите в Настройки → Доступность\n2. Включите «Deepal Translate»\n3. Откройте Deepal (китайское приложение)\n4. Перевод появится на экране\n\nПеревод с китайского → английский/русский</string>
+    <string name="app_version">v2.8.0</string>
+    <string name="accessibility_desc">Translates text from the Deepal car app (Chinese) to English/Russian in real time</string>
+
+    <!-- Permissions card -->
+    <string name="permissions_title">Permissions</string>
+    <string name="acc_active">Accessibility service active</string>
+    <string name="acc_required">Accessibility service required</string>
+    <string name="btn_enable_accessibility">Enable Accessibility</string>
+    <string name="btn_enabled">Enabled</string>
+    <string name="overlay_granted">Overlay permission granted</string>
+    <string name="overlay_required">Overlay permission required</string>
+    <string name="btn_grant_overlay">Grant overlay permission</string>
+    <string name="btn_overlay_granted">Overlay granted ✓</string>
+
+    <!-- Actions card -->
+    <string name="actions_title">Actions</string>
+    <string name="btn_open_deepal">Open Deepal</string>
+    <string name="btn_test_overlay">Test Overlay</string>
+    <string name="test_overlay_text">Overlay works!</string>
+    <string name="deepal_not_found">Deepal app not found</string>
+    <string name="error_prefix">Error: </string>
+
+    <!-- Settings card -->
+    <string name="settings_title">Settings</string>
+    <string name="ui_language">Interface language</string>
+    <string name="lang_en">English</string>
+    <string name="lang_ru">Русский</string>
+    <string name="app_theme">App theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_system">System</string>
+    <string name="translation_lang">Translation language</string>
+    <string name="scan_all_apps">Scan all apps</string>
+    <string name="scan_all_desc">Translate text in any app (debug)</string>
+    <string name="word_wrap">Word wrap</string>
+    <string name="word_wrap_desc">Wrap long translations to multiple lines</string>
+    <string name="btn_quit">Quit</string>
+    <string name="btn_quitting">Shutting down…</string>
+    <string name="dark_overlay">Dark overlay</string>
+    <string name="dark_overlay_desc">Dark background with white text for all overlays</string>
 </resources>

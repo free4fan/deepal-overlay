@@ -4,11 +4,15 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -26,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.json.JSONObject;
 import org.json.JSONException;
 
@@ -34,6 +40,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private static final int NOTIFICATION_ID = 1001;
     private static final String CHANNEL_ID = "translation_channel";
     private static final long DEBOUNCE_MS = 350;
+    public static final String ACTION_QUIT = "com.walter.overlay.QUIT";
+    public static final String ACTION_SHOW = "com.walter.overlay.SHOW";
 
     private OverlayView statusView;
     private InlineOverlayManager inlineManager;
@@ -52,6 +60,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private boolean translationEnabled = true;
     private android.widget.TextView toggleButton;
     private android.view.WindowManager toggleWm;
+    private BroadcastReceiver quitReceiver;
+    private ExecutorService translateExecutor;
+    private final Runnable retryRunnable = this::retryOverlaysIfNeeded;
+    private long lastNotificationTime = 0;
 
     @Override
     public void onServiceConnected() {
@@ -64,8 +76,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 NotificationManager.IMPORTANCE_LOW);
             notificationManager.createNotificationChannel(channel);
         }
-
-        updateNotification("Ready — open Deepal");
 
         android.accessibilityservice.AccessibilityServiceInfo config =
             new android.accessibilityservice.AccessibilityServiceInfo();
@@ -82,15 +92,78 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         setServiceInfo(config);
 
         inlineManager = new InlineOverlayManager(this);
-        setupStatusOverlay();
-        setupToggleButton();
 
         // Read saved translation state
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         translationEnabled = prefs.getBoolean("translation_enabled", true);
-        updateToggleButtonAppearance();
+
+        if (translationEnabled) {
+            updateNotification("Ready — open Deepal");
+            setupStatusOverlay();
+            setupToggleButton();
+            updateToggleButtonAppearance();
+        } else {
+            updateNotification("Disabled");
+        }
 
         loadDictionary();
+        translateExecutor = Executors.newSingleThreadExecutor();
+
+        quitReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if (ACTION_QUIT.equals(action)) {
+                    translationEnabled = false;
+                    if (inlineManager != null) inlineManager.clearAll();
+                    if (statusView != null) {
+                        try {
+                            android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+                            wm.removeViewImmediate(statusView);
+                            statusView = null;
+                        } catch (Exception e) {
+                            Log.w(TAG, "Quit: remove status overlay: " + e.getMessage());
+                        }
+                    }
+                    if (toggleButton != null && toggleWm != null) {
+                        try {
+                            toggleWm.removeViewImmediate(toggleButton);
+                            toggleButton = null;
+                        } catch (Exception e) {
+                            Log.w(TAG, "Quit: remove toggle: " + e.getMessage());
+                        }
+                    }
+                } else if (ACTION_SHOW.equals(action)) {
+                    translationEnabled = true;
+                    updateNotification("Ready — open Deepal");
+                    if (statusView == null || statusView.getWindowToken() == null) {
+                        setupStatusOverlay();
+                    }
+                    if (toggleButton == null) {
+                        setupToggleButton();
+                        updateToggleButtonAppearance();
+                    }
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter(ACTION_QUIT);
+        filter.addAction(ACTION_SHOW);
+        registerReceiver(quitReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+
+        retryOverlaysIfNeeded();
+    }
+
+    private void retryOverlaysIfNeeded() {
+        if (!Settings.canDrawOverlays(this)) {
+            mainHandler.postDelayed(retryRunnable, 2000);
+            return;
+        }
+        if (toggleButton == null) {
+            setupToggleButton();
+        }
+        if (statusView == null || statusView.getWindowToken() == null) {
+            setupStatusOverlay();
+        }
     }
 
     private void loadDictionary() {
@@ -135,14 +208,17 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     }
 
     private void setupStatusOverlay() {
+        if (!Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "No overlay permission, skipping status overlay");
+            return;
+        }
         try {
             android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
             statusView = new OverlayView(this);
             statusView.setText("Deepal Translate ready");
             statusView.show();
 
-            android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
-            wm.getDefaultDisplay().getMetrics(dm);
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
 
             android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
                 dm.widthPixels / 2,
@@ -162,10 +238,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     }
 
     private void setupToggleButton() {
+        if (!Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "No overlay permission, skipping toggle button");
+            return;
+        }
         try {
             toggleWm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
-            android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
-            toggleWm.getDefaultDisplay().getMetrics(dm);
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
 
             toggleButton = new android.widget.TextView(this);
             updateToggleButtonAppearance();
@@ -217,8 +296,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
     }
 
+    private void setToggleVisible(boolean visible) {}
+
     private void updateNotification(String text) {
         if (notificationManager == null) return;
+        long now = System.currentTimeMillis();
+        if (now - lastNotificationTime < 2000) return;
+        lastNotificationTime = now;
         Intent intent = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, intent,
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -248,7 +332,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 if (!packageName.equals(lastWindowPackage)) {
                     lastWindowPackage = packageName;
                     SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
-                    boolean scanAll = prefs.getBoolean("scan_all", true);
+                    boolean scanAll = prefs.getBoolean("scan_all", false);
                     boolean isTarget = scanAll ||
                         packageName.contains("deepal") ||
                         packageName.contains("changan") ||
@@ -279,7 +363,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             root.getPackageName().toString() : "";
 
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
-        boolean scanAll = prefs.getBoolean("scan_all", true);
+        boolean scanAll = prefs.getBoolean("scan_all", false);
         boolean isTarget = scanAll ||
             packageName.contains("deepal") ||
             packageName.contains("changan") ||
@@ -313,6 +397,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             mainHandler.post(() -> inlineManager.clearAll());
         }
         final Map<String, String> dict = (targetLang == 0) ? dictEn : dictRu;
+        final boolean wordWrap = prefs.getBoolean("word_wrap", false);
+        final boolean darkOverlay = prefs.getBoolean("dark_overlay", false);
 
         // Lookup in dictionary first — instant, no API needed
         final Set<String> currentPositions = new HashSet<>();
@@ -338,7 +424,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 inlineManager.showTranslation(
                     node.bounds.left, node.bounds.top,
                     node.bounds.width(), node.bounds.height(),
-                    display, node.estimatedTextSize, node.bgColor);
+                    display, node.estimatedTextSize, node.bgColor, wordWrap, darkOverlay);
             }
         });
 
@@ -374,6 +460,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             AccessibilityNodeInfo child = node.getChild(i);
             if (child != null) {
                 collectChineseNodes(child, result, depth + 1);
+                child.recycle();
             }
         }
     }
@@ -450,33 +537,39 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         int targetLang = prefs.getInt("target_lang", 0);
         final String langCode = (targetLang == 0) ? "en" : "ru";
 
-        new Thread(() -> {
-            for (TextNodeInfo node : nodes) {
-                try {
-                    String result = translateText(node.text, langCode);
-                    node.translated = result;
-                    translationCache.put(node.text, result);
-                    translateCount++;
+        translateExecutor.submit(() -> {
+            try {
+                for (TextNodeInfo node : nodes) {
+                    if (Thread.currentThread().isInterrupted()) break;
+                    try {
+                        String result = translateText(node.text, langCode);
+                        node.translated = result;
+                        translationCache.put(node.text, result);
+                        translateCount++;
 
-                    final String translated = result;
-                    final int l = node.bounds.left;
-                    final int t = node.bounds.top;
-                    final int w = node.bounds.width();
-                    final int h = node.bounds.height();
-                    final float sz = node.estimatedTextSize;
-                    final int bg = node.bgColor;
+                        final String translated = result;
+                        final int l = node.bounds.left;
+                        final int t = node.bounds.top;
+                        final int w = node.bounds.width();
+                        final int h = node.bounds.height();
+                        final float sz = node.estimatedTextSize;
+                        final int bg = node.bgColor;
 
-                    mainHandler.post(() -> {
-                        inlineManager.showTranslation(l, t, w, h, translated, sz, bg);
-                    });
-                } catch (Exception e) {
-                    Log.e(TAG, "Translate error: " + e.getMessage());
+                        mainHandler.post(() -> {
+                            SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
+                            boolean ww = p.getBoolean("word_wrap", false);
+                            boolean dk = p.getBoolean("dark_overlay", false);
+                            inlineManager.showTranslation(l, t, w, h, translated, sz, bg, ww, dk);
+                        });
+                    } catch (Exception e) {
+                        Log.e(TAG, "Translate error: " + e.getMessage());
+                    }
                 }
+            } finally {
+                translating = false;
+                updateNotification(translateCount + " translated (cache: " + translationCache.size() + ")");
             }
-
-            translating = false;
-            updateNotification(translateCount + " translated (cache: " + translationCache.size() + ")");
-        }).start();
+        });
     }
 
     private String translateText(String text, String langCode) throws IOException {
@@ -567,16 +660,27 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     @Override
     public void onDestroy() {
         super.onDestroy();
+        mainHandler.removeCallbacks(retryRunnable);
+        if (translateExecutor != null) translateExecutor.shutdownNow();
+        if (quitReceiver != null) {
+            try { unregisterReceiver(quitReceiver); } catch (Exception e) {
+                Log.w(TAG, "Unregister receiver: " + e.getMessage());
+            }
+        }
         mainHandler.post(() -> {
             if (inlineManager != null) inlineManager.clearAll();
             if (statusView != null) {
                 try {
                     android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
                     wm.removeViewImmediate(statusView);
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    Log.w(TAG, "Destroy: remove status overlay: " + e.getMessage());
+                }
             }
             if (toggleButton != null && toggleWm != null) {
-                try { toggleWm.removeViewImmediate(toggleButton); } catch (Exception ignored) {}
+                try { toggleWm.removeViewImmediate(toggleButton); } catch (Exception e) {
+                    Log.w(TAG, "Destroy: remove toggle: " + e.getMessage());
+                }
             }
         });
     }
@@ -584,7 +688,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
-        stopSelf();
+        disableSelf();
     }
 
     private static class TextNodeInfo {

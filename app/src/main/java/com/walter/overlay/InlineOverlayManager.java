@@ -38,7 +38,8 @@ public class InlineOverlayManager {
     }
 
     public void showTranslation(int left, int top, int width, int height,
-                                 String translatedText, float origTextSize, int bgColor) {
+                                 String translatedText, float origTextSize, int bgColor,
+                                 boolean wordWrap, boolean darkOverlay) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
@@ -49,11 +50,11 @@ public class InlineOverlayManager {
 
         float textSize = Math.max(10, Math.min(origTextSize, 24));
         float density = dm.density;
-        float singleLineHeight = textSize * density * 1.4f;
-        boolean allowWrap = height > singleLineHeight * 1.5f;
 
-        // Smart line break: max ~13 chars per line
-        String displayText = wrapText(translatedText, 13);
+        // Smart line break: max ~13 chars per line (only if word wrap enabled)
+        String displayText = wordWrap ? wrapText(translatedText, 13) : translatedText;
+        int lineCount = displayText.split("\n").length;
+        boolean multiline = lineCount > 1;
 
         // Calculate width based on longest line
         int longestLine = 0;
@@ -75,7 +76,7 @@ public class InlineOverlayManager {
                 existing.setText(displayText);
             }
             WindowManager.LayoutParams lp = (WindowManager.LayoutParams) existing.getLayoutParams();
-            int newHeight = allowWrap ? WindowManager.LayoutParams.WRAP_CONTENT : Math.max(height, 20);
+            int newHeight = multiline ? WindowManager.LayoutParams.WRAP_CONTENT : Math.max(height, 20);
             if (lp.x != left || lp.y != top || lp.width != overlayWidth || lp.height != newHeight) {
                 lp.x = left;
                 lp.y = top;
@@ -89,15 +90,21 @@ public class InlineOverlayManager {
         // Create new overlay — matches native app appearance
         TextView tv = new TextView(context);
         tv.setText(displayText);
-        int textColor = isLightColor(bgColor) ? 0xFF333333 : 0xFFFFFFFF;
+        int textColor;
+        if (darkOverlay) {
+            bgColor = 0xDD1A1A1A;
+            textColor = 0xFFFFFFFF;
+        } else {
+            textColor = isLightColor(bgColor) ? 0xFF333333 : 0xFFFFFFFF;
+        }
         tv.setTextColor(textColor);
         tv.setBackgroundColor(bgColor);
         tv.setTypeface(Typeface.DEFAULT);
         tv.setIncludeFontPadding(false);
 
-        if (allowWrap) {
+        if (multiline) {
             tv.setSingleLine(false);
-            tv.setMaxLines(Math.max(2, (int)(height / singleLineHeight) + 1));
+            tv.setMaxLines(4);
             tv.setEllipsize(TextUtils.TruncateAt.END);
             tv.setGravity(Gravity.TOP | Gravity.START);
         } else {
@@ -116,7 +123,7 @@ public class InlineOverlayManager {
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             : WindowManager.LayoutParams.TYPE_PHONE;
 
-        int overlayHeight = allowWrap
+        int overlayHeight = multiline
             ? WindowManager.LayoutParams.WRAP_CONTENT
             : Math.max(height + padV * 2, 20);
 

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Deepal Translate</string>
+    <string name="app_version">v2.8.0</string>
+    <string name="accessibility_desc">Переводит текст китайского приложения Deepal на русский/английский в реальном времени</string>
+
+    <!-- Permissions card -->
+    <string name="permissions_title">Разрешения</string>
+    <string name="acc_active">Сервис доступности активен</string>
+    <string name="acc_required">Необходим сервис доступности</string>
+    <string name="btn_enable_accessibility">Включить доступность</string>
+    <string name="btn_enabled">Включено</string>
+    <string name="overlay_granted">Разрешение на оверлей получено</string>
+    <string name="overlay_required">Требуется разрешение на оверлей</string>
+    <string name="btn_grant_overlay">Выдать разрешение</string>
+    <string name="btn_overlay_granted">Разрешено ✓</string>
+
+    <!-- Actions card -->
+    <string name="actions_title">Действия</string>
+    <string name="btn_open_deepal">Открыть Deepal</string>
+    <string name="btn_test_overlay">Тест оверлея</string>
+    <string name="test_overlay_text">Оверлей работает!</string>
+    <string name="deepal_not_found">Приложение Deepal не найдено</string>
+    <string name="error_prefix">Ошибка: </string>
+
+    <!-- Settings card -->
+    <string name="settings_title">Настройки</string>
+    <string name="ui_language">Язык интерфейса</string>
+    <string name="lang_en">English</string>
+    <string name="lang_ru">Русский</string>
+    <string name="app_theme">Тема приложения</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="theme_system">Системная</string>
+    <string name="translation_lang">Язык перевода</string>
+    <string name="scan_all_apps">Сканировать все приложения</string>
+    <string name="scan_all_desc">Переводить текст в любом приложении (отладка)</string>
+    <string name="word_wrap">Перенос слов</string>
+    <string name="word_wrap_desc">Переносить длинные переводы на несколько строк</string>
+    <string name="btn_quit">Выход</string>
+    <string name="btn_quitting">Завершение…</string>
+    <string name="dark_overlay">Тёмный фон оверлея</string>
+    <string name="dark_overlay_desc">Тёмный фон и белый текст для всех оверлеев</string>
+</resources>

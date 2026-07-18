@@ -1,43 +1,58 @@
 package com.walter.overlay;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.graphics.PixelFormat;
-import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.WindowManager;
-import android.widget.*;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowCompat;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.card.MaterialCardView;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
     private boolean resumed = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        applyTheme();
+        applyLocale();
         super.onCreate(savedInstanceState);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);
 
         MaterialButton accBtn = findViewById(R.id.accBtn);
-        MaterialButton applyBtn = findViewById(R.id.applyBtn);
         MaterialButton quitBtn = findViewById(R.id.quitBtn);
         MaterialButton openDeepalBtn = findViewById(R.id.openDeepalBtn);
         MaterialButton testOverlayBtn = findViewById(R.id.testOverlayBtn);
         MaterialCardView actionsCard = findViewById(R.id.actionsCard);
         MaterialSwitch scanAllSwitch = findViewById(R.id.scanAllSwitch);
+        MaterialSwitch wordWrapSwitch = findViewById(R.id.wordWrapSwitch);
+        MaterialSwitch darkOverlaySwitch = findViewById(R.id.darkOverlaySwitch);
         MaterialButtonToggleGroup langToggle = findViewById(R.id.langToggle);
         MaterialButton langEn = findViewById(R.id.langEn);
         MaterialButton langRu = findViewById(R.id.langRu);
+        MaterialButtonToggleGroup uiLangToggle = findViewById(R.id.uiLangToggle);
+        MaterialButton uiLangEn = findViewById(R.id.uiLangEn);
+        MaterialButton uiLangRu = findViewById(R.id.uiLangRu);
+        MaterialButtonToggleGroup themeToggle = findViewById(R.id.themeToggle);
+        MaterialButton themeLight = findViewById(R.id.themeLight);
+        MaterialButton themeDark = findViewById(R.id.themeDark);
+        MaterialButton themeSystem = findViewById(R.id.themeSystem);
 
-        android.content.SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
 
         // Status icons
         ImageView accIcon = findViewById(R.id.accIcon);
@@ -56,31 +71,33 @@ public class MainActivity extends AppCompatActivity {
         if (isAccEnabled) {
             accIcon.setImageResource(android.R.drawable.ic_menu_info_details);
             accIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_success));
-            accStatusLabel.setText("Accessibility service active");
-            accBtn.setText("Enabled");
+            accStatusLabel.setText(R.string.acc_active);
+            accBtn.setText(R.string.btn_enabled);
             accBtn.setEnabled(false);
             accBtn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.status_success));
+            accBtn.setTextColor(ContextCompat.getColor(this, android.R.color.white));
         } else {
             accIcon.setImageResource(android.R.drawable.ic_dialog_alert);
             accIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
-            accStatusLabel.setText("Accessibility service required");
+            accStatusLabel.setText(R.string.acc_required);
             accBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         }
 
         // Overlay status
+        MaterialButton grantOverlayBtn = findViewById(R.id.grantOverlayBtn);
         if (hasOverlay) {
             overlayIcon.setImageResource(android.R.drawable.ic_menu_info_details);
             overlayIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_success));
-            overlayStatusLabel.setText("Overlay permission granted");
+            overlayStatusLabel.setText(R.string.overlay_granted);
+            grantOverlayBtn.setText(R.string.btn_overlay_granted);
+            grantOverlayBtn.setEnabled(false);
+            grantOverlayBtn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.status_success));
+            grantOverlayBtn.setTextColor(ContextCompat.getColor(this, android.R.color.white));
         } else {
             overlayIcon.setImageResource(android.R.drawable.ic_dialog_alert);
             overlayIcon.setColorFilter(ContextCompat.getColor(this, R.color.status_error));
-            overlayStatusLabel.setText("Overlay permission required");
-
-            LinearLayout container = findViewById(R.id.overlayButtonsContainer);
-            MaterialButton grantBtn = new MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
-            grantBtn.setText("Grant overlay permission");
-            grantBtn.setOnClickListener(v -> {
+            overlayStatusLabel.setText(R.string.overlay_required);
+            grantOverlayBtn.setOnClickListener(v -> {
                 try {
                     startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:" + getPackageName())));
@@ -89,18 +106,9 @@ public class MainActivity extends AppCompatActivity {
                         Uri.parse("package:" + getPackageName())));
                 }
             });
-            container.addView(grantBtn);
-
-            MaterialButton confirmBtn = new MaterialButton(this);
-            confirmBtn.setText("Permission granted — continue");
-            confirmBtn.setOnClickListener(v -> {
-                prefs.edit().putBoolean("overlay_manual_granted", true).apply();
-                recreate();
-            });
-            container.addView(confirmBtn);
         }
 
-        // Actions card — only show when permissions OK
+        // Actions card
         if (isAccEnabled && hasOverlay) {
             actionsCard.setVisibility(android.view.View.VISIBLE);
 
@@ -116,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
                         startActivity(intent);
                     }
                 } catch (Exception e) {
-                    Toast.makeText(this, "Deepal app not found", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, R.string.deepal_not_found, Toast.LENGTH_SHORT).show();
                 }
             });
 
@@ -124,7 +132,7 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
                     TextView testView = new TextView(this);
-                    testView.setText(" Overlay works! ");
+                    testView.setText(R.string.test_overlay_text);
                     testView.setTextSize(22f);
                     testView.setBackgroundColor(0xDD000000);
                     testView.setTextColor(0xFF00FF00);
@@ -142,46 +150,127 @@ public class MainActivity extends AppCompatActivity {
                         try { wm.removeView(testView); } catch (Exception ignored) {}
                     }, 3000);
                 } catch (Exception e) {
-                    Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
                 }
             });
         } else {
             actionsCard.setVisibility(android.view.View.GONE);
         }
 
-        // Settings
+        // UI language toggle
+        String uiLang = prefs.getString("ui_lang", "en");
+        if ("ru".equals(uiLang)) {
+            uiLangToggle.check(R.id.uiLangRu);
+        } else {
+            uiLangToggle.check(R.id.uiLangEn);
+        }
+
+        uiLangToggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            String newLang = (checkedId == R.id.uiLangRu) ? "ru" : "en";
+            if (!newLang.equals(uiLang)) {
+                prefs.edit().putString("ui_lang", newLang).apply();
+                recreate();
+            }
+        });
+
+        // App theme toggle
+        String themeMode = prefs.getString("theme_mode", "system");
+        switch (themeMode) {
+            case "light": themeToggle.check(R.id.themeLight); break;
+            case "dark": themeToggle.check(R.id.themeDark); break;
+            default: themeToggle.check(R.id.themeSystem); break;
+        }
+
+        themeToggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            String newTheme;
+            if (checkedId == R.id.themeLight) newTheme = "light";
+            else if (checkedId == R.id.themeDark) newTheme = "dark";
+            else newTheme = "system";
+            if (!newTheme.equals(themeMode)) {
+                prefs.edit().putString("theme_mode", newTheme).apply();
+                applyTheme();
+                recreate();
+            }
+        });
+
+        // Translation language toggle
         if (prefs.getInt("target_lang", 0) == 0) {
             langToggle.check(R.id.langEn);
         } else {
             langToggle.check(R.id.langRu);
         }
 
-        scanAllSwitch.setChecked(prefs.getBoolean("scan_all", true));
+        scanAllSwitch.setChecked(prefs.getBoolean("scan_all", false));
+        wordWrapSwitch.setChecked(prefs.getBoolean("word_wrap", false));
+        darkOverlaySwitch.setChecked(prefs.getBoolean("dark_overlay", false));
 
-        applyBtn.setOnClickListener(v -> {
-            int langPos = langToggle.getCheckedButtonId() == R.id.langRu ? 1 : 0;
-            prefs.edit()
-                .putInt("target_lang", langPos)
-                .putBoolean("scan_all", scanAllSwitch.isChecked())
-                .apply();
-            Toast.makeText(this, "Settings applied", Toast.LENGTH_SHORT).show();
+        langToggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            int langPos = checkedId == R.id.langRu ? 1 : 0;
+            prefs.edit().putInt("target_lang", langPos).apply();
+            stopService(new Intent(this, TranslationService.class));
+            startService(new Intent(this, TranslationService.class));
+        });
+
+        scanAllSwitch.setOnCheckedChangeListener((btn, checked) -> {
+            prefs.edit().putBoolean("scan_all", checked).apply();
+            stopService(new Intent(this, TranslationService.class));
+            startService(new Intent(this, TranslationService.class));
+        });
+
+        wordWrapSwitch.setOnCheckedChangeListener((btn, checked) -> {
+            prefs.edit().putBoolean("word_wrap", checked).apply();
+            stopService(new Intent(this, TranslationService.class));
+            startService(new Intent(this, TranslationService.class));
+        });
+
+        darkOverlaySwitch.setOnCheckedChangeListener((btn, checked) -> {
+            prefs.edit().putBoolean("dark_overlay", checked).apply();
             stopService(new Intent(this, TranslationService.class));
             startService(new Intent(this, TranslationService.class));
         });
 
         quitBtn.setOnClickListener(v -> {
-            prefs.edit().putBoolean("translation_enabled", false).apply();
-            stopService(new Intent(this, TranslationService.class));
-            finishAffinity();
-            System.exit(0);
+            sendBroadcast(new Intent(TranslationService.ACTION_QUIT));
+            finishAndRemoveTask();
         });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        sendBroadcast(new Intent(TranslationService.ACTION_SHOW));
         if (resumed) recreate();
         resumed = true;
+    }
+
+    private void applyLocale() {
+        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+        String lang = prefs.getString("ui_lang", "en");
+        Locale locale = new Locale(lang);
+        Locale.setDefault(locale);
+        Configuration config = new Configuration();
+        config.setLocale(locale);
+        getBaseContext().getResources().updateConfiguration(config,
+            getBaseContext().getResources().getDisplayMetrics());
+    }
+
+    private void applyTheme() {
+        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+        String themeMode = prefs.getString("theme_mode", "system");
+        switch (themeMode) {
+            case "light":
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+                break;
+            case "dark":
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+                break;
+            default:
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+                break;
+        }
     }
 
     private boolean checkOverlayPermission() {

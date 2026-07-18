@@ -1,47 +1,63 @@
-# Deepal Translate — Overlay-сервис перевода китайских приложений
+# Deepal Translate Overlay
 
-Отдельное Android-приложение (без модификации оригинального APK).
-Перехватывает текст из Chinese UI через Accessibility Service,
-переводит через Google Translate RPC и рисует overlay поверх строк.
+Приложение для Android, которое переводит китайский интерфейс приложения **Deepal (深蓝汽车)** на английский или русский язык в реальном времени.
 
-## Структура
-```
-deepal-overlay/
-├── app/
-│   ├── build.gradle              # Dependencies: material, appcompat
-│   └── src/main/
-│       ├── AndroidManifest.xml   # Service + permissions declaration
-│       ├── res/xml/accessibility_config.xml  # Service config
-│       └── java/com/walter/overlay/
-│           ├── TranslationService.java    # Main logic
-│           └── MainActivity.java          # Settings UI
-```
+Работает через Accessibility Service — читает текст из любого приложения и показывает перевод поверх оригинального текста.
 
-## Сборка
-1. Установить Android SDK + Gradle (или Android Studio)
-2. `cd deepal-overlay && ./gradlew assembleDebug`
-3. APK: `app/build/outputs/apk/debug/app-debug.apk`
+## Установка
 
-## Установка на телефон
-```bash
-adb install app/build/outputs/apk/debug/app-debug.apk
-```
+1. Скачайте `deepal-overlay.apk`
+2. Установите: `adb install deepal-overlay.apk`
+3. Откройте приложение и выдайте два разрешения:
+   - **Accessibility Service** — для чтения текста из приложений
+   - **Overlay** — для отображения переводов поверх других приложений
+4. Нажмите **Open Deepal** для запуска приложения
 
-После установки: включить сервис в Настройки → Специальные возможности.
+## Использование
+
+- **Плавающая кнопка ON/OFF** (правый верхний угол) — включение/выключение перевода
+- **Quit** — скрывает переводчик (сервис остаётся в фоне без UI, без перевода)
+- **Open Deepal** — запускает приложение Deepal
+
+### Настройки (в MainActivity)
+
+- **UI Language** — язык интерфейса (English / Русский)
+- **Translation Language** — язык перевода (English / Русский)
+- **Scan all apps** — переводить во всех приложениях (не только в Deepal)
+- **Word wrap** — перенос длинных переводов на несколько строк
+- **Dark overlay** — тёмный фон для всех переводов
+- **App theme** — тема приложения (Светлая / Тёмная / Системная)
+
+## Требования
+
+- Android 8.0+ (API 26)
+- Приложение Deepal установлено на устройстве
 
 ## Как работает
-1. Приложение запускает **AccessibilityService** с правом просмотра содержимого окна
-2. При смене экрана (`TYPE_WINDOW_STATE_CHANGED`) сканирует все `TextView` окна
-3. Для строк с китайскими символами (CJK Unicode range 4E00-9FFF) делает запрос к Google Translate RPC
-4. Рисует полупрозрачный yellow overlay TextView поверх оригинала
-5. При уходе из приложения — overlays удаляются
 
-## Настройка
-- `TARGET_LANG` в TranslationService.java: `"en"` или `"ru"`  
-- `MONITORED_PACKAGES` — список пакетов для мониторинга (пусто = все приложения)
-- Для Russian: изменить TARGET_LANG на "ru"
+1. Accessibility Service отслеживает события окон (открытие, скролл, смена контента)
+2. При обнаружении китайского текста — ищет перевод в embedded словаре (4889 строк)
+3. Если строка не найдена в словаре — отправляет запрос к Google Translate API
+4. Перевод отображается как overlay поверх оригинального текста
 
-## Ограничения
-- Google Translate RPC — бесплатный, без ключа, но есть rate limiting (~50 req/min)
-- Android 10+ требует явного разрешения на overlay от пользователя
-- Overlay позиционируется в (0,0) относительно экрана — может не точно совпадать с оригиналом
+## Технические детали
+
+- **Package**: `com.walter.overlay`
+- **Min SDK**: 26 (Android 8.0)
+- **Target SDK**: 34 (Android 14)
+- **Embedded dictionaries**: `dict_zh_en.json` (4889 строк), `dict_zh_ru.json` (4889 строк)
+- **Overlay**: `TYPE_APPLICATION_OVERLAY` с автоматическим подбором фона
+- **Flicker-free**: обновление overlay in-place без пересоздания
+
+## Сборка
+
+```bash
+./gradlew assembleDebug
+cp app/build/outputs/apk/debug/app-debug.apk deepal-overlay.apk
+```
+
+Требуется JDK 17.
+
+## Лицензия
+
+Личный проект. Не для распространения.
