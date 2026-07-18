@@ -133,6 +133,23 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                             Log.w(TAG, "Quit: remove toggle: " + e.getMessage());
                         }
                     }
+                    SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
+                    if (p.getBoolean("disable_acc_on_quit", false)) {
+                        String serviceId = getPackageName() + "/" + TranslationService.class.getName();
+                        String enabledNow = Settings.Secure.getString(getContentResolver(),
+                            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+                        if (enabledNow != null && enabledNow.contains(serviceId)) {
+                            String newServices = enabledNow.replace(serviceId, "").replace("::", ":");
+                            if (newServices.startsWith(":")) newServices = newServices.substring(1);
+                            if (newServices.endsWith(":")) newServices = newServices.substring(0, newServices.length() - 1);
+                            Settings.Secure.putString(getContentResolver(),
+                                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newServices);
+                            if (newServices.isEmpty()) {
+                                Settings.Secure.putInt(getContentResolver(),
+                                    Settings.Secure.ACCESSIBILITY_ENABLED, 0);
+                            }
+                        }
+                    }
                 } else if (ACTION_SHOW.equals(action)) {
                     translationEnabled = true;
                     updateNotification("Ready — open Deepal");

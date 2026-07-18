@@ -41,4 +41,8 @@
     <string name="btn_quitting">Завершение…</string>
     <string name="dark_overlay">Тёмный фон оверлея</string>
     <string name="dark_overlay_desc">Тёмный фон и белый текст для всех оверлеев</string>
+
+    <!-- Quit settings -->
+    <string name="disable_acc_on_quit">Отключить доступность</string>
+    <string name="disable_acc_on_quit_desc">Удалить из сервисов доступности при выходе</string>
 </resources>
