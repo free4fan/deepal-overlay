@@ -168,6 +168,15 @@
                     android:layout_height="wrap_content"
                     android:text="@string/btn_test_overlay"
                     android:textAllCaps="false"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/testQuitBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_test_quit"
+                    android:textAllCaps="false"
                     style="?attr/materialButtonOutlinedStyle" />
 
             </LinearLayout>

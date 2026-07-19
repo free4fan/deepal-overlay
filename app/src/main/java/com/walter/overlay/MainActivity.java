@@ -24,7 +24,7 @@ import com.google.android.material.card.MaterialCardView;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
-    private MaterialButton accBtn, grantOverlayBtn, quitBtn, openDeepalBtn, testOverlayBtn;
+    private MaterialButton accBtn, grantOverlayBtn, quitBtn, openDeepalBtn, testOverlayBtn, testQuitBtn;
     private MaterialCardView actionsCard;
     private ImageView accIcon, overlayIcon;
     private TextView accStatusLabel, overlayStatusLabel;
@@ -44,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
         quitBtn = findViewById(R.id.quitBtn);
         openDeepalBtn = findViewById(R.id.openDeepalBtn);
         testOverlayBtn = findViewById(R.id.testOverlayBtn);
+        testQuitBtn = findViewById(R.id.testQuitBtn);
         actionsCard = findViewById(R.id.actionsCard);
         grantOverlayBtn = findViewById(R.id.grantOverlayBtn);
         MaterialSwitch scanAllSwitch = findViewById(R.id.scanAllSwitch);
@@ -190,6 +191,11 @@ public class MainActivity extends AppCompatActivity {
 
         quitBtn.setOnClickListener(v -> {
             TranslationService.quit();
+            finishAndRemoveTask();
+        });
+
+        testQuitBtn.setOnClickListener(v -> {
+            TranslationService.disableTranslation();
             finishAndRemoveTask();
         });
     }

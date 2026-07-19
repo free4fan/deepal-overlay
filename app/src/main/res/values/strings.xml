@@ -19,6 +19,7 @@
     <string name="actions_title">Actions</string>
     <string name="btn_open_deepal">Open Deepal</string>
     <string name="btn_test_overlay">Test Overlay</string>
+    <string name="btn_test_quit">Test Quit (keep accessibility)</string>
     <string name="test_overlay_text">Overlay works!</string>
     <string name="deepal_not_found">Deepal app not found</string>
     <string name="error_prefix">Error: </string>

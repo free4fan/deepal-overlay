@@ -698,6 +698,31 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         s.disableSelf();
     }
 
+    public static void disableTranslation() {
+        TranslationService s = instance;
+        if (s == null) return;
+        s.translationEnabled = false;
+        if (s.inlineManager != null) s.inlineManager.clearAll();
+        if (s.statusView != null) {
+            try {
+                android.view.WindowManager wm = (android.view.WindowManager) s.getSystemService(WINDOW_SERVICE);
+                wm.removeViewImmediate(s.statusView);
+                s.statusView = null;
+            } catch (Exception e) {
+                Log.w(TAG, "disableTranslation: remove status overlay: " + e.getMessage());
+            }
+        }
+        if (s.toggleButton != null && s.toggleWm != null) {
+            try {
+                s.toggleWm.removeViewImmediate(s.toggleButton);
+                s.toggleButton = null;
+            } catch (Exception e) {
+                Log.w(TAG, "disableTranslation: remove toggle: " + e.getMessage());
+            }
+        }
+        // NOT calling disableSelf() — accessibility stays on
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
