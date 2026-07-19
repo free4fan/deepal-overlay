@@ -275,13 +275,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         toggleButton.setGravity(android.view.Gravity.CENTER);
         int pad = (int)(8 * getResources().getDisplayMetrics().density);
         toggleButton.setPadding(pad, pad, pad, pad);
-        if (translationEnabled) {
-            toggleButton.setText("ON");
-            toggleButton.setBackgroundColor(0xCC4CAF50);
-        } else {
-            toggleButton.setText("OFF");
-            toggleButton.setBackgroundColor(0xCC999999);
-        }
+        int bgColor = translationEnabled ? 0xCC4CAF50 : 0xCC999999;
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+        shape.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        shape.setCornerRadius(12 * getResources().getDisplayMetrics().density);
+        shape.setColor(bgColor);
+        toggleButton.setBackground(shape);
+        toggleButton.setText(translationEnabled ? "ON" : "OFF");
     }
 
     private void updateNotification(String text) {
@@ -695,6 +695,20 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             }
         }
         s.disableSelf();
+    }
+
+    public static void reactivate() {
+        TranslationService s = instance;
+        if (s == null) return;
+        s.translationEnabled = true;
+        s.updateNotification("Ready — open Deepal");
+        if (s.statusView == null || s.statusView.getWindowToken() == null) {
+            s.setupStatusOverlay();
+        }
+        if (s.toggleButton == null) {
+            s.setupToggleButton();
+            s.updateToggleButtonAppearance();
+        }
     }
 
     public static void disableTranslation() {

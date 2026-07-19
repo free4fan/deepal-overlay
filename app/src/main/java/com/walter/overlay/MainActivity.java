@@ -203,7 +203,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        sendBroadcast(new Intent(TranslationService.ACTION_SHOW));
+        TranslationService.reactivate();
         refreshStatus();
     }
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.9.2 (2026-07-19)
+- `TranslationService.reactivate()` — надёжное восстановление через статический instance (вместо broadcast)
+- Тoggle button: скруглённый прямоугольник (GradientDrawable, cornerRadius 12dp)
+- versionCode 49
+
 ## v2.9.1 (2026-07-19)
 - Добавлена тестовая кнопка "Test Quit (keep accessibility)" — выход без отключения accessibility
 - `TranslationService.disableTranslation()` — чистит оверлеи, выключает перевод, НЕ вызывает `disableSelf()`
