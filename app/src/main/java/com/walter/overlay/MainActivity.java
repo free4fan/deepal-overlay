@@ -158,8 +158,6 @@ public class MainActivity extends AppCompatActivity {
         scanAllSwitch.setChecked(prefs.getBoolean("scan_all", false));
         wordWrapSwitch.setChecked(prefs.getBoolean("word_wrap", false));
         darkOverlaySwitch.setChecked(prefs.getBoolean("dark_overlay", false));
-        MaterialSwitch disableAccSwitch = findViewById(R.id.disableAccSwitch);
-        disableAccSwitch.setChecked(prefs.getBoolean("disable_acc_on_quit", false));
 
         langToggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked) return;
@@ -187,12 +185,8 @@ public class MainActivity extends AppCompatActivity {
             startService(new Intent(this, TranslationService.class));
         });
 
-        disableAccSwitch.setOnCheckedChangeListener((btn, checked) -> {
-            prefs.edit().putBoolean("disable_acc_on_quit", checked).apply();
-        });
-
         quitBtn.setOnClickListener(v -> {
-            sendBroadcast(new Intent(TranslationService.ACTION_QUIT));
+            TranslationService.quit();
             finishAndRemoveTask();
         });
     }

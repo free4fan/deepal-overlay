@@ -42,7 +42,4 @@
     <string name="dark_overlay">Dark overlay</string>
     <string name="dark_overlay_desc">Dark background with white text for all overlays</string>
 
-    <!-- Quit settings -->
-    <string name="disable_acc_on_quit">Disable accessibility</string>
-    <string name="disable_acc_on_quit_desc">Remove from accessibility services on quit</string>
 </resources>

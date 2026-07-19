@@ -43,6 +43,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private static final long DEBOUNCE_MS = 350;
     public static final String ACTION_QUIT = "com.walter.overlay.QUIT";
     public static final String ACTION_SHOW = "com.walter.overlay.SHOW";
+    private static TranslationService instance;
 
     private OverlayView statusView;
     private InlineOverlayManager inlineManager;
@@ -70,6 +71,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     @Override
     public void onServiceConnected() {
         Log.i(TAG, "Service started");
+        instance = this;
 
         notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -668,14 +670,38 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 Log.w(TAG, "onTaskRemoved: remove toggle: " + e.getMessage());
             }
         }
-        if (getSharedPreferences("deepal", MODE_PRIVATE).getBoolean("disable_acc_on_quit", false)) {
-            disableSelf();
+        disableSelf();
+    }
+
+    public static void quit() {
+        TranslationService s = instance;
+        if (s == null) return;
+        s.translationEnabled = false;
+        if (s.inlineManager != null) s.inlineManager.clearAll();
+        if (s.statusView != null) {
+            try {
+                android.view.WindowManager wm = (android.view.WindowManager) s.getSystemService(WINDOW_SERVICE);
+                wm.removeViewImmediate(s.statusView);
+                s.statusView = null;
+            } catch (Exception e) {
+                Log.w(TAG, "quit: remove status overlay: " + e.getMessage());
+            }
         }
+        if (s.toggleButton != null && s.toggleWm != null) {
+            try {
+                s.toggleWm.removeViewImmediate(s.toggleButton);
+                s.toggleButton = null;
+            } catch (Exception e) {
+                Log.w(TAG, "quit: remove toggle: " + e.getMessage());
+            }
+        }
+        s.disableSelf();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        instance = null;
         mainHandler.removeCallbacks(retryRunnable);
         if (translateExecutor != null) translateExecutor.shutdownNow();
         if (quitReceiver != null) {
