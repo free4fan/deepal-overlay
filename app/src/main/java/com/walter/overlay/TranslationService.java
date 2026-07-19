@@ -117,41 +117,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 String action = intent.getAction();
                 if (ACTION_QUIT.equals(action)) {
                     translationEnabled = false;
-                    if (inlineManager != null) inlineManager.clearAll();
-                    if (statusView != null) {
-                        try {
-                            android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
-                            wm.removeViewImmediate(statusView);
-                            statusView = null;
-                        } catch (Exception e) {
-                            Log.w(TAG, "Quit: remove status overlay: " + e.getMessage());
-                        }
-                    }
-                    if (toggleButton != null && toggleWm != null) {
-                        try {
-                            toggleWm.removeViewImmediate(toggleButton);
-                            toggleButton = null;
-                        } catch (Exception e) {
-                            Log.w(TAG, "Quit: remove toggle: " + e.getMessage());
-                        }
-                    }
-                    SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
-                    if (p.getBoolean("disable_acc_on_quit", false)) {
-                        String serviceId = getPackageName() + "/" + TranslationService.class.getName();
-                        String enabledNow = Settings.Secure.getString(getContentResolver(),
-                            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-                        if (enabledNow != null && enabledNow.contains(serviceId)) {
-                            String newServices = enabledNow.replace(serviceId, "").replace("::", ":");
-                            if (newServices.startsWith(":")) newServices = newServices.substring(1);
-                            if (newServices.endsWith(":")) newServices = newServices.substring(0, newServices.length() - 1);
-                            Settings.Secure.putString(getContentResolver(),
-                                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, newServices);
-                            if (newServices.isEmpty()) {
-                                Settings.Secure.putInt(getContentResolver(),
-                                    Settings.Secure.ACCESSIBILITY_ENABLED, 0);
-                            }
-                        }
-                    }
                 } else if (ACTION_SHOW.equals(action)) {
                     translationEnabled = true;
                     updateNotification("Ready — open Deepal");
@@ -680,6 +645,33 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
     @Override
     public void onInterrupt() {}
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        translationEnabled = false;
+        if (inlineManager != null) inlineManager.clearAll();
+        if (statusView != null) {
+            try {
+                android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+                wm.removeViewImmediate(statusView);
+                statusView = null;
+            } catch (Exception e) {
+                Log.w(TAG, "onTaskRemoved: remove status overlay: " + e.getMessage());
+            }
+        }
+        if (toggleButton != null && toggleWm != null) {
+            try {
+                toggleWm.removeViewImmediate(toggleButton);
+                toggleButton = null;
+            } catch (Exception e) {
+                Log.w(TAG, "onTaskRemoved: remove toggle: " + e.getMessage());
+            }
+        }
+        if (getSharedPreferences("deepal", MODE_PRIVATE).getBoolean("disable_acc_on_quit", false)) {
+            disableSelf();
+        }
+    }
 
     @Override
     public void onDestroy() {

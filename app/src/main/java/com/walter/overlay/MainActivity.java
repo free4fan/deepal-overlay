@@ -42,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
         openDeepalBtn = findViewById(R.id.openDeepalBtn);
         testOverlayBtn = findViewById(R.id.testOverlayBtn);
         actionsCard = findViewById(R.id.actionsCard);
+        grantOverlayBtn = findViewById(R.id.grantOverlayBtn);
         MaterialSwitch scanAllSwitch = findViewById(R.id.scanAllSwitch);
         MaterialSwitch wordWrapSwitch = findViewById(R.id.wordWrapSwitch);
         MaterialSwitch darkOverlaySwitch = findViewById(R.id.darkOverlaySwitch);
@@ -66,19 +67,6 @@ public class MainActivity extends AppCompatActivity {
 
         refreshStatus();
 
-        // Overlay permission button
-        grantOverlayBtn = findViewById(R.id.grantOverlayBtn);
-        if (!checkOverlayPermission()) {
-            grantOverlayBtn.setOnClickListener(v -> {
-                try {
-                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName())));
-                } catch (Exception e) {
-                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:" + getPackageName())));
-                }
-            });
-        }
         // Actions card button listeners (visibility set in refreshStatus)
         openDeepalBtn.setOnClickListener(v -> {
             try {
@@ -257,6 +245,15 @@ public class MainActivity extends AppCompatActivity {
             grantOverlayBtn.setEnabled(true);
             grantOverlayBtn.setBackgroundTintList(null);
             grantOverlayBtn.setTextColor(ContextCompat.getColor(this, R.color.md_theme_error));
+            grantOverlayBtn.setOnClickListener(v -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName())));
+                } catch (Exception e) {
+                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())));
+                }
+            });
         }
 
         actionsCard.setVisibility(isAccEnabled && hasOverlay ? android.view.View.VISIBLE : android.view.View.GONE);
