@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.9.1 (2026-07-19)
+- Добавлена тестовая кнопка "Test Quit (keep accessibility)" — выход без отключения accessibility
+- `TranslationService.disableTranslation()` — чистит оверлеи, выключает перевод, НЕ вызывает `disableSelf()`
+- versionCode 48
+
 ## v2.9.0 (2026-07-19)
 - **Quit**: полностью отключает accessibility service (`disableSelf()`)
 - **Quit**: плавающая кнопка и все оверлеи пропадают мгновенно
