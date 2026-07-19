@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.9.0 (2026-07-19)
+- **Quit**: полностью отключает accessibility service (`disableSelf()`)
+- **Quit**: плавающая кнопка и все оверлеи пропадают мгновенно
+- **Quit**: при следующем запуске требуется повторное включение accessibility
+- **Без тумблера**: поведение quit всегда одинаковое (выход = отключение сервиса)
+- Исправлена рекурсия `recreate()` в `onResume()` — заменён на `refreshStatus()`
+- Исправлены утечки `HttpURLConnection` (disconnect в finally)
+- Исправлены утечки InputStream в `loadDictFromAssets()` (try-with-resources)
+- `dictLoaded` и `translating` — `volatile` (видимость между потоками)
+- `collectChineseNodes()`: `Pattern.compile` вместо `replaceAll` на каждый вызов
+- `scanWindow()`: SharedPreferences читаются 1 раз за вызов
+- `translateBatch()`: один `mainHandler.post()` вместо N (батч)
+- Удалён пустой метод `setToggleVisible()`
+- Удалён `BroadcastReceiver.ACTION_QUIT` (заменён на прямой вызов `quit()`)
+- `TranslationService.quit()` — статический метод, синхронный вызов
+- versionCode 47
+
 ## v2.8.0 (2026-07-18)
 - **Quit**: приложение сворачивается, плавающая кнопка пропадает
 - **Quit**: при следующем запуске приложения снова требуется permission на accessibility
