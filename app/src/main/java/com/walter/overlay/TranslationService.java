@@ -670,7 +670,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 Log.w(TAG, "onTaskRemoved: remove toggle: " + e.getMessage());
             }
         }
-        disableSelf();
     }
 
     public static void quit() {
