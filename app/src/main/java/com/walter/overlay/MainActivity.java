@@ -24,7 +24,8 @@ import com.google.android.material.card.MaterialCardView;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
-    private MaterialButton accBtn, grantOverlayBtn, quitBtn, openDeepalBtn, testOverlayBtn, testQuitBtn;
+    private MaterialButton accBtn, grantOverlayBtn, openDeepalBtn, testOverlayBtn;
+    private MaterialButton quitKeepAccBtn, quitDisableAccBtn;
     private MaterialCardView actionsCard;
     private ImageView accIcon, overlayIcon;
     private TextView accStatusLabel, overlayStatusLabel;
@@ -41,10 +42,10 @@ public class MainActivity extends AppCompatActivity {
         ((MaterialToolbar) findViewById(R.id.toolbar)).setSubtitle("v" + BuildConfig.VERSION_NAME);
 
         accBtn = findViewById(R.id.accBtn);
-        quitBtn = findViewById(R.id.quitBtn);
+        quitKeepAccBtn = findViewById(R.id.quitKeepAccBtn);
+        quitDisableAccBtn = findViewById(R.id.quitDisableAccBtn);
         openDeepalBtn = findViewById(R.id.openDeepalBtn);
         testOverlayBtn = findViewById(R.id.testOverlayBtn);
-        testQuitBtn = findViewById(R.id.testQuitBtn);
         actionsCard = findViewById(R.id.actionsCard);
         grantOverlayBtn = findViewById(R.id.grantOverlayBtn);
         MaterialSwitch scanAllSwitch = findViewById(R.id.scanAllSwitch);
@@ -189,13 +190,13 @@ public class MainActivity extends AppCompatActivity {
             startService(new Intent(this, TranslationService.class));
         });
 
-        quitBtn.setOnClickListener(v -> {
-            TranslationService.quit();
+        quitKeepAccBtn.setOnClickListener(v -> {
+            TranslationService.disableTranslation();
             finishAndRemoveTask();
         });
 
-        testQuitBtn.setOnClickListener(v -> {
-            TranslationService.disableTranslation();
+        quitDisableAccBtn.setOnClickListener(v -> {
+            TranslationService.quit();
             finishAndRemoveTask();
         });
     }

@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.9.3 (2026-07-19)
+- Две кнопки выхода внизу: "Quit (keep accessibility)" и "Quit (disable accessibility)"
+- Тестовая кнопка убрана из Actions card
+- versionCode 50
+
 ## v2.9.2 (2026-07-19)
 - `TranslationService.reactivate()` — надёжное восстановление через статический instance (вместо broadcast)
 - Тoggle button: скруглённый прямоугольник (GradientDrawable, cornerRadius 12dp)

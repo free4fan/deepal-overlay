@@ -19,7 +19,6 @@
     <string name="actions_title">Действия</string>
     <string name="btn_open_deepal">Открыть Deepal</string>
     <string name="btn_test_overlay">Тест оверлея</string>
-    <string name="btn_test_quit">Тест выхода (без откл. доступности)</string>
     <string name="test_overlay_text">Оверлей работает!</string>
     <string name="deepal_not_found">Приложение Deepal не найдено</string>
     <string name="error_prefix">Ошибка: </string>
@@ -38,8 +37,8 @@
     <string name="scan_all_desc">Переводить текст в любом приложении (отладка)</string>
     <string name="word_wrap">Перенос слов</string>
     <string name="word_wrap_desc">Переносить длинные переводы на несколько строк</string>
-    <string name="btn_quit">Выход</string>
-    <string name="btn_quitting">Завершение…</string>
+    <string name="btn_quit_keep_acc">Выход (оставить доступность)</string>
+    <string name="btn_quit_disable_acc">Выход (отключить доступность)</string>
     <string name="dark_overlay">Тёмный фон оверлея</string>
     <string name="dark_overlay_desc">Тёмный фон и белый текст для всех оверлеев</string>
 

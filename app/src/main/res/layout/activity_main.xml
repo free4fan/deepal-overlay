@@ -168,15 +168,6 @@
                     android:layout_height="wrap_content"
                     android:text="@string/btn_test_overlay"
                     android:textAllCaps="false"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_marginBottom="8dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/testQuitBtn"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/btn_test_quit"
-                    android:textAllCaps="false"
                     style="?attr/materialButtonOutlinedStyle" />
 
             </LinearLayout>
@@ -438,14 +429,25 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Quit button -->
+        <!-- Quit buttons -->
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/quitBtn"
+            android:id="@+id/quitKeepAccBtn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="24dp"
-            android:text="@string/btn_quit"
+            android:text="@string/btn_quit_keep_acc"
+            android:textAllCaps="false"
+            style="?attr/materialButtonOutlinedStyle" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/quitDisableAccBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp"
+            android:text="@string/btn_quit_disable_acc"
             android:textAllCaps="false"
             style="?attr/materialButtonOutlinedStyle"
             app:strokeColor="@color/md_theme_error"
