@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Deepal Translate</string>
-    <string name="app_version">v2.8.0</string>
+    <string name="app_version">v2.9.0</string> <!-- Also set programmatically from BuildConfig -->
     <string name="accessibility_desc">Translates text from the Deepal car app (Chinese) to English/Russian in real time</string>
 
     <!-- Permissions card -->
