@@ -164,30 +164,24 @@ public class MainActivity extends AppCompatActivity {
         wordWrapSwitch.setChecked(prefs.getBoolean("word_wrap", false));
         darkOverlaySwitch.setChecked(prefs.getBoolean("dark_overlay", false));
 
+        // The service reads prefs on every scan — no need to restart it
+        // (stopService is a no-op for an accessibility service anyway)
         langToggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked) return;
             int langPos = checkedId == R.id.langRu ? 1 : 0;
             prefs.edit().putInt("target_lang", langPos).apply();
-            stopService(new Intent(this, TranslationService.class));
-            startService(new Intent(this, TranslationService.class));
         });
 
         scanAllSwitch.setOnCheckedChangeListener((btn, checked) -> {
             prefs.edit().putBoolean("scan_all", checked).apply();
-            stopService(new Intent(this, TranslationService.class));
-            startService(new Intent(this, TranslationService.class));
         });
 
         wordWrapSwitch.setOnCheckedChangeListener((btn, checked) -> {
             prefs.edit().putBoolean("word_wrap", checked).apply();
-            stopService(new Intent(this, TranslationService.class));
-            startService(new Intent(this, TranslationService.class));
         });
 
         darkOverlaySwitch.setOnCheckedChangeListener((btn, checked) -> {
             prefs.edit().putBoolean("dark_overlay", checked).apply();
-            stopService(new Intent(this, TranslationService.class));
-            startService(new Intent(this, TranslationService.class));
         });
 
         quitKeepAccBtn.setOnClickListener(v -> {
@@ -263,15 +257,17 @@ public class MainActivity extends AppCompatActivity {
         actionsCard.setVisibility(isAccEnabled && hasOverlay ? android.view.View.VISIBLE : android.view.View.GONE);
     }
 
+    // Build the new config from the current one: a bare Configuration() (the old
+    // code) zeroed densityDpi and other fields after every language switch
     private void applyLocale() {
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         String lang = prefs.getString("ui_lang", "en");
         Locale locale = new Locale(lang);
         Locale.setDefault(locale);
-        Configuration config = new Configuration();
+        android.content.res.Resources res = getBaseContext().getResources();
+        Configuration config = res.getConfiguration();
         config.setLocale(locale);
-        getBaseContext().getResources().updateConfiguration(config,
-            getBaseContext().getResources().getDisplayMetrics());
+        res.updateConfiguration(config, res.getDisplayMetrics());
     }
 
     private void applyTheme() {
@@ -291,8 +287,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean checkOverlayPermission() {
-        if (Settings.canDrawOverlays(this)) return true;
-        return getSharedPreferences("deepal", MODE_PRIVATE)
-            .getBoolean("overlay_manual_granted", false);
+        return Settings.canDrawOverlays(this);
     }
 }

@@ -4,10 +4,8 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Rect;
 import android.os.Handler;
@@ -26,10 +24,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
@@ -41,11 +39,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private static final int NOTIFICATION_ID = 1001;
     private static final String CHANNEL_ID = "translation_channel";
     private static final long DEBOUNCE_MS = 350;
-    public static final String ACTION_QUIT = "com.walter.overlay.QUIT";
-    public static final String ACTION_SHOW = "com.walter.overlay.SHOW";
+    private static final long[] FOLLOW_UP_SCAN_DELAYS = {400, 1200, 2500};
     private static TranslationService instance;
 
-    private OverlayView statusView;
     private InlineOverlayManager inlineManager;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
     private NotificationManager notificationManager;
@@ -54,15 +50,53 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private long lastScanTime = 0;
     private String lastWindowPackage = "";
     private volatile boolean translating = false;
-    private final Map<String, String> translationCache = new ConcurrentHashMap<>();
+    private final List<TextNodeInfo> translateQueue = new ArrayList<>();
+    private final Set<String> queuedTexts = new HashSet<>();
+    // Access-order LRU caches, guarded by cacheLock: the executor thread and the
+    // main thread both read/write, so the non-thread-safe LinkedHashMap must be
+    // synchronized externally
+    private final Object cacheLock = new Object();
+    private final Map<String, String> cacheEn = newLruCache();
+    private final Map<String, String> cacheRu = newLruCache();
+    private static final int CACHE_MAX_ENTRIES = 20000;
+    private static final String CACHE_FILE = "translation_cache.json";
     private Map<String, String> dictEn = new HashMap<>();
     private Map<String, String> dictRu = new HashMap<>();
     private volatile boolean dictLoaded = false;
-    private int lastTargetLang = -1;
     private boolean translationEnabled = true;
+    private boolean trailingScanScheduled = false;
+    private int scanEpoch = 0;
+    private static final long WATCHDOG_MS = 3000;
+    private static final long FOREIGN_WINDOW_CLEAR_DELAY_MS = 500;
+    private final Runnable watchdogScan = new Runnable() {
+        @Override
+        public void run() {
+            if (translationEnabled) scanWindow();
+            mainHandler.postDelayed(this, WATCHDOG_MS);
+        }
+    };
+    // Delayed cancellable clear: app startup/scroll emits transient foreign
+    // windows (SystemUI transitions, toasts). An instant clearAll on each one
+    // wiped live overlays — they reappeared only after the next successful scan
+    private final Runnable foreignClearRunnable = () -> {
+        if (!translationEnabled) return;
+        if (inlineManager != null) inlineManager.clearAll();
+    };
+
+    private void scheduleForeignClear() {
+        mainHandler.removeCallbacks(foreignClearRunnable);
+        mainHandler.postDelayed(foreignClearRunnable, FOREIGN_WINDOW_CLEAR_DELAY_MS);
+    }
+
+    private void cancelForeignClear() {
+        mainHandler.removeCallbacks(foreignClearRunnable);
+    }
+    private final Runnable trailingScan = () -> {
+        trailingScanScheduled = false;
+        if (translationEnabled) scanWindow();
+    };
     private android.widget.TextView toggleButton;
     private android.view.WindowManager toggleWm;
-    private BroadcastReceiver quitReceiver;
     private ExecutorService translateExecutor;
     private final Runnable retryRunnable = this::retryOverlaysIfNeeded;
     private long lastNotificationTime = 0;
@@ -99,11 +133,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
         // Read saved translation state
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
-        translationEnabled = prefs.getBoolean("translation_enabled", true);
+        translationEnabled = prefs.getBoolean("translation_enabled", false);
 
         if (translationEnabled) {
             updateNotification("Ready — open Deepal");
-            setupStatusOverlay();
             setupToggleButton();
             updateToggleButtonAppearance();
         } else {
@@ -111,35 +144,18 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
 
         loadDictionary();
+        loadPersistentCache();
         translateExecutor = Executors.newSingleThreadExecutor();
 
-        quitReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                if (ACTION_QUIT.equals(action)) {
-                    translationEnabled = false;
-                } else if (ACTION_SHOW.equals(action)) {
-                    translationEnabled = true;
-                    updateNotification("Ready — open Deepal");
-                    if (statusView == null || statusView.getWindowToken() == null) {
-                        setupStatusOverlay();
-                    }
-                    if (toggleButton == null) {
-                        setupToggleButton();
-                        updateToggleButtonAppearance();
-                    }
-                }
-            }
-        };
-        IntentFilter filter = new IntentFilter(ACTION_QUIT);
-        filter.addAction(ACTION_SHOW);
-        registerReceiver(quitReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        // Watchdog: some pages never fire accessibility events (fragments,
+        // lazy-loaded content) — periodic rescan catches them
+        mainHandler.postDelayed(watchdogScan, WATCHDOG_MS);
 
         retryOverlaysIfNeeded();
     }
 
     private void retryOverlaysIfNeeded() {
+        if (!translationEnabled) return;
         if (!Settings.canDrawOverlays(this)) {
             mainHandler.postDelayed(retryRunnable, 2000);
             return;
@@ -147,41 +163,66 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         if (toggleButton == null) {
             setupToggleButton();
         }
-        if (statusView == null || statusView.getWindowToken() == null) {
-            setupStatusOverlay();
+    }
+
+    private static Map<String, String> newLruCache() {
+        return new LinkedHashMap<String, String>(256, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+                return size() > CACHE_MAX_ENTRIES;
+            }
+        };
+    }
+
+    // Store under the raw form and the normalized one (when they differ) so
+    // lookups hit regardless of which form the node carried
+    private void cachePut(Map<String, String> cache, String k, String v) {
+        synchronized (cacheLock) {
+            cache.put(k, v);
+            String n = normalizeForKey(k);
+            if (n != null) cache.put(n, v);
         }
+    }
+
+    private String cacheGet(Map<String, String> cache, String k) {
+        synchronized (cacheLock) {
+            String v = cache.get(k);
+            if (v == null) v = cache.get(normalizeForKey(k));
+            return v;
+        }
+    }
+
+    private int cacheSize(Map<String, String> cache) {
+        synchronized (cacheLock) { return cache.size(); }
     }
 
     private void loadDictionary() {
         new Thread(() -> {
-            try {
-                dictEn = loadDictFromAssets("dict_zh_en.json");
-                dictRu = loadDictFromAssets("dict_zh_ru.json");
-                dictLoaded = true;
-                Log.i(TAG, "Dictionary loaded: EN=" + dictEn.size() + " RU=" + dictRu.size());
-                updateNotification("Dict loaded: " + dictEn.size() + " entries");
-            } catch (Exception e) {
-                Log.e(TAG, "Dictionary load failed: " + e.getMessage());
+            for (int attempt = 1; attempt <= 3 && !dictLoaded; attempt++) {
+                try {
+                    Map<String, String> en = loadDictFromAssets("dict_zh_en.json");
+                    Map<String, String> ru = loadDictFromAssets("dict_zh_ru.json");
+                    dictEn = en;
+                    dictRu = ru;
+                    dictLoaded = true;
+                    Log.i(TAG, "Dictionary loaded: EN=" + dictEn.size() + " RU=" + dictRu.size());
+                    updateNotification("Dict loaded: " + dictEn.size() + " entries");
+                } catch (Exception e) {
+                    Log.e(TAG, "Dictionary load failed (attempt " + attempt + "/3): " + e.getMessage());
+                    try { Thread.sleep(1000); } catch (InterruptedException ie) { return; }
+                }
             }
         }).start();
     }
 
     private Map<String, String> loadDictFromAssets(String filename) throws IOException {
         Map<String, String> dict = new HashMap<>();
-        StringBuilder sb = new StringBuilder();
-        try (InputStream is = getAssets().open(filename);
-             BufferedReader r = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) sb.append(line);
-        } catch (IOException e) {
-            throw e;
-        }
         try {
-            JSONObject json = new JSONObject(sb.toString());
-            java.util.Iterator<String> keys = json.keys();
+            JSONObject obj = new JSONObject(readAll(getAssets().open(filename)));
+            java.util.Iterator<String> keys = obj.keys();
             while (keys.hasNext()) {
                 String key = keys.next();
-                dict.put(key, json.getString(key));
+                dict.put(key, obj.getString(key));
             }
         } catch (JSONException e) {
             throw new IOException("JSON parse error: " + e.getMessage());
@@ -189,39 +230,69 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         return dict;
     }
 
-    private int getStatusBarHeight() {
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        if (resourceId > 0) return getResources().getDimensionPixelSize(resourceId);
-        return 0;
+    private static String readAll(InputStream in) throws IOException {
+        try (in; java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
     }
 
-    private void setupStatusOverlay() {
-        if (!Settings.canDrawOverlays(this)) {
-            Log.w(TAG, "No overlay permission, skipping status overlay");
-            return;
-        }
+    private void loadPersistentCache() {
+        new Thread(() -> {
+            try {
+                java.io.File f = new java.io.File(getFilesDir(), CACHE_FILE);
+                if (!f.exists()) return;
+                JSONObject root = new JSONObject(readAll(new java.io.FileInputStream(f)));
+                JSONObject en = root.optJSONObject("en");
+                JSONObject ru = root.optJSONObject("ru");
+                synchronized (cacheLock) {
+                    if (en != null) {
+                        java.util.Iterator<String> keys = en.keys();
+                        while (keys.hasNext()) {
+                            String k = keys.next();
+                            cacheEn.put(k, en.getString(k));
+                        }
+                    }
+                    if (ru != null) {
+                        java.util.Iterator<String> keys = ru.keys();
+                        while (keys.hasNext()) {
+                            String k = keys.next();
+                            cacheRu.put(k, ru.getString(k));
+                        }
+                    }
+                    Log.i(TAG, "Persistent cache loaded: EN=" + cacheEn.size() + " RU=" + cacheRu.size());
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Persistent cache load failed: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void savePersistentCache() {
         try {
-            android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
-            statusView = new OverlayView(this);
-            statusView.setText("Deepal Translate ready");
-            statusView.show();
-
-            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-
-            android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
-                dm.widthPixels / 2,
-                android.view.WindowManager.LayoutParams.WRAP_CONTENT,
-                android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                    android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                android.graphics.PixelFormat.TRANSLUCENT);
-            params.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
-            params.x = 10;
-            params.y = getStatusBarHeight() + 10;
-            params.alpha = 0.7f;
-            wm.addView(statusView, params);
+            JSONObject enJson;
+            JSONObject ruJson;
+            synchronized (cacheLock) {
+                enJson = new JSONObject(cacheEn);
+                ruJson = new JSONObject(cacheRu);
+            }
+            JSONObject root = new JSONObject();
+            root.put("en", enJson);
+            root.put("ru", ruJson);
+            java.io.File dir = getFilesDir();
+            java.io.File tmp = new java.io.File(dir, CACHE_FILE + ".tmp");
+            java.io.File dst = new java.io.File(dir, CACHE_FILE);
+            try (java.io.FileOutputStream os = new java.io.FileOutputStream(tmp)) {
+                os.write(root.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            if (dst.exists()) dst.delete();
+            if (!tmp.renameTo(dst)) {
+                Log.w(TAG, "Persistent cache rename failed");
+            }
         } catch (Exception e) {
-            Log.e(TAG, "Status overlay failed: " + e.getMessage());
+            Log.w(TAG, "Persistent cache save failed: " + e.getMessage());
         }
     }
 
@@ -235,7 +306,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
 
             toggleButton = new android.widget.TextView(this);
-            updateToggleButtonAppearance();
 
             int size = (int)(40 * dm.density);
             android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
@@ -304,6 +374,14 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         notificationManager.notify(NOTIFICATION_ID, notification);
     }
 
+    private String lastNotifText = "";
+
+    private void updateNotificationOnce(String text) {
+        if (text.equals(lastNotifText)) return;
+        lastNotifText = text;
+        updateNotification(text);
+    }
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || !translationEnabled) return;
@@ -325,20 +403,34 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                         packageName.contains("cn.app");
 
                     if (!isTarget) {
-                        mainHandler.post(() -> {
-                            if (inlineManager != null) inlineManager.clearAll();
-                        });
+                        scheduleForeignClear();
                         return;
+                    }
+                    cancelForeignClear();
+                    // New target window: content may render asynchronously —
+                    // re-scan a few times to catch late-loaded text
+                    int epoch = scanEpoch;
+                    for (long delay : FOLLOW_UP_SCAN_DELAYS) {
+                        mainHandler.postDelayed(() -> {
+                            if (epoch != scanEpoch) return;
+                            if (translationEnabled) scanWindow();
+                        }, delay);
                     }
                 }
             }
         }
 
-        // Debounced scan — no clearAll on scroll, positions update in-place
+        // Trailing debounce: the last event of a burst always triggers a scan
         long now = System.currentTimeMillis();
-        if (now - lastScanTime < DEBOUNCE_MS) return;
-        lastScanTime = now;
-        mainHandler.post(this::scanWindow);
+        if (now - lastScanTime >= DEBOUNCE_MS) {
+            lastScanTime = now;
+            mainHandler.removeCallbacks(trailingScan);
+            trailingScanScheduled = false;
+            mainHandler.post(this::scanWindow);
+        } else if (!trailingScanScheduled) {
+            trailingScanScheduled = true;
+            mainHandler.postDelayed(trailingScan, DEBOUNCE_MS);
+        }
     }
 
     private void scanWindow() {
@@ -364,61 +456,106 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             return;
         }
 
-        if (!packageName.equals(lastPackage)) {
-            lastPackage = packageName;
-            translationCache.clear();
-            mainHandler.post(() -> inlineManager.clearAll());
-        }
+        boolean packageChanged = !packageName.equals(lastPackage);
+        lastPackage = packageName;
 
         List<TextNodeInfo> chineseNodes = new ArrayList<>();
         collectChineseNodes(root, chineseNodes);
         root.recycle();
 
         if (chineseNodes.isEmpty()) {
-            updateNotification(packageName + ": no Chinese text");
+            // Clear stale overlays only when the window actually changed and has
+            // nothing to translate — delayed, so transient foreign windows during
+            // app startup don't wipe live overlays. When there IS content,
+            // reconcile() below swaps old→new atomically in one frame.
+            if (packageChanged) scheduleForeignClear();
+            updateNotificationOnce(packageName + ": no Chinese text");
             return;
         }
+        cancelForeignClear();
 
-        // Clear cache when language changes
-        if (targetLang != lastTargetLang) {
-            lastTargetLang = targetLang;
-            translationCache.clear();
-            mainHandler.post(() -> inlineManager.clearAll());
-        }
+        // On language change reconcile() swaps texts atomically — no clearAll
+        // (cache is kept per-language)
         final Map<String, String> dict = (targetLang == 0) ? dictEn : dictRu;
+        final Map<String, String> cache = (targetLang == 0) ? cacheEn : cacheRu;
 
-        // Lookup in dictionary first — instant, no API needed
-        final Set<String> currentPositions = new HashSet<>();
+        float density = getResources().getDisplayMetrics().density;
+
+        // Two-pass lookup: pass 1 reads, pass 2 writes, so the lookups never
+        // race the LRU eviction of a still-needing entry within this scan
+        final String[] hits = new String[chineseNodes.size()];
+        for (int i = 0; i < chineseNodes.size(); i++) {
+            TextNodeInfo node = chineseNodes.get(i);
+            String raw = node.text;
+            String norm = normalizeForKey(raw);
+
+            String result = dictLoaded ? dict.get(raw) : null;
+            if (result == null && norm != null) result = dictLoaded ? dict.get(norm) : null;
+            if (result == null) {
+                result = cacheGet(cache, raw);
+                if (result == null && norm != null) result = cacheGet(cache, norm);
+            }
+            hits[i] = result;
+        }
+        for (int i = 0; i < chineseNodes.size(); i++) {
+            TextNodeInfo node = chineseNodes.get(i);
+            if (hits[i] != null) cachePut(cache, node.text, hits[i]);
+        }
+
         final List<TextNodeInfo> toTranslate = new ArrayList<>();
+        final List<InlineOverlayManager.OverlaySpec> specs = new ArrayList<>();
 
-        for (TextNodeInfo node : chineseNodes) {
-            String dictResult = dictLoaded ? dict.get(node.text) : null;
-            if (dictResult == null) dictResult = translationCache.get(node.text);
-            String display = dictResult != null ? dictResult : node.text;
-            currentPositions.add(node.bounds.left + "," + node.bounds.top);
-            if (dictResult == null) {
+        for (int i = 0; i < chineseNodes.size(); i++) {
+            TextNodeInfo node = chineseNodes.get(i);
+            String display = hits[i] != null ? hits[i] : node.text;
+
+            String displayNoBr = display != null ? display : "";
+            boolean centered = node.bounds.width() > 0
+                && node.bounds.height() < 96 * density
+                && displayNoBr.length() * node.estimatedTextSize * density * 0.5f
+                    <= node.bounds.width() * 0.85f
+                && !displayNoBr.contains("\n");
+
+            specs.add(new InlineOverlayManager.OverlaySpec(
+                node.bounds.left + "," + node.bounds.top,
+                display, node.bounds.width(), node.bounds.height(),
+                node.estimatedTextSize, node.darkZone, centered));
+            if (hits[i] == null) {
                 toTranslate.add(node);
             }
         }
 
-        final List<TextNodeInfo> nodesToShow = new ArrayList<>(chineseNodes);
+        final int epochAtScan = scanEpoch;
         mainHandler.post(() -> {
-            inlineManager.removeNotIn(currentPositions);
-            for (TextNodeInfo node : nodesToShow) {
-                String dictResult = dictLoaded ? dict.get(node.text) : null;
-                if (dictResult == null) dictResult = translationCache.get(node.text);
-                String display = dictResult != null ? dictResult : node.text;
-                inlineManager.showTranslation(
-                    node.bounds.left, node.bounds.top,
-                    node.bounds.width(), node.bounds.height(),
-                    display, node.estimatedTextSize, node.bgColor, wordWrap, darkOverlay);
-            }
+            if (!translationEnabled) return;
+            inlineManager.reconcile(specs, wordWrap, darkOverlay);
         });
 
-        if (!toTranslate.isEmpty() && !translating) {
+        if (!toTranslate.isEmpty()) {
+            synchronized (translateQueue) {
+                for (TextNodeInfo node : toTranslate) {
+                    if (queuedTexts.add(node.text)) {
+                        translateQueue.add(node);
+                    }
+                }
+            }
             updateNotification("Translating " + toTranslate.size() + " new...");
-            translateBatch(toTranslate);
+            startBatchIfIdle(epochAtScan);
         }
+    }
+
+    // The embedded dictionary is keyed by the raw resource values (with HTML
+    // tags). Accessibility text loses the tags on rich-text nodes, so lookup the
+    // normalized form too and backfill the raw form on a hit
+    private static String normalizeForKey(String s) {
+        if (s == null || s.indexOf('<') < 0) return null;
+        return HTML_PATTERN.matcher(s).replaceAll("").replaceAll("\\s+", " ").trim();
+    }
+
+    private boolean isToolbarId(AccessibilityNodeInfo node) {
+        String id = node.getViewIdResourceName();
+        if (id == null) return false;
+        return id.toLowerCase().contains("toolbar") || id.toLowerCase().contains("appbar");
     }
 
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result) {
@@ -431,14 +568,15 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         CharSequence text = node.getText();
         if (text != null && text.length() > 0) {
             String s = text.toString().trim();
-            // Strip HTML tags before checking
+            // Strip HTML tags before checking; single '>' (e.g. "金融试算 >") is kept
             String clean = HTML_PATTERN.matcher(s).replaceAll("").trim();
             if (isTranslatable(clean)) {
+                float density = getResources().getDisplayMetrics().density;
                 Rect bounds = new Rect();
                 node.getBoundsInScreen(bounds);
-                float textSize = estimateTextSize(node);
-                int bgColor = detectBackgroundColor(node);
-                result.add(new TextNodeInfo(clean, bounds, textSize, bgColor));
+                float textSize = estimateTextSize(bounds, density);
+                boolean darkZone = isDarkZone(node, bounds, density);
+                result.add(new TextNodeInfo(clean, bounds, textSize, darkZone));
             }
         }
 
@@ -452,72 +590,88 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
     }
 
-    private boolean isTranslatable(String text) {
-        if (text == null || text.length() < 2 || text.length() > 200) return false;
-        // Skip text with HTML-like content
-        if (text.contains("<") || text.contains(">")) return false;
-        // Count Chinese characters
+    // The CJK ratio is computed on the visible (tag-stripped) text so that
+    // markup characters from <a>/<font> tags don't water it down below the
+    // 30% threshold; raw keeps the length check (markup inflates length)
+    private boolean isTranslatable(String clean) {
+        if (clean == null || clean.length() < 2 || clean.length() > 200) return false;
         int chineseCount = 0;
         int totalNonSpace = 0;
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (!Character.isWhitespace(c)) totalNonSpace++;
-            if ((c >= 0x4E00 && c <= 0x9FFF) ||
-                (c >= 0x3400 && c <= 0x4DBF) ||
-                (c >= 0xF900 && c <= 0xFAFF)) {
-                chineseCount++;
-            }
+        for (int i = 0; i < clean.length(); i++) {
+            char c = clean.charAt(i);
+            if (Character.isWhitespace(c)) continue;
+            totalNonSpace++;
+            if (isHan(c)) chineseCount++;
         }
-        // At least 30% of non-space chars must be Chinese
         return totalNonSpace > 0 && (chineseCount * 100 / totalNonSpace) >= 30;
     }
 
-    private int detectBackgroundColor(AccessibilityNodeInfo node) {
-        Rect bounds = new Rect();
-        node.getBoundsInScreen(bounds);
-        float density = getResources().getDisplayMetrics().density;
+    private static boolean isHan(char c) {
+        return (c >= 0x4E00 && c <= 0x9FFF) ||
+            (c >= 0x3400 && c <= 0x4DBF) ||
+            (c >= 0xF900 && c <= 0xFAFF);
+    }
 
-        // Only check nearest 3 parents
+    // An overlay reads as part of the UI (instead of a foreign box) when its
+    // background blends with the surface behind the original text:
+    // opaque dark over the top band / a toolbar, translucent scrim elsewhere
+    private boolean isDarkZone(AccessibilityNodeInfo node, Rect bounds, float density) {
+        if (bounds.top < 140 * density) return true;
+
+        // Only check the nearest 3 parents, recycling nodes as we traverse
         AccessibilityNodeInfo parent = node.getParent();
-        int levels = 0;
-        while (parent != null && levels < 3) {
-            String viewId = parent.getViewIdResourceName();
-            if (viewId != null) {
-                String id = viewId.toLowerCase();
-                if (id.contains("toolbar") || id.contains("appbar")) {
-                    return 0xFF202020;
-                }
-            }
-            CharSequence className = parent.getClassName();
-            if (className != null) {
-                String cn = className.toString();
-                if (cn.endsWith("Toolbar") || cn.endsWith("AppBarLayout")) {
-                    return 0xFF202020;
-                }
-            }
-            parent = parent.getParent();
-            levels++;
+        boolean toolbar = false;
+        for (int levels = 0; parent != null && levels < 3 && !toolbar; levels++) {
+            AccessibilityNodeInfo next = parent.getParent();
+            toolbar = isToolbarLike(parent);
+            parent.recycle();
+            if (!toolbar) parent = next;
+            else { recycleChain(next); parent = null; }
         }
+        recycleChain(parent);
 
-        // Top 80dp — likely in header/toolbar zone
-        if (bounds.top < 80 * density) {
-            return 0xFF202020;
-        }
-
-        return 0xFFFFFFFF;
+        return toolbar && bounds.top < 240 * density;
     }
 
-    private float estimateTextSize(AccessibilityNodeInfo node) {
-        Rect bounds = new Rect();
-        node.getBoundsInScreen(bounds);
-        int height = bounds.height();
-        float density = getResources().getDisplayMetrics().density;
-        float heightDp = height / density;
-        return Math.max(10, Math.min(heightDp * 0.65f, 26));
+    private static boolean isToolbarLike(AccessibilityNodeInfo node) {
+        String viewId = node.getViewIdResourceName();
+        if (viewId != null) {
+            String id = viewId.toLowerCase();
+            if (id.contains("toolbar") || id.contains("appbar")) return true;
+        }
+        CharSequence className = node.getClassName();
+        if (className == null) return false;
+        String cn = className.toString();
+        return cn.endsWith("Toolbar") || cn.endsWith("AppBarLayout");
     }
 
-    private void translateBatch(List<TextNodeInfo> nodes) {
+    private static void recycleChain(AccessibilityNodeInfo node) {
+        while (node != null) {
+            AccessibilityNodeInfo next = node.getParent();
+            node.recycle();
+            node = next;
+        }
+    }
+
+    private float estimateTextSize(Rect bounds, float density) {
+        // A typical text line is ~1.5x the font size (leading included); 10-24sp
+        float size = bounds.height() / density * (2f / 3f);
+        return Math.max(10, Math.min(size, 24));
+    }
+
+    private void startBatchIfIdle() {
+        startBatchIfIdle(scanEpoch);
+    }
+
+    private void startBatchIfIdle(final int epoch) {
         if (translating) return;
+        final List<TextNodeInfo> batch;
+        synchronized (translateQueue) {
+            if (translateQueue.isEmpty()) return;
+            batch = new ArrayList<>(translateQueue);
+            translateQueue.clear();
+            queuedTexts.clear();
+        }
         translating = true;
 
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
@@ -525,35 +679,54 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         final String langCode = (targetLang == 0) ? "en" : "ru";
 
         translateExecutor.submit(() -> {
+            final Map<String, String> cache = (targetLang == 0) ? cacheEn : cacheRu;
             try {
-                for (TextNodeInfo node : nodes) {
+                for (TextNodeInfo node : batch) {
                     if (Thread.currentThread().isInterrupted()) break;
                     try {
                         String result = translateText(node.text, langCode);
                         node.translated = result;
-                        translationCache.put(node.text, result);
+                        cachePut(cache, node.text, result);
                         translateCount++;
                     } catch (Exception e) {
                         Log.e(TAG, "Translate error: " + e.getMessage());
                     }
                 }
+                // LRU evicts the least-recently-used entries automatically —
+                // no more full-cache reset that would drop fresh translations
             } finally {
                 translating = false;
-                final List<TextNodeInfo> batch = new ArrayList<>(nodes);
+                try {
+                    savePersistentCache();
+                } catch (Exception e) {
+                    Log.w(TAG, "Cache save error: " + e.getMessage());
+                }
+                final List<TextNodeInfo> done = new ArrayList<>(batch);
                 mainHandler.post(() -> {
+                    if (!translationEnabled) return;
+                    // Scroll/package change while the request was in flight:
+                    // the fixed pre-request bounds are stale, don't place them
+                    if (epoch != scanEpoch) return;
                     SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
                     boolean ww = p.getBoolean("word_wrap", false);
                     boolean dk = p.getBoolean("dark_overlay", false);
-                    for (TextNodeInfo n : batch) {
+                    float density = getResources().getDisplayMetrics().density;
+                    for (TextNodeInfo n : done) {
                         if (n.translated != null) {
+                            boolean centered = n.bounds.width() > 0
+                                && n.bounds.height() < 96 * density
+                                && n.translated.length() * n.estimatedTextSize * density * 0.5f
+                                    <= n.bounds.width() * 0.85f
+                                && !n.translated.contains("\n");
                             inlineManager.showTranslation(
                                 n.bounds.left, n.bounds.top,
                                 n.bounds.width(), n.bounds.height(),
-                                n.translated, n.estimatedTextSize, n.bgColor, ww, dk);
+                                n.translated, n.estimatedTextSize, n.darkZone, centered, ww, dk);
                         }
                     }
+                    startBatchIfIdle();
                 });
-                updateNotification(translateCount + " translated (cache: " + translationCache.size() + ")");
+                updateNotification(translateCount + " translated (cache: " + cacheSize(cache) + ")");
             }
         });
     }
@@ -652,16 +825,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
         translationEnabled = false;
+        getSharedPreferences("deepal", MODE_PRIVATE)
+            .edit().putBoolean("translation_enabled", false).apply();
         if (inlineManager != null) inlineManager.clearAll();
-        if (statusView != null) {
-            try {
-                android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
-                wm.removeViewImmediate(statusView);
-                statusView = null;
-            } catch (Exception e) {
-                Log.w(TAG, "onTaskRemoved: remove status overlay: " + e.getMessage());
-            }
-        }
         if (toggleButton != null && toggleWm != null) {
             try {
                 toggleWm.removeViewImmediate(toggleButton);
@@ -676,16 +842,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         TranslationService s = instance;
         if (s == null) return;
         s.translationEnabled = false;
+        s.getSharedPreferences("deepal", MODE_PRIVATE)
+            .edit().putBoolean("translation_enabled", false).apply();
         if (s.inlineManager != null) s.inlineManager.clearAll();
-        if (s.statusView != null) {
-            try {
-                android.view.WindowManager wm = (android.view.WindowManager) s.getSystemService(WINDOW_SERVICE);
-                wm.removeViewImmediate(s.statusView);
-                s.statusView = null;
-            } catch (Exception e) {
-                Log.w(TAG, "quit: remove status overlay: " + e.getMessage());
-            }
-        }
         if (s.toggleButton != null && s.toggleWm != null) {
             try {
                 s.toggleWm.removeViewImmediate(s.toggleButton);
@@ -697,34 +856,32 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         s.disableSelf();
     }
 
+    // Called from MainActivity.onResume: opening the app is the explicit
+    // "turn translation back on" action (spec v2.10.2: «включён явно —
+    // открытие приложения или кнопка»). Off state survives service restarts
+    // until the user opens the app again — that is intentional, not sticky.
     public static void reactivate() {
         TranslationService s = instance;
         if (s == null) return;
-        s.translationEnabled = true;
-        s.updateNotification("Ready — open Deepal");
-        if (s.statusView == null || s.statusView.getWindowToken() == null) {
-            s.setupStatusOverlay();
+        if (!s.translationEnabled) {
+            s.translationEnabled = true;
+            s.getSharedPreferences("deepal", MODE_PRIVATE)
+                .edit().putBoolean("translation_enabled", true).apply();
         }
+        s.updateNotification("Ready — open Deepal");
         if (s.toggleButton == null) {
             s.setupToggleButton();
-            s.updateToggleButtonAppearance();
         }
+        s.updateToggleButtonAppearance();
     }
 
     public static void disableTranslation() {
         TranslationService s = instance;
         if (s == null) return;
         s.translationEnabled = false;
+        s.getSharedPreferences("deepal", MODE_PRIVATE)
+            .edit().putBoolean("translation_enabled", false).apply();
         if (s.inlineManager != null) s.inlineManager.clearAll();
-        if (s.statusView != null) {
-            try {
-                android.view.WindowManager wm = (android.view.WindowManager) s.getSystemService(WINDOW_SERVICE);
-                wm.removeViewImmediate(s.statusView);
-                s.statusView = null;
-            } catch (Exception e) {
-                Log.w(TAG, "disableTranslation: remove status overlay: " + e.getMessage());
-            }
-        }
         if (s.toggleButton != null && s.toggleWm != null) {
             try {
                 s.toggleWm.removeViewImmediate(s.toggleButton);
@@ -741,22 +898,21 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         super.onDestroy();
         instance = null;
         mainHandler.removeCallbacks(retryRunnable);
-        if (translateExecutor != null) translateExecutor.shutdownNow();
-        if (quitReceiver != null) {
-            try { unregisterReceiver(quitReceiver); } catch (Exception e) {
-                Log.w(TAG, "Unregister receiver: " + e.getMessage());
+        mainHandler.removeCallbacks(trailingScan);
+        mainHandler.removeCallbacks(watchdogScan);
+        mainHandler.removeCallbacks(foreignClearRunnable);
+        trailingScanScheduled = false;
+        scanEpoch++;
+        if (translateExecutor != null) {
+            try {
+                translateExecutor.submit(this::savePersistentCache);
+                translateExecutor.shutdown();
+            } catch (Exception e) {
+                Log.w(TAG, "Cache save on destroy: " + e.getMessage());
             }
         }
         mainHandler.post(() -> {
             if (inlineManager != null) inlineManager.clearAll();
-            if (statusView != null) {
-                try {
-                    android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
-                    wm.removeViewImmediate(statusView);
-                } catch (Exception e) {
-                    Log.w(TAG, "Destroy: remove status overlay: " + e.getMessage());
-                }
-            }
             if (toggleButton != null && toggleWm != null) {
                 try { toggleWm.removeViewImmediate(toggleButton); } catch (Exception e) {
                     Log.w(TAG, "Destroy: remove toggle: " + e.getMessage());
@@ -770,13 +926,15 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         Rect bounds;
         float estimatedTextSize;
         String translated;
-        int bgColor;
+        // Computed at collection time while the AccessibilityNodeInfo is still
+        // valid (the node reference is not kept — it is recycled afterwards)
+        boolean darkZone;
 
-        TextNodeInfo(String text, Rect bounds, float estimatedTextSize, int bgColor) {
+        TextNodeInfo(String text, Rect bounds, float estimatedTextSize, boolean darkZone) {
             this.text = text;
             this.bounds = bounds;
             this.estimatedTextSize = estimatedTextSize;
-            this.bgColor = bgColor;
+            this.darkZone = darkZone;
         }
     }
 }
