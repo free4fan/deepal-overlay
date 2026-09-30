@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Тёмно-синий фон градиент -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050B14"/>
+      <stop offset="50%" stop-color="#0A1628"/>
+      <stop offset="100%" stop-color="#04091C"/>
+    </linearGradient>
+
+    <!-- Тень -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+
+    <!-- Свечение буквы T -->
+    <linearGradient id="tGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E8F0FE"/>
+      <stop offset="100%" stop-color="#BBDEFB"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Фон: MD3 rounded square rx=112 -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+
+  <!-- Большая буква T -->
+  <text x="256" y="310" font-family="'Roboto','Noto Sans',sans-serif" font-size="240" font-weight="800" fill="url(#tGrad)" text-anchor="middle" filter="url(#shadow)">T</text>
+
+  <!-- Надпись Deepal внизу -->
+  <text x="256" y="410" font-family="'Roboto','Noto Sans',sans-serif" font-size="52" font-weight="600" fill="#90CAF9" text-anchor="middle" letter-spacing="8">DEEPAL</text>
+</svg>

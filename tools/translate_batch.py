@@ -6,9 +6,9 @@ import urllib.parse
 import sys
 import os
 
-INPUT_FILE = "/tmp/deepal_chinese_strings.json"
-DICT_ZH_EN = "/tmp/dict_zh_en.json"
-DICT_ZH_RU = "/tmp/dict_zh_ru.json"
+INPUT_FILE = os.environ.get("INPUT_FILE", "/tmp/deepal_chinese_strings.json")
+DICT_ZH_EN = os.environ.get("DICT_ZH_EN", "/tmp/dict_zh_en.json")
+DICT_ZH_RU = os.environ.get("DICT_ZH_RU", "/tmp/dict_zh_ru.json")
 SAVE_EVERY = 100
 MAX_RETRIES = 3
 DELAY = 0.1
