@@ -21,3 +21,5 @@ app/build/intermediates/
 app/build/generated/
 app/build/tmp/
 DeepalScreenTranslator.apk
+*.idsig
+overlay.keystore

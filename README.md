@@ -36,18 +36,23 @@
 ## Как работает
 
 1. Accessibility Service отслеживает события окон (открытие, скролл, смена контента)
-2. При обнаружении китайского текста — ищет перевод в embedded словаре (4889 строк)
+2. При обнаружении китайского текста — ищет перевод в embedded словаре (4856 строк)
 3. Если строка не найдена в словаре — отправляет запрос к Google Translate API
-4. Перевод отображается как overlay поверх оригинального текста
+4. Перевод отображается как overlay поверх оригинального текста:
+   полупрозрачный тёмный scrim в контенте, непрозрачный тёмный в зоне тулбара,
+   коротким подписям в узких узлах (кнопки, заголовки) передаётся центрирование
 
 ## Технические детали
 
 - **Package**: `com.walter.overlay`
 - **Min SDK**: 26 (Android 8.0)
 - **Target SDK**: 34 (Android 14)
-- **Embedded dictionaries**: `dict_zh_en.json` (4889 строк), `dict_zh_ru.json` (4889 строк)
-- **Overlay**: `TYPE_APPLICATION_OVERLAY` с автоматическим подбором фона
+- **Embedded dictionaries**: `dict_zh_en.json` (4856 строк), `dict_zh_ru.json` (4856 строк)
+- **Overlay**: `TYPE_APPLICATION_OVERLAY` с адаптивным фоном (scrim/тёмный по зоне)
 - **Flicker-free**: обновление overlay in-place без пересоздания
+- **Точный размер**: ширина меряется `Paint.measureText`, кегль в px (не SP)
+- **Word wrap**: нативный перенос по фактической ширине (max 8 строк)
+- **Кэш**: LRU (20000), постоянного файла `translation_cache.json`
 
 ## Сборка
 
@@ -64,44 +69,43 @@ cp app/build/outputs/apk/debug/app-debug.apk deepal-overlay.apk
 
 ### 1. Извлечение строк из APK
 
-Установите последнюю версию Deepal, затем через ADB выгрузите ресурсы:
-
 ```bash
-# Дамп всех строковых ресурсов
-adb shell dumpsys accessibility > /tmp/deepal-resources-dump.txt
-
-# Или через aapt
-aapt2 dump resources path/to/deepal.apk > /tmp/deepal-values-dump.txt
+python3 tools/extract_strings.py /path/to/deepal.apk
 ```
 
-### 2. Подготовка списка китайских строк
+Скрипт:
+- печатает версию приложения (package/versionName/versionCode)
+- извлекает уникальные китайские строки из `resources.arsc` (дефолтный конфиг + zh-rCN + zh-rTW)
+- считает дифф со словарём: новые строки (в APK, нет в словаре) и исчезнувшие
+- пишет `/tmp/deepal_chinese_strings.json` (все строки) и `/tmp/deepal_missing_strings.json` (только новые)
 
-Из дампа извлеките уникальные китайские строки. Формат:
-```json
-["строка1", "строка2", ...]
-```
-
-Подготовленный файл: `/tmp/deepal-chinese-strings.json`. В проекте также есть `/tmp/deepal-string-mapping.json` — маппинг original_key → Chinese text.
-
-### 3. Запуск перевода
+### 2. Запуск перевода
 
 ```bash
 python3 tools/translate_batch.py
 ```
 
 Скрипт:
-- Читает все строки из `INPUT_FILE` (`/tmp/deepal_chinese_strings.json`)
+- Читает строки из `INPUT_FILE` (по умолчанию `/tmp/deepal_chinese_strings.json`)
 - Для каждой строки переводит через Google Translate API (EN + RU)
 - Сохраняет прогресс каждые 100 строк
 - Пропускает уже переведённые строки (при дозапуске)
 - Результат: `dict_zh_en.json` и `dict_zh_ru.json`
+
+Пути переопределяются env-переменными `INPUT_FILE`, `DICT_ZH_EN`, `DICT_ZH_RU`.
+Переводить только новые строки:
+
+```bash
+INPUT_FILE=/tmp/deepal_missing_strings.json DICT_ZH_EN=/tmp/dict_zh_en.json DICT_ZH_RU=/tmp/dict_zh_ru.json \
+  python3 tools/translate_batch.py
+```
 
 Параметры (в начале скрипта):
 - `DELAY = 0.1` — задержка между запросами
 - `SAVE_EVERY = 100` — как часто сохранять прогресс
 - `MAX_RETRIES = 3` — повторы при ошибке сети
 
-### 4. Копирование в проект
+### 3. Копирование в проект
 
 ```bash
 cp /tmp/dict_zh_en.json app/src/main/assets/
@@ -110,4 +114,8 @@ cp /tmp/dict_zh_ru.json app/src/main/assets/
 
 ## Лицензия
 
-Личный проект. Не для распространения.
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or distribute this software, either in source code form or as a compiled binary, for any purpose, commercial or non-commercial, and by any means.
+
+See [LICENSE](LICENSE) for full text.
