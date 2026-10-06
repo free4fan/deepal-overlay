@@ -36,7 +36,13 @@ public class InlineOverlayManager {
 
     private static final int BG_DARK_SETTING = 0xDD1A1A1A; // manual "Dark overlay" mode
     private static final int BG_DARK_ZONE = 0xFF202020;    // toolbar/header: opaque dark, blends into the bar
-    private static final int BG_SCRIM = 0xB31A1A1A;        // content: translucent dark scrim, subtitle-like
+    private static final int BG_SCRIM = 0xFF1A1A1A;        // content: opaque dark — original CJK must never show through
+    // A pill may not cross this absolute-x boundary (nearest right neighbor's left edge minus this gap)
+    private static final int ROW_GAP = 6;
+    // Siblings farther apart than this are unrelated, not a row neighbor
+    private static final int ROW_NEIGHBOR_MAX = 600;
+    // Font may shrink to this (sp) so the text fits the column instead of ellipsizing
+    private static final float FIT_MIN_SP = 9;
 
     private final Context context;
     private final WindowManager windowManager;
@@ -118,7 +124,7 @@ public class InlineOverlayManager {
         for (OverlaySpec s : specs) {
             TextView tv = activeViews.get(s.key);
             if (tv != null) {
-                apply(tv, s, wordWrap, darkOverlay);
+                apply(tv, s, wordWrap, darkOverlay, specs);
                 claimed.add(tv);
             }
         }
@@ -142,7 +148,7 @@ public class InlineOverlayManager {
             }
             if (best != null) {
                 activeViews.remove(bestKey);
-                apply(best, s, wordWrap, darkOverlay);
+                apply(best, s, wordWrap, darkOverlay, specs);
                 activeViews.put(s.key, best);
                 claimed.add(best);
             }
@@ -174,7 +180,7 @@ public class InlineOverlayManager {
         // Pass 4: create overlays for new nodes
         for (OverlaySpec s : specs) {
             if (!activeViews.containsKey(s.key)) {
-                TextView tv = create(s, wordWrap, darkOverlay);
+                TextView tv = create(s, wordWrap, darkOverlay, specs);
                 if (tv != null) {
                     activeViews.put(s.key, tv);
                     lastSeenMs.put(tv, now);
@@ -195,17 +201,18 @@ public class InlineOverlayManager {
 
         TextView existing = activeViews.get(key);
         if (existing != null) {
-            apply(existing, spec, wordWrap, darkOverlay);
+            apply(existing, spec, wordWrap, darkOverlay, null);
         } else {
-            existing = create(spec, wordWrap, darkOverlay);
+            existing = create(spec, wordWrap, darkOverlay, null);
             if (existing == null) return;
             activeViews.put(key, existing);
         }
         lastSeenMs.put(existing, android.os.SystemClock.uptimeMillis());
     }
 
-    private void apply(TextView tv, OverlaySpec spec, boolean wordWrap, boolean darkOverlay) {
-        Layout layout = computeLayout(spec, wordWrap, darkOverlay);
+    private void apply(TextView tv, OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
+                       List<OverlaySpec> siblings) {
+        Layout layout = computeLayout(spec, wordWrap, darkOverlay, siblings);
 
         // Tag holds the raw text — used for drift matching in reconcile()
         if (!spec.text.contentEquals(tv.getText())) {
@@ -234,8 +241,9 @@ public class InlineOverlayManager {
         }
     }
 
-    private TextView create(OverlaySpec spec, boolean wordWrap, boolean darkOverlay) {
-        Layout layout = computeLayout(spec, wordWrap, darkOverlay);
+    private TextView create(OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
+                            List<OverlaySpec> siblings) {
+        Layout layout = computeLayout(spec, wordWrap, darkOverlay, siblings);
 
         TextView tv = new TextView(context);
         tv.setText(spec.text);
@@ -277,9 +285,27 @@ public class InlineOverlayManager {
         }
     }
 
-    private Layout computeLayout(OverlaySpec spec, boolean wordWrap, boolean darkOverlay) {
+    private Layout computeLayout(OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
+                                 List<OverlaySpec> siblings) {
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenWidth = dm.widthPixels;
+        int x = parseX(spec.key);
+
+        // Column limit: a pill must not cover a row neighbor's column (a 4-icon grid
+        // leaves ~column width of room, not the whole screen to the right)
+        int maxW = Math.max(48, screenWidth - x - SCREEN_EDGE_MARGIN);
+        if (siblings != null) {
+            int near = -1;
+            for (OverlaySpec s : siblings) {
+                if (s == spec) continue;
+                int dx = parseX(s.key) - x;
+                if (dx > 0 && dx < ROW_NEIGHBOR_MAX
+                        && Math.abs(parseY(s.key) - parseY(spec.key)) < 140) {
+                    if (near < 0 || dx < near) near = dx;
+                }
+            }
+            if (near > 48) maxW = Math.min(maxW, near - ROW_GAP);
+        }
 
         // Font size in absolute px: the user's system font scale must not stretch
         // an overlay out of its fixed window (the old SP setting did exactly that)
@@ -287,14 +313,24 @@ public class InlineOverlayManager {
         textSizePx = Math.max(MIN_TEXT_SP * dm.density,
             Math.min(textSizePx, MAX_TEXT_SP * dm.density));
 
+        int padH = Math.max(4, (int) (textSizePx * 0.4f));
+        int padV = Math.max(2, (int) (textSizePx * 0.3f));
         measurePaint.setTextSize(textSizePx);
         float textPxWidth = measurePaint.measureText(spec.text);
 
-        int x = parseX(spec.key);
-        int maxW = Math.max(48, screenWidth - x - SCREEN_EDGE_MARGIN);
-
-        int padH = Math.max(4, (int) (textSizePx * 0.4f));
-        int padV = Math.max(2, (int) (textSizePx * 0.3f));
+        // Fit the column: shrink the font (down to FIT_MIN_SP) so the full text fits
+        // instead of ellipsizing; ellipsize remains the last resort at the floor size
+        if (!wordWrap && textPxWidth + padH * 2 > maxW) {
+            float floorPx = FIT_MIN_SP * dm.density;
+            float scale = floorPx >= textSizePx ? 1f : (maxW - padH * 2) / textPxWidth;
+            if (scale < 1f) {
+                textSizePx = Math.max(floorPx, textSizePx * scale);
+                padH = Math.max(4, (int) (textSizePx * 0.4f));
+                padV = Math.max(2, (int) (textSizePx * 0.3f));
+                measurePaint.setTextSize(textSizePx);
+                textPxWidth = measurePaint.measureText(spec.text);
+            }
+        }
 
         // Native wrapping: let the TextView itself break lines when the text does not
         // fit in the available width (the old 13-char manual wrap is gone)
@@ -305,7 +341,8 @@ public class InlineOverlayManager {
             width = maxW;
         } else {
             int textArea = (int) Math.min(textPxWidth, maxW - padH * 2);
-            width = Math.min(maxW, (int) Math.max(spec.width, textArea)) + padH * 2;
+            int nodeArea = (int) Math.min(spec.width, maxW - padH * 2);
+            width = Math.max(nodeArea, textArea) + padH * 2;
         }
 
         int height;
