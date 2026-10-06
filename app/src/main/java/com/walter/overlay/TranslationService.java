@@ -66,6 +66,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private boolean translationEnabled = true;
     private boolean trailingScanScheduled = false;
     private int scanEpoch = 0;
+    // Last foreground package seen via TYPE_WINDOW_STATE_CHANGED. Overlay
+    // placement is gated on this so a batch that was started in Deepal cannot
+    // recreate pills over another app after the user has already left.
+    private volatile String activePackage = "";
     private static final long WATCHDOG_MS = 3000;
     private static final long FOREIGN_WINDOW_CLEAR_DELAY_MS = 500;
     private final Runnable watchdogScan = new Runnable() {
@@ -395,14 +399,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 String packageName = pkg.toString();
                 if (!packageName.equals(lastWindowPackage)) {
                     lastWindowPackage = packageName;
-                    SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
-                    boolean scanAll = prefs.getBoolean("scan_all", false);
-                    boolean isTarget = scanAll ||
-                        packageName.contains("deepal") ||
-                        packageName.contains("changan") ||
-                        packageName.contains("cn.app");
+                    activePackage = packageName;
+                    // Any foreground change invalidates in-flight API batches
+                    // and scheduled follow-up scans: their bounds belong to
+                    // the previous window and must not be placed elsewhere
+                    scanEpoch++;
 
-                    if (!isTarget) {
+                    if (!isTargetPackage(packageName)) {
                         scheduleForeignClear();
                         return;
                     }
@@ -433,25 +436,30 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
     }
 
+    // Whether overlays may be drawn over a window of this package
+    private boolean isTargetPackage(String packageName) {
+        if (packageName == null) return false;
+        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+        return prefs.getBoolean("scan_all", false)
+            || packageName.contains("deepal")
+            || packageName.contains("changan")
+            || packageName.contains("cn.app");
+    }
+
     private void scanWindow() {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return;
 
         String packageName = root.getPackageName() != null ?
             root.getPackageName().toString() : "";
+        activePackage = packageName;
 
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
-        boolean scanAll = prefs.getBoolean("scan_all", false);
         int targetLang = prefs.getInt("target_lang", 0);
         boolean wordWrap = prefs.getBoolean("word_wrap", false);
         boolean darkOverlay = prefs.getBoolean("dark_overlay", false);
 
-        boolean isTarget = scanAll ||
-            packageName.contains("deepal") ||
-            packageName.contains("changan") ||
-            packageName.contains("cn.app");
-
-        if (!isTarget) {
+        if (!isTargetPackage(packageName)) {
             root.recycle();
             return;
         }
@@ -528,6 +536,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         final int epochAtScan = scanEpoch;
         mainHandler.post(() -> {
             if (!translationEnabled) return;
+            // Either the foreground window changed while this reconcile was
+            // posted (epoch bump on every package change) or the active
+            // window is foreign now — never paint a stale window's text
+            if (epochAtScan != scanEpoch) return;
+            if (!isTargetPackage(activePackage)) return;
             inlineManager.reconcile(specs, wordWrap, darkOverlay);
         });
 
@@ -707,6 +720,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     // Scroll/package change while the request was in flight:
                     // the fixed pre-request bounds are stale, don't place them
                     if (epoch != scanEpoch) return;
+                    if (!isTargetPackage(activePackage)) return;
                     SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
                     boolean ww = p.getBoolean("word_wrap", false);
                     boolean dk = p.getBoolean("dark_overlay", false);
