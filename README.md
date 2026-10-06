@@ -79,7 +79,7 @@ python3 tools/extract_strings.py /path/to/deepal.apk
 - считает дифф со словарём: новые строки (в APK, нет в словаре) и исчезнувшие
 - пишет `/tmp/deepal_chinese_strings.json` (все строки) и `/tmp/deepal_missing_strings.json` (только новые)
 
-### 2. Запуск перевода
+### 2. Перевод новых строк (машинный)
 
 ```bash
 python3 tools/translate_batch.py
@@ -105,7 +105,44 @@ INPUT_FILE=/tmp/deepal_missing_strings.json DICT_ZH_EN=/tmp/dict_zh_en.json DICT
 - `SAVE_EVERY = 100` — как часто сохранять прогресс
 - `MAX_RETRIES = 3` — повторы при ошибке сети
 
-### 3. Копирование в проект
+### 3. Улучшение качества (LLM)
+
+Машинный перевод (Google) даёт ошибки: битые форматтеры (`%1$стикер`),
+оставшийся CJK, неточные термины (`后备箱`→«ствол»), «раздутые» UI-лейблы.
+Их правит `tools/improve_translations.py` (LLM через OpenAI-совместимый API,
+адаптирован из проекта `deepal-HU-translate`):
+
+```bash
+python3 tools/improve_translations.py --audit          # триаж без API: дефекты + fit-кандидаты
+python3 tools/improve_translations.py --defective      # починить только проблемные (по умолчанию)
+python3 tools/improve_translations.py --fit --lang ru  # укоротить раздутые короткие UI-строки
+python3 tools/improve_translations.py --all            # полная перезапись (глубокий фоновый прогон)
+```
+
+Режимы:
+- `--audit` — локальный отчёт (`tools/logs/audit_report.json`) без сети;
+- `--defective` — пустые/CJK в переводе/битые форматтеры/битые HTML-теги/
+  дегенеративные значения/слишком короткие длинные;
+- `--fit` — короткие UI-лейблы, где перевод заметно шире китайского
+  (страница переполняется): два лимита — «короче текущего» и жёсткий cap
+  в символах; укороченные не трогаются повторно (свой progress);
+- `--all` — весь словарь, resumable (прогресс — `tools/logs/improve_progress_*.json`).
+
+Общее: `--lang en|ru|both`, `--limit N`, `--fresh` (сброс progress),
+`--dry-run`, `API_DEBUG=1` (лог — `tools/logs/improve_translations.log`).
+Изменения пишутся в `tools/logs/improve_report_<ts>.json` — сверять до пуша.
+
+Env: `API_URL` (default `http://10.0.0.128:11434/v1/chat/completions`),
+`API_KEY`, `API_MODEL` (default `Qwen3.8-27B-BF16:latest`), `API_BATCH_SIZE`.
+
+Особенности под наше приложение (vs HU-проект): значения словаря рисует
+`TextView.setText` (plain text, JSON-ассет), поэтому скрипт НЕ применяет
+aapt2-конвенции (замена `'` на U+2019, `\n`→`\\n`, расэскранирование
+`&amp;`), а guard отклоняет ответы с `&`-сущностями и требует сохранение
+HTML-тегов и форматтеров (`%s`, `%1$d`, …) 1:1. Бренды в промпте:
+`深蓝` = **Deepal** (не «темно-синий»), `高德` = Amap и т.д.
+
+### 4. Копирование в проект
 
 ```bash
 cp /tmp/dict_zh_en.json app/src/main/assets/

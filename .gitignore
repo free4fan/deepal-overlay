@@ -23,3 +23,10 @@ app/build/tmp/
 DeepalScreenTranslator.apk
 *.idsig
 overlay.keystore
+
+# LLM-improve artifacts (progress, logs, reports)
+tools/logs/
+
+# Python
+__pycache__/
+*.pyc
