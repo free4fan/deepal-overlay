@@ -10,8 +10,8 @@ android {
         applicationId "com.walter.overlay"
         minSdk 26
         targetSdk 34
-        versionCode 73
-        versionName "2.10.21"
+        versionCode 74
+        versionName "2.10.22"
     }
 
     buildTypes {
