@@ -503,6 +503,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 result = cacheGet(cache, raw);
                 if (result == null && norm != null) result = cacheGet(cache, norm);
             }
+            // legacy cache/API leftovers can still hold the literal brand
+            if (result != null && raw.contains("深蓝")) result = fixBrand(result, targetLang == 0 ? "en" : "ru");
             hits[i] = result;
         }
         for (int i = 0; i < chineseNodes.size(); i++) {
@@ -698,6 +700,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     if (Thread.currentThread().isInterrupted()) break;
                     try {
                         String result = translateText(node.text, langCode);
+                        if (result != null && node.text.contains("深蓝")) {
+                            result = fixBrand(result, langCode);
+                        }
                         node.translated = result;
                         cachePut(cache, node.text, result);
                         translateCount++;
@@ -746,15 +751,39 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     }
 
     private String translateText(String text, String langCode) throws IOException {
+        String out;
         try {
-            return translateGoogle(text, langCode);
+            out = translateGoogle(text, langCode);
         } catch (Exception e1) {
             try {
-                return translateAlternative(text, langCode);
+                out = translateAlternative(text, langCode);
             } catch (Exception e2) {
                 throw new IOException("All APIs failed: " + e1.getMessage());
             }
         }
+        // The general-purpose APIs render the brand 深蓝 literally
+        // («тёмно-синий/глубокий синий/Dark/Deep Blue») in free user content,
+        // where the dictionary cannot help. The dict already maps 深蓝 ->
+        // Deepal, so inside this app every occurrence is the brand
+        if (text.contains("深蓝") && out != null) out = fixBrand(out, langCode);
+        return out;
+    }
+
+    // Matches every inflection of the literal brand renderings the generic
+    // APIs produce for 深蓝 (темно-синый/темносиний/тёмно-синие/глубокий синий/
+    // dark blue/deep blue). Only applied when the source text contains 深蓝,
+    // where inside this app the color word is never the actual color.
+    private static final java.util.regex.Pattern BRAND_RU = java.util.regex.Pattern.compile(
+        "(?i)(?:т[её]мно\\s*[- ]?син[а-яё]{1,3}|глуб[оё]к[а-яё]{1,5}\\s+син[а-яё]{1,3}|dark[\\s\\-]+blue|deep[\\s\\-]+blue)");
+    private static final java.util.regex.Pattern BRAND_EN = java.util.regex.Pattern.compile(
+        "(?i)(?:dark[\\s\\-]+blue|deep[\\s\\-]+blue)");
+
+    private static String fixBrand(String s, String langCode) {
+        java.util.regex.Pattern p = (langCode == null || langCode.startsWith("ru"))
+            ? BRAND_RU : BRAND_EN;
+        java.util.regex.Matcher m = p.matcher(s);
+        if (!m.find()) return s;
+        return m.replaceAll("Deepal");
     }
 
     private String translateGoogle(String text, String langCode) throws IOException {
