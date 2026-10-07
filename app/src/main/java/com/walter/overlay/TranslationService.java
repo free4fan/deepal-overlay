@@ -578,6 +578,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     }
 
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result, int depth) {
+        collectChineseNodes(node, result, depth,
+            getResources().getDisplayMetrics().widthPixels,
+            getResources().getDisplayMetrics().heightPixels);
+    }
+
+    private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result,
+            int depth, int screenW, int screenH) {
         if (node == null || depth > 50) return;
 
         CharSequence text = node.getText();
@@ -589,6 +596,17 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 float density = getResources().getDisplayMetrics().density;
                 Rect bounds = new Rect();
                 node.getBoundsInScreen(bounds);
+                // Horizontally scrolling containers (the mall's tab strip,
+                // ViewPagers) keep adjacent pages in the tree at off-screen
+                // coordinates; their pills would poke out on both sides of the
+                // current page. A node this far out is invisible, and so is
+                // everything under it — skip the whole subtree.
+                // (zero-size container bounds are ambiguous — never prune on them)
+                if (bounds.width() > 0 && bounds.height() > 0
+                        && (bounds.right <= 0 || bounds.left >= screenW
+                            || bounds.bottom <= 0 || bounds.top >= screenH)) {
+                    return;
+                }
                 float textSize = estimateTextSize(bounds, density);
                 boolean darkZone = isDarkZone(node, bounds, density);
                 result.add(new TextNodeInfo(clean, bounds, textSize, darkZone));
@@ -599,7 +617,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         for (int i = 0; i < childCount; i++) {
             AccessibilityNodeInfo child = node.getChild(i);
             if (child != null) {
-                collectChineseNodes(child, result, depth + 1);
+                collectChineseNodes(child, result, depth + 1, screenW, screenH);
                 child.recycle();
             }
         }
