@@ -599,17 +599,25 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 // Horizontally scrolling containers (the mall's tab strip,
                 // ViewPagers) keep adjacent pages in the tree at off-screen
                 // coordinates; their pills would poke out on both sides of the
-                // current page. A node this far out is invisible, and so is
-                // everything under it — skip the whole subtree.
+                // current page. Nodes fully outside the screen are invisible
+                // together with everything under them — skip the subtree.
                 // (zero-size container bounds are ambiguous — never prune on them)
                 if (bounds.width() > 0 && bounds.height() > 0
                         && (bounds.right <= 0 || bounds.left >= screenW
                             || bounds.bottom <= 0 || bounds.top >= screenH)) {
                     return;
                 }
-                float textSize = estimateTextSize(bounds, density);
-                boolean darkZone = isDarkZone(node, bounds, density);
-                result.add(new TextNodeInfo(clean, bounds, textSize, darkZone));
+                // Pills are only built for nodes that sit fully inside the
+                // screen. A node that only partly fits horizontally (a page
+                // or tab sliding across the edge) is mid-animation; its pill
+                // would anchor off-screen and stick out from the page edge.
+                // Keep recursing either way — partially visible children may
+                // settle on-screen and be picked up in the same scan.
+                if (bounds.left >= 0 && bounds.right <= screenW) {
+                    float textSize = estimateTextSize(bounds, density);
+                    boolean darkZone = isDarkZone(node, bounds, density);
+                    result.add(new TextNodeInfo(clean, bounds, textSize, darkZone));
+                }
             }
         }
 

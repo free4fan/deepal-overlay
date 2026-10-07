@@ -9,6 +9,7 @@ import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 
@@ -49,6 +50,9 @@ public class InlineOverlayManager {
     private static final int ROW_SAME_ROW_MAX_DY = 50;
     // Font may shrink to this (sp) so the text fits the column instead of ellipsizing
     private static final float FIT_MIN_SP = 9;
+    // A pill narrower than this whose text still overflows is a meaningless
+    // one-letter "А…" sliver — hide it (width 0) instead of drawing it
+    private static final int MIN_MEANINGFUL_PILL = 72;
 
     private final Context context;
     private final WindowManager windowManager;
@@ -89,9 +93,10 @@ public class InlineOverlayManager {
         final int gravity;
         final int padH;
         final int padV;
+        final boolean hidden;
 
         Layout(int width, int height, float textSizePx, int bgColor, int textColor,
-               boolean multiline, int gravity, int padH, int padV) {
+               boolean multiline, int gravity, int padH, int padV, boolean hidden) {
             this.width = width;
             this.height = height;
             this.textSizePx = textSizePx;
@@ -101,6 +106,7 @@ public class InlineOverlayManager {
             this.gravity = gravity;
             this.padH = padH;
             this.padV = padV;
+            this.hidden = hidden;
         }
     }
 
@@ -219,6 +225,18 @@ public class InlineOverlayManager {
     private void apply(TextView tv, OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
                        List<OverlaySpec> siblings) {
         Layout layout = computeLayout(spec, wordWrap, darkOverlay, siblings);
+        if (layout.hidden) {
+            // Slide sliver: park the existing overlay (it is claimed by this
+            // spec, so reconciliation keeps tracking — it reappears as soon as
+            // the node settles and the pill becomes wide again).
+            WindowManager.LayoutParams lp0 = (WindowManager.LayoutParams) tv.getLayoutParams();
+            if (lp0.width != 0) {
+                updateParams(tv, lp0, 0, 0, parseX(spec.key), parseY(spec.key));
+            }
+            if (tv.getVisibility() != View.GONE) tv.setVisibility(View.GONE);
+            return;
+        }
+        if (tv.getVisibility() != View.VISIBLE) tv.setVisibility(View.VISIBLE);
 
         // Tag holds the raw text — used for drift matching in reconcile()
         if (!spec.text.contentEquals(tv.getText())) {
@@ -236,20 +254,25 @@ public class InlineOverlayManager {
         tv.setGravity(layout.gravity);
         tv.setPadding(layout.padH, layout.padV, layout.padH, layout.padV);
 
-        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) tv.getLayoutParams();
-        if (lp.x != parseX(spec.key) || lp.y != parseY(spec.key)
-                || lp.width != layout.width || lp.height != layout.height) {
-            lp.x = parseX(spec.key);
-            lp.y = parseY(spec.key);
-            lp.width = layout.width;
-            lp.height = layout.height;
-            try { windowManager.updateViewLayout(tv, lp); } catch (Exception ignored) {}
-        }
+        updateParams(tv, (WindowManager.LayoutParams) tv.getLayoutParams(),
+            layout.width, layout.height, parseX(spec.key), parseY(spec.key));
+    }
+
+    // Only touches the window when something actually changed
+    private void updateParams(TextView tv, WindowManager.LayoutParams lp,
+                              int width, int height, int x, int y) {
+        if (lp.width == width && lp.height == height && lp.x == x && lp.y == y) return;
+        lp.width = width;
+        lp.height = height;
+        lp.x = x;
+        lp.y = y;
+        try { windowManager.updateViewLayout(tv, lp); } catch (Exception ignored) {}
     }
 
     private TextView create(OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
                             List<OverlaySpec> siblings) {
         Layout layout = computeLayout(spec, wordWrap, darkOverlay, siblings);
+        if (layout.hidden) return null; // don't spawn a slide sliver
 
         TextView tv = new TextView(context);
         tv.setText(spec.text);
@@ -374,8 +397,16 @@ public class InlineOverlayManager {
                 : Gravity.CENTER_VERTICAL | Gravity.START;
         }
 
+        // A carousel mid-slide leaves a node partially in: the widest the pill
+        // may grow is the gap to the next node (~40px), so only a single
+        // letter plus ellipsis fits ("А…"). Draw nothing while it stays in a
+        // sliver — the text is unknown here — and restore the pill as soon as
+        // the card settles (layout becomes wide enough again).
+        boolean hidden = !multiline && width > 0 && width < MIN_MEANINGFUL_PILL
+            && textPxWidth + padH * 2 > width;
+
         return new Layout(width, height, textSizePx, bgColor, textColor,
-            multiline, gravity, padH, padV);
+            multiline, gravity, padH, padV, hidden);
     }
 
     private void applyBackground(TextView tv, int color) {
