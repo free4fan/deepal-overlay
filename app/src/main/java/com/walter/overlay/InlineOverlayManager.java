@@ -41,6 +41,12 @@ public class InlineOverlayManager {
     private static final int ROW_GAP = 6;
     // Siblings farther apart than this are unrelated, not a row neighbor
     private static final int ROW_NEIGHBOR_MAX = 600;
+    // Vertical offset that still counts as "same row". Real rows align within a
+    // few px (top/bottom-aligned or centered of similar heights); dense lists put
+    // the next row 55px+ further down. The old 140 band treated a node from the
+    // adjacent row as a row neighbor and clamped this pill to their gap — a 60px
+    // "Це…" instead of "Центр сообщений".
+    private static final int ROW_SAME_ROW_MAX_DY = 50;
     // Font may shrink to this (sp) so the text fits the column instead of ellipsizing
     private static final float FIT_MIN_SP = 9;
 
@@ -300,7 +306,7 @@ public class InlineOverlayManager {
                 if (s == spec) continue;
                 int dx = parseX(s.key) - x;
                 if (dx > 0 && dx < ROW_NEIGHBOR_MAX
-                        && Math.abs(parseY(s.key) - parseY(spec.key)) < 140) {
+                        && Math.abs(parseY(s.key) - parseY(spec.key)) <= ROW_SAME_ROW_MAX_DY) {
                     if (near < 0 || dx < near) near = dx;
                 }
             }
