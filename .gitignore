@@ -30,3 +30,6 @@ tools/logs/
 # Python
 __pycache__/
 *.pyc
+
+# Release artifacts — APKs live on GitHub Releases, not in the repo
+*.apk
