@@ -70,9 +70,16 @@ public class InlineOverlayManager {
         public final float textSizeSp;
         public final boolean darkZone;
         public final boolean centered;
+        // Estimated width of the source CJK text in px (one Han char ≈ 1em).
+        // 0 = unknown / not estimated — layout falls back to the node width.
+        // Needed because a11y nodes report row-container bounds (e.g. a section
+        // header 704px wide with a 4-char title in its left part): the pill
+        // must cover the text, not the whole container.
+        public final int estSourceWidthPx;
 
         public OverlaySpec(String key, String text, int width, int height,
-                           float textSizeSp, boolean darkZone, boolean centered) {
+                           float textSizeSp, boolean darkZone, boolean centered,
+                           int estSourceWidthPx) {
             this.key = key;
             this.text = text;
             this.width = width;
@@ -80,6 +87,7 @@ public class InlineOverlayManager {
             this.textSizeSp = textSizeSp;
             this.darkZone = darkZone;
             this.centered = centered;
+            this.estSourceWidthPx = estSourceWidthPx;
         }
     }
 
@@ -94,9 +102,18 @@ public class InlineOverlayManager {
         final int padH;
         final int padV;
         final boolean hidden;
+        // Offset (in px) from the node's top-left where the window is anchored.
+        // Single-line pills are centered on the node: the source CJK sits
+        // centered in the node box, so a top-left-anchored window padded by
+        // padV/padH shifts the translation diagonally off the CJK center
+        // (perceivable as the caption being displaced from the original).
+        // Multiline wraps grow downward and stay top-anchored.
+        final int dx;
+        final int dy;
 
         Layout(int width, int height, float textSizePx, int bgColor, int textColor,
-               boolean multiline, int gravity, int padH, int padV, boolean hidden) {
+               boolean multiline, int gravity, int padH, int padV, boolean hidden,
+               int dx, int dy) {
             this.width = width;
             this.height = height;
             this.textSizePx = textSizePx;
@@ -107,6 +124,8 @@ public class InlineOverlayManager {
             this.padH = padH;
             this.padV = padV;
             this.hidden = hidden;
+            this.dx = dx;
+            this.dy = dy;
         }
     }
 
@@ -206,12 +225,13 @@ public class InlineOverlayManager {
     public void showTranslation(int left, int top, int width, int height,
                                 String translatedText, float textSizeSp,
                                 boolean darkZone, boolean centered,
+                                int estSourceWidthPx,
                                 boolean wordWrap, boolean darkOverlay) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
         String key = left + "," + top;
         OverlaySpec spec = new OverlaySpec(key, translatedText, width, height,
-            textSizeSp, darkZone, centered);
+            textSizeSp, darkZone, centered, estSourceWidthPx);
 
         TextView existing = activeViews.get(key);
         if (existing != null) {
@@ -233,7 +253,8 @@ public class InlineOverlayManager {
             // the node settles and the pill becomes wide again).
             WindowManager.LayoutParams lp0 = (WindowManager.LayoutParams) tv.getLayoutParams();
             if (lp0.width != 0) {
-                updateParams(tv, lp0, 0, 0, parseX(spec.key), parseY(spec.key));
+                updateParams(tv, lp0, 0, 0,
+                    parseX(spec.key) + layout.dx, parseY(spec.key) + layout.dy);
             }
             if (tv.getVisibility() != View.GONE) tv.setVisibility(View.GONE);
             return;
@@ -257,7 +278,8 @@ public class InlineOverlayManager {
         tv.setPadding(layout.padH, layout.padV, layout.padH, layout.padV);
 
         updateParams(tv, (WindowManager.LayoutParams) tv.getLayoutParams(),
-            layout.width, layout.height, parseX(spec.key), parseY(spec.key));
+            layout.width, layout.height,
+            parseX(spec.key) + layout.dx, parseY(spec.key) + layout.dy);
     }
 
     // Only touches the window when something actually changed
@@ -303,9 +325,15 @@ public class InlineOverlayManager {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             android.graphics.PixelFormat.TRANSLUCENT);
 
-        params.x = parseX(spec.key);
-        params.y = parseY(spec.key);
+        params.x = parseX(spec.key) + layout.dx;
+        params.y = parseY(spec.key) + layout.dy;
         params.gravity = Gravity.TOP | Gravity.START;
+        // On this device WMS rewrites overlay params (adds CENTER to the
+        // gravity, forces alpha 0.8) — the CJK then shows *through* the pill
+        // and reads as the translation being misaligned/offset from the
+        // original text. Force full opacity; the rounded corners are
+        // per-pixel alpha inside the surface and are not affected.
+        params.alpha = 1.0f;
 
         try {
             windowManager.addView(tv, params);
@@ -325,6 +353,7 @@ public class InlineOverlayManager {
         // Column limit: a pill must not cover a row neighbor's column (a 4-icon grid
         // leaves ~column width of room, not the whole screen to the right)
         int maxW = Math.max(48, screenWidth - x - SCREEN_EDGE_MARGIN);
+        boolean closeRow = false;
         if (siblings != null) {
             int near = -1;
             for (OverlaySpec s : siblings) {
@@ -332,32 +361,48 @@ public class InlineOverlayManager {
                 int dx = parseX(s.key) - x;
                 if (dx > 0 && dx < ROW_NEIGHBOR_MAX
                         && Math.abs(parseY(s.key) - parseY(spec.key)) <= ROW_SAME_ROW_MAX_DY) {
+                    closeRow = true;
                     if (near < 0 || dx < near) near = dx;
                 }
             }
             if (near > 48) maxW = Math.min(maxW, near - ROW_GAP);
         }
 
-        // Font size in absolute px: the user's system font scale must not stretch
-        // an overlay out of its fixed window (the old SP setting did exactly that)
+        // Wide row containers (section headers): the a11y bounds are the whole
+        // row (e.g. 704px for a 4-char title) while the source text fills only
+        // its start — a pill sized from the node swallows the row and the strip
+        // below it. Detected by: source text well smaller than the node width
+        // AND no close CJK row neighbor (grid tiles like 车锁|车窗 have one and
+        // keep their node size; tight text nodes fail the width test).
+        boolean standaloneRow = !closeRow && spec.estSourceWidthPx > 0
+            && spec.width > spec.estSourceWidthPx * 2.5f;
+        int textCap = 0;
+        int fitW = maxW;
         float textSizePx = spec.textSizeSp * dm.density;
         textSizePx = Math.max(MIN_TEXT_SP * dm.density,
             Math.min(textSizePx, MAX_TEXT_SP * dm.density));
 
         int padH = Math.max(4, (int) (textSizePx * 0.4f));
         int padV = Math.max(2, (int) (textSizePx * 0.3f));
+        if (standaloneRow) {
+            // ~1.4x the source extent: room for a longer translation, not a row
+            textCap = (int) (spec.estSourceWidthPx * 1.4f) + padH * 2;
+            fitW = Math.min(maxW, textCap);
+        }
+
         measurePaint.setTextSize(textSizePx);
         float textPxWidth = measurePaint.measureText(spec.text);
 
         // Fit the column: shrink the font (down to FIT_MIN_SP) so the full text fits
         // instead of ellipsizing; ellipsize remains the last resort at the floor size
-        if (!wordWrap && textPxWidth + padH * 2 > maxW) {
+        if (!wordWrap && textPxWidth + padH * 2 > fitW) {
             float floorPx = FIT_MIN_SP * dm.density;
-            float scale = floorPx >= textSizePx ? 1f : (maxW - padH * 2) / textPxWidth;
+            float scale = floorPx >= textSizePx ? 1f : (fitW - padH * 2) / textPxWidth;
             if (scale < 1f) {
                 textSizePx = Math.max(floorPx, textSizePx * scale);
                 padH = Math.max(4, (int) (textSizePx * 0.4f));
                 padV = Math.max(2, (int) (textSizePx * 0.3f));
+                if (standaloneRow) textCap = (int) (spec.estSourceWidthPx * 1.4f) + padH * 2;
                 measurePaint.setTextSize(textSizePx);
                 textPxWidth = measurePaint.measureText(spec.text);
             }
@@ -365,14 +410,18 @@ public class InlineOverlayManager {
 
         // Native wrapping: let the TextView itself break lines when the text does not
         // fit in the available width (the old 13-char manual wrap is gone)
-        boolean multiline = wordWrap && textPxWidth + padH * 2 > maxW;
+        boolean multiline = wordWrap && textPxWidth + padH * 2 > fitW;
 
         int width;
         if (multiline) {
-            width = maxW;
+            width = fitW;
         } else {
             int textArea = (int) Math.min(textPxWidth, maxW - padH * 2);
             int nodeArea = (int) Math.min(spec.width, maxW - padH * 2);
+            if (standaloneRow) {
+                textArea = Math.min(textArea, textCap - padH);
+                nodeArea = Math.min(nodeArea, textCap - padH);
+            }
             width = Math.max(nodeArea, textArea) + padH * 2;
         }
 
@@ -381,7 +430,12 @@ public class InlineOverlayManager {
             height = WindowManager.LayoutParams.WRAP_CONTENT;
         } else {
             int minH = Math.max((int) (textSizePx + padV * 2), MIN_SINGLE_LINE_HEIGHT);
-            height = Math.max(spec.height + padV * 2, minH);
+            int h = spec.height + padV * 2;
+            if (standaloneRow) {
+                // the container is several lines tall, the text one line
+                h = (int) (textSizePx * 1.35f) + padV * 2;
+            }
+            height = Math.max(h, minH);
         }
 
         int bgColor = darkOverlay ? BG_DARK_SETTING
@@ -407,8 +461,24 @@ public class InlineOverlayManager {
         boolean hidden = !multiline && width > 0 && width < MIN_MEANINGFUL_PILL
             && textPxWidth + padH * 2 > width;
 
+        // Center the single-line window on the node (see Layout.dx/dy).
+        // Source CJK is centered in the node box, and the window is padded
+        // around the caption (h = node + 2*padV, w = node + 2*padH when the
+        // translation is short), so anchoring at the node top-left pushes the
+        // caption down-right off the CJK center — the pill looked displaced.
+        // Delta = (node - window) / 2: usually negative (window is slightly
+        // larger than the node), so it starts above/left of the node.
+        int ddx = 0, ddy = 0;
+        if (!multiline) {
+            ddy = (spec.height - height) / 2;
+            if (spec.centered && !standaloneRow && width >= spec.width) {
+                ddx = Math.min(0, (spec.width - width) / 2);
+                ddx = Math.max(ddx, -x); // never cross the screen edge
+            }
+        }
+
         return new Layout(width, height, textSizePx, bgColor, textColor,
-            multiline, gravity, padH, padV, hidden);
+            multiline, gravity, padH, padV, hidden, ddx, ddy);
     }
 
     private void applyBackground(TextView tv, int color) {

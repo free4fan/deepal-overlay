@@ -529,7 +529,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             specs.add(new InlineOverlayManager.OverlaySpec(
                 node.bounds.left + "," + node.bounds.top,
                 display, node.bounds.width(), node.bounds.height(),
-                node.estimatedTextSize, node.darkZone, centered));
+                node.estimatedTextSize, node.darkZone, centered,
+                estimateSourceWidth(node.text, node.estimatedTextSize, density)));
             if (hits[i] == null) {
                 toTranslate.add(node);
             }
@@ -759,6 +760,29 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         return Math.max(10, Math.min(size, 24));
     }
 
+    // Estimated on-screen width of the source CJK string at the given size.
+    // CJK glyphs are ~1em wide, latin/digit glyphs ~0.55em. Row-container nodes
+    // report container bounds, so the pill size caps to this text extent instead
+    // of the whole container (a 4-char section title inside a 704px-wide row).
+    private static int estimateSourceWidth(String text, float textSizeSp, float density) {
+        if (text == null || text.isEmpty()) return 0;
+        float em = Math.max(10, Math.min(textSizeSp, 24)) * density;
+        float w = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            boolean wide =
+                (c >= 0x1100 && c <= 0x115F) ||      // Hangul Jamo
+                (c >= 0x2E80 && c <= 0xA4CF) ||      // CJK radicals .. Yi
+                (c >= 0xAC00 && c <= 0xD7A3) ||      // Hangul syllables
+                (c >= 0xF900 && c <= 0xFAFF) ||      // CJK compat ideographs
+                (c >= 0xFE30 && c <= 0xFE4F) ||      // CJK compat forms
+                (c >= 0xFF00 && c <= 0xFF60) ||      // fullwidth forms
+                (c >= 0xD800 && c <= 0xDFFF);        // surrogates (CJK ext B+)
+            w += wide ? em : em * 0.55f;
+        }
+        return Math.max(1, (int) (w + 0.5f));
+    }
+
     private void startBatchIfIdle() {
         startBatchIfIdle(scanEpoch);
     }
@@ -825,7 +849,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                             inlineManager.showTranslation(
                                 n.bounds.left, n.bounds.top,
                                 n.bounds.width(), n.bounds.height(),
-                                n.translated, n.estimatedTextSize, n.darkZone, centered, ww, dk);
+                                n.translated, n.estimatedTextSize, n.darkZone, centered,
+                                estimateSourceWidth(n.text, n.estimatedTextSize, density),
+                                ww, dk);
                         }
                     }
                     startBatchIfIdle();
