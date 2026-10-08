@@ -577,10 +577,37 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         collectChineseNodes(node, result, 0);
     }
 
+    // The service's resource context reports *window* metrics (status/nav bars
+    // subtracted: 1935px here), while getBoundsInScreen uses the full-display
+    // coordinate space (2142px). Culling against the window height wrongly
+    // pruned the bottom navigation bar (探索/服务/爱车/商城/我的 at y≈2029+).
+    // Real metrics come from the display itself.
+    private void realDisplaySize(int[] out) {
+        try {
+            android.hardware.display.DisplayManager dm =
+                (android.hardware.display.DisplayManager) getSystemService(DISPLAY_SERVICE);
+            if (dm != null) {
+                android.view.Display disp =
+                    dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+                if (disp != null) {
+                    android.util.DisplayMetrics m = new android.util.DisplayMetrics();
+                    disp.getRealMetrics(m);
+                    out[0] = m.widthPixels;
+                    out[1] = m.heightPixels;
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        android.util.DisplayMetrics m = getResources().getDisplayMetrics();
+        out[0] = m.widthPixels;
+        out[1] = m.heightPixels;
+    }
+
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result, int depth) {
-        collectChineseNodes(node, result, depth,
-            getResources().getDisplayMetrics().widthPixels,
-            getResources().getDisplayMetrics().heightPixels);
+        int[] size = new int[2];
+        realDisplaySize(size);
+        collectChineseNodes(node, result, depth, size[0], size[1]);
     }
 
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result,
@@ -614,9 +641,24 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 // Keep recursing either way — partially visible children may
                 // settle on-screen and be picked up in the same scan.
                 if (bounds.left >= 0 && bounds.right <= screenW) {
-                    float textSize = estimateTextSize(bounds, density);
-                    boolean darkZone = isDarkZone(node, bounds, density);
-                    result.add(new TextNodeInfo(clean, bounds, textSize, darkZone));
+                    // Edge strip: a tab/page whose clipped node hugs the left
+                    // or right screen edge and is only a sliver wide is the
+                    // previous/next carousel item mid-slide; its pill would
+                    // poke across the edge ("Спо…"). Legitimate wide left-edge
+                    // labels (322px "Магазин «Чэюнь»") are unaffected.
+                    boolean edgeStrip = bounds.width() < 120
+                        && (bounds.left < 24 || bounds.right > screenW - 24);
+                    // Floating bottom tab bar: content lists scroll underneath
+                    // its translucent panel. Pills for that scrolled content
+                    // read as dark smears behind the tab labels — only the
+                    // labels themselves (short pure-CJK: 探索/服务/爱车/商城/我的)
+                    // get pills in the band.
+                    boolean navBand = bounds.top >= screenH - 150;
+                    if (!edgeStrip && (!navBand || isTabLabel(clean))) {
+                        float textSize = estimateTextSize(bounds, density);
+                        boolean darkZone = isDarkZone(node, bounds, density);
+                        result.add(new TextNodeInfo(clean, bounds, textSize, darkZone));
+                    }
                 }
             }
         }
@@ -629,6 +671,17 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 child.recycle();
             }
         }
+    }
+
+    // Bottom tab-bar labels are 2-char pure CJK (探索/服务/爱车/商城/我的);
+    // anything longer that reaches the nav band is scrolled content behind the
+    // translucent panel, not a label
+    private static boolean isTabLabel(String clean) {
+        if (clean.length() == 0 || clean.length() > 6) return false;
+        for (int i = 0; i < clean.length(); i++) {
+            if (!isHan(clean.charAt(i))) return false;
+        }
+        return true;
     }
 
     // The CJK ratio is computed on the visible (tag-stripped) text so that

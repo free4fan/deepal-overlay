@@ -169,8 +169,10 @@ public class InlineOverlayManager {
         // Pass 3: remove overlays that no longer match any node.
         // Unclaimed overlays get a grace period before removal — a sparse scan
         // mid-fling must not wipe the screen. Fully offscreen views go at once.
-        DisplayMetrics dm = context.getResources().getDisplayMetrics();
-        int screenH = dm.heightPixels;
+        // Use the *real* display height (resource context reports window
+        // metrics, which understates the space where nodes like the bottom
+        // nav bar actually live).
+        int screenH = realDisplayHeight();
         for (Iterator<Map.Entry<String, TextView>> it = activeViews.entrySet().iterator(); it.hasNext();) {
             Map.Entry<String, TextView> e = it.next();
             TextView tv = e.getValue();
@@ -425,6 +427,27 @@ public class InlineOverlayManager {
             cornerRadiusPx = (int) (CORNER_RADIUS_DP * density + 0.5f);
         }
         return cornerRadiusPx;
+    }
+
+    // Resource context returns window metrics (system bars subtracted); the
+    // real display is taller — node bounds use the full-display space
+    private int realDisplayHeight() {
+        try {
+            android.hardware.display.DisplayManager dm =
+                (android.hardware.display.DisplayManager)
+                    context.getSystemService(Context.DISPLAY_SERVICE);
+            if (dm != null) {
+                android.view.Display disp =
+                    dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+                if (disp != null) {
+                    DisplayMetrics m = new DisplayMetrics();
+                    disp.getRealMetrics(m);
+                    return m.heightPixels;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return context.getResources().getDisplayMetrics().heightPixels;
     }
 
     private static int parseX(String key) {
