@@ -640,7 +640,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 // would anchor off-screen and stick out from the page edge.
                 // Keep recursing either way — partially visible children may
                 // settle on-screen and be picked up in the same scan.
-                if (bounds.left >= 0 && bounds.right <= screenW) {
+                // Rects that are zero-sized or inverted (right<=left) are how a
+                // horizontally-scrolling container reports its off-screen pages;
+                // an inverted right (e.g. -960) trivially satisfies "right<=screenW"
+                // and would leak off-screen nodes into the pill list, so require
+                // a well-formed, positive-area rect as well.
+                if (bounds.width() > 0 && bounds.height() > 0
+                        && bounds.left >= 0 && bounds.right <= screenW) {
                     // Edge strip: a tab/page whose clipped node hugs the left
                     // or right screen edge and is only a sliver wide is the
                     // previous/next carousel item mid-slide; its pill would
