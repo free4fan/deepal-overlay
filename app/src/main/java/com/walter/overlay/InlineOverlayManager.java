@@ -363,6 +363,8 @@ public class InlineOverlayManager {
         int maxW = Math.max(48, screenWidth - x - SCREEN_EDGE_MARGIN);
         boolean closeRow = false;
         int gapBelow = -1; // empty strip under the node, until the next node
+        int leftClear = x; // empty space to the node's left (screen edge default);
+        // a left row neighbor shrinks it — the pill must not cover that column
         if (siblings != null) {
             int near = -1;
             int y = parseY(spec.key);
@@ -374,6 +376,9 @@ public class InlineOverlayManager {
                         && Math.abs(parseY(s.key) - y) <= ROW_SAME_ROW_MAX_DY) {
                     closeRow = true;
                     if (near < 0 || dx < near) near = dx;
+                } else if (dx < 0 && dx > -ROW_NEIGHBOR_MAX
+                        && Math.abs(parseY(s.key) - y) <= ROW_SAME_ROW_MAX_DY) {
+                    leftClear = Math.max(0, Math.min(leftClear, x - (parseX(s.key) + s.width)));
                 }
                 // The nearest node below that overlaps the pill column
                 // bounds how far a wrapped caption may stretch down.
@@ -429,10 +434,28 @@ public class InlineOverlayManager {
 
         int textCap = 0;
         int fitW = maxW;
+        // Heading floor for standalone row titles: a section header (车辆设置,
+        // 960×123 CJK box) must read like a heading (≥ 16sp), not be squeezed
+        // below the CJK font (it came out 13sp + "…"). WRAP_DESIRED_SP + 4sp.
+        // The cap grows to one line at 16sp ONLY when the column allows —
+        // otherwise the normal fit/wrap path keeps the est*1.4 cap.
+        float headingFloorPx = (WRAP_DESIRED_SP + 4f) * dm.density;
+        boolean headingCap = false; // cap extended beyond est*1.4 — keep it
         if (standaloneRow) {
             // ~1.4x the source extent: room for a longer translation, not a row
             textCap = (int) (est * 1.4f) + padH * 2;
             fitW = Math.min(maxW, textCap);
+            // If one line at the heading floor fits the column, grow the cap
+            // to it: the title stays one line at heading size, no ellipsis.
+            // Beyond the column the normal fit/wrap path takes over.
+            measurePaint.setTextSize(headingFloorPx);
+            int atHeading = (int) Math.ceil(measurePaint.measureText(spec.text)
+                + headingFloorPx * 0.8f);
+            if (atHeading > textCap && atHeading <= maxW) {
+                textCap = atHeading;
+                fitW = atHeading;
+                headingCap = true;
+            }
         }
 
         // Icon-card tiles: the a11y font of a 1-line CJK block can be wider
@@ -494,7 +517,7 @@ public class InlineOverlayManager {
                     textSizePx = fs1;
                     padH = Math.max(4, (int) (textSizePx * 0.4f));
                     padV = Math.max(2, (int) (textSizePx * 0.3f));
-                    if (standaloneRow) textCap = (int) (est * 1.4f) + padH * 2;
+                    if (standaloneRow && !headingCap) textCap = (int) (est * 1.4f) + padH * 2;
                     measurePaint.setTextSize(textSizePx);
                     textPxWidth = measurePaint.measureText(spec.text);
                 } else {
@@ -504,7 +527,7 @@ public class InlineOverlayManager {
                     textSizePx = Math.max(floorPx, textSizePx * scale);
                     padH = Math.max(4, (int) (textSizePx * 0.4f));
                     padV = Math.max(2, (int) (textSizePx * 0.3f));
-                    if (standaloneRow) textCap = (int) (est * 1.4f) + padH * 2;
+                    if (standaloneRow && !headingCap) textCap = (int) (est * 1.4f) + padH * 2;
                     measurePaint.setTextSize(textSizePx);
                     textPxWidth = measurePaint.measureText(spec.text);
                 }
@@ -514,7 +537,7 @@ public class InlineOverlayManager {
                 textSizePx = fs1;
                 padH = Math.max(4, (int) (textSizePx * 0.4f));
                 padV = Math.max(2, (int) (textSizePx * 0.3f));
-                if (standaloneRow) textCap = (int) (est * 1.4f) + padH * 2;
+                if (standaloneRow && !headingCap) textCap = (int) (est * 1.4f) + padH * 2;
                 measurePaint.setTextSize(textSizePx);
                 textPxWidth = measurePaint.measureText(spec.text);
             }
@@ -621,13 +644,25 @@ public class InlineOverlayManager {
         // caption down-right off the CJK center — the pill looked displaced.
         // Delta = (node - window) / 2: usually negative (window is slightly
         // larger than the node), so it starts above/left of the node.
+        // Bottom nav band: center the single-line pill on the tab's ICON.
+        // The a11y node can be the text TextView (width ≈ est) or a wider
+        // container; the CJK block is always `est` wide from the node's left
+        // edge, and the icon sits above its center (user: the tab pills
+        // « Машина »/« Магазин » looked shifted right of the icons — the pill
+        // anchored at the CJK's left edge, while RU is 2-3x wider than the
+        // block). Center on x + est/2 when the overhang fits the clearances.
         int ddx = 0, ddy = 0;
         if (!multiline) {
             ddy = (spec.height - height) / 2;
-            if (spec.centered && !standaloneRow && !wideRow && !tallIconBox
-                    && width >= spec.width) {
-                ddx = Math.min(0, (spec.width - width) / 2);
-                ddx = Math.max(ddx, -x); // never cross the screen edge
+            if (parseY(spec.key) > realDisplayHeight() - 130
+                    && est > 0 && width > est
+                    && !standaloneRow && !tallIconBox) {
+                int overhang = (width - est) / 2;
+                if (overhang <= leftClear) {
+                    ddx = (est - width) / 2;
+                    ddx = Math.max(ddx, -x); // never cross the screen edge
+                    if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
+                }
             }
         }
 
@@ -658,9 +693,27 @@ public class InlineOverlayManager {
         int padV = Math.max(2, (int) (fsPx * 0.3f));
         float avail = boxWidthPx - 2f * padH;
         if (avail < fsPx) return 0; // not even one glyph fits
+        // Words break on spaces; an explicit hyphen is also a break point
+        // (UAX#14: break after "-", the hyphen stays on the first line —
+        // "Concierge-сервис" → 2 readable lines instead of one 10sp sliver).
+        // The hyphenated pieces are pre-split so each stays with its tail.
+        final java.util.List<String> words = new java.util.ArrayList<>();
+        for (String part : text.split(" ", -1)) {
+            if (part.length() > 1 && part.indexOf('-') >= 0) {
+                int from = 0;
+                int h;
+                while ((h = part.indexOf('-', from)) >= 0) {
+                    words.add(part.substring(from, h + 1));
+                    from = h + 1;
+                }
+                if (from < part.length()) words.add(part.substring(from));
+            } else {
+                words.add(part);
+            }
+        }
         int lines = 1;
         float x = 0;
-        for (String word : text.split(" ", -1)) {
+        for (String word : words) {
             float ww = measurePaint.measureText(word);
             float need = (x > 0 ? measurePaint.measureText(" ") : 0) + ww;
             if (x + need > avail && x > 0) {
