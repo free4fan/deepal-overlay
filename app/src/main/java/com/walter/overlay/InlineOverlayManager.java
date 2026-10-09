@@ -431,9 +431,22 @@ public class InlineOverlayManager {
         //    whole row), keep the font at the source size when it fits.
         boolean wideRow = !closeRow && !standaloneRow && !tallIconBox && est > 0
             && spec.width > est * 2.5f;
+        //
+        // L) loose label row — a tall (2-line box) row whose single CJK line
+        //    spans a large part of the width (个人信息收集清单 858x142): the
+        //    a11y font (54px from the box height) and the node width both
+        //    overstate the real label, producing full-width 24sp slabs.
+        //    Cap width to ~1.35x the source extent, one text-line tall.
+        boolean looseRow = !closeRow && !standaloneRow && !tallIconBox && !wideRow
+            && est > 0 && spec.width > est * 1.7f && spec.height > textSizePx * 1.8f;
 
         int textCap = 0;
         int fitW = maxW;
+        if (looseRow) {
+            // Cap the field at the scaled source extent (+ padding) so the
+            // fit path shrinks the font to it instead of taking the row.
+            fitW = Math.min(fitW, (int) (est * 1.35f) + padH * 2);
+        }
         // Heading floor for standalone row titles: a section header (车辆设置,
         // 960×123 CJK box) must read like a heading (≥ 16sp), not be squeezed
         // below the CJK font (it came out 13sp + "…"). WRAP_DESIRED_SP + 4sp.
@@ -576,6 +589,9 @@ public class InlineOverlayManager {
                 // The source label fills the row's left part, the pill may
                 // be wider than the label but must not swallow the row.
                 nodeArea = Math.min(nodeArea, (int) (est * 2.2f));
+            } else if (looseRow) {
+                // Loose label row: hug the source extent, never the row box.
+                nodeArea = Math.min(nodeArea, (int) (est * 1.35f) + padH);
             }
             width = Math.max(nodeArea, textArea) + padH * 2;
         }
@@ -604,6 +620,10 @@ public class InlineOverlayManager {
                 // Icon-card tile: one line, not a box-tall slab (the
                 // "Зарядка" 184x130 pill).
                 h = (int) (textSizePx * 1.4f) + padV * 2;
+            } else if (looseRow) {
+                // Loose label row: one CJK line in a 2-line-tall box —
+                // a one-line caption centered in the row, not a slab.
+                h = (int) (textSizePx * 1.35f) + padV * 2;
             } else {
                 h = spec.height + padV * 2;
             }
@@ -660,6 +680,37 @@ public class InlineOverlayManager {
                 int overhang = (width - est) / 2;
                 if (overhang <= leftClear) {
                     ddx = (est - width) / 2;
+                    ddx = Math.max(ddx, -x); // never cross the screen edge
+                    if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
+                }
+            }
+            // Two more cases where the app CENTERS the CJK inside the node
+            // box, so the pill must be centered on the node center too
+            // (anchoring at the node's left edge left the CJK exposed):
+            //
+            // (A) a toolbar title inset between the back arrow and the
+            //     right icons (设置 (154,191) 652x68 — the title TextView
+            //     spans the gap, CJK centered on the screen midpoint).
+            //     Full-width header bars (车辆设置, x=0, w≈screen) keep the
+            //     left-anchored look; the inset bar is the centered one.
+            // (B) a full-width button with a short CJK label (退出登录
+            //     (51,1884) 858x102): the label sits in the button center.
+            //     List rows are excluded by x>60 / h>=120 / char count.
+            if (ddx == 0 && est > 0 && !closeRow
+                    && !tallIconBox && !looseRow && width > est) {
+                int y0 = parseY(spec.key);
+                // standaloneRow (card titles like 行程回顾 704x108) sit in the
+                // header zone too but their CJK is LEFT-aligned — only the
+                // inset toolbar bar (wideRow here, 设置 652x68) centers it.
+                boolean toolbarCentered =
+                    !standaloneRow && y0 < 320 && x > 40 && x < screenWidth * 0.6f
+                    && spec.width > est * 2.5f && spec.height < 96 * dm.density;
+                boolean buttonCentered =
+                    x <= 60 && spec.width >= screenWidth * 0.83f
+                    && spec.height >= textSizePx * 1.4f && spec.height < 120
+                    && spec.width > est * 2.5f;
+                if (toolbarCentered || buttonCentered) {
+                    ddx = (spec.width - width) / 2;
                     ddx = Math.max(ddx, -x); // never cross the screen edge
                     if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
                 }
