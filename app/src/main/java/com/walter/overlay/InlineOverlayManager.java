@@ -688,30 +688,61 @@ public class InlineOverlayManager {
             // box, so the pill must be centered on the node center too
             // (anchoring at the node's left edge left the CJK exposed):
             //
-            // (A) a toolbar title inset between the back arrow and the
+            // (A) an inset TOOLBAR title between the back arrow and the
             //     right icons (设置 (154,191) 652x68 — the title TextView
             //     spans the gap, CJK centered on the screen midpoint).
-            //     Full-width header bars (车辆设置, x=0, w≈screen) keep the
-            //     left-anchored look; the inset bar is the centered one.
-            // (B) a full-width button with a short CJK label (退出登录
+            //     Gated thin-and-wide: a real toolbar title is a short band
+            //     (h<74, 设置 68 / 服务权益 75 are the boundaries case) and
+            //     its CJK is ~6x narrower than the node; the car tab's dark
+            //     banner (服务权益 756x75, w≈3.8×est) and full-width page
+            //     headers (商城 909x89, 878x53) LEFT-align their CJK and
+            //     must stay at the node's left edge.
+            // (B) a full-width BUTTON with a short CJK label (退出登录
             //     (51,1884) 858x102): the label sits in the button center.
-            //     List rows are excluded by x>60 / h>=120 / char count.
+            //     List rows (878x53 / 878x45 headers) are shorter than
+            //     96px; a real button is not.
             if (ddx == 0 && est > 0 && !closeRow
                     && !tallIconBox && !looseRow && width > est) {
                 int y0 = parseY(spec.key);
                 // standaloneRow (card titles like 行程回顾 704x108) sit in the
                 // header zone too but their CJK is LEFT-aligned — only the
-                // inset toolbar bar (wideRow here, 设置 652x68) centers it.
+                // inset toolbar bar (wideRow here, 设置 652x68, w≈6×est)
+                // centers it; a left-aligned banner heading (服务权益
+                // 756x75, w≈4×est) stays at the node's left edge.
                 boolean toolbarCentered =
                     !standaloneRow && y0 < 320 && x > 40 && x < screenWidth * 0.6f
-                    && spec.width > est * 2.5f && spec.height < 96 * dm.density;
+                    && spec.width > est * 4.5f && spec.height < 74;
+                // A real toolbar title is a thin band (68/75px); a full-width
+                // PAGE header (商城 909x89) is not: keep it left-anchored.
                 boolean buttonCentered =
                     x <= 60 && spec.width >= screenWidth * 0.83f
-                    && spec.height >= textSizePx * 1.4f && spec.height < 120
+                    && spec.height >= 96 && spec.height < 120
                     && spec.width > est * 2.5f;
-                if (toolbarCentered || buttonCentered) {
+                // (C) a full-width header bar (设置 0x960 / 车辆设置 0x960):
+                //     left-aligned CJK, but the app keeps a content inset
+                //     (~24dp = 55-59px measured) inside the 0-based node —
+                //     the screen-edge-anchored pill left a 55px strip of
+                //     empty scrim. Anchor at the content edge instead.
+                boolean headerContentLeft =
+                    standaloneRow && x <= 30
+                    && spec.width >= screenWidth * 0.95f && y0 < 340
+                    && width < spec.width;
+                // (D) a full-width empty-state block (当日无旅程数据
+                //     (0,1107) 960x106, deep in the page): the app CENTERS
+                //     the CJK in the node, so a left-anchored pill leaves
+                //     the last CJK chars exposed. Center it like the header.
+                boolean emptyCentered =
+                    standaloneRow && x <= 30
+                    && spec.width >= screenWidth * 0.95f && y0 > 340
+                    && width < spec.width;
+                if (toolbarCentered || buttonCentered || emptyCentered) {
                     ddx = (spec.width - width) / 2;
                     ddx = Math.max(ddx, -x); // never cross the screen edge
+                    if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
+                } else if (headerContentLeft) {
+                    int inset = (int) (24 * dm.density); // app content edge
+                    ddx = inset;
+                    ddx = Math.max(ddx, -x);
                     if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
                 }
             }
