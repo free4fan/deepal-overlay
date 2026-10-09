@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -53,6 +54,13 @@ public class InlineOverlayManager {
     // A pill narrower than this whose text still overflows is a meaningless
     // one-letter "А…" sliver — hide it (width 0) instead of drawing it
     private static final int MIN_MEANINGFUL_PILL = 72;
+    // Wrapped captions below this font are no better than the proportional
+    // one-line shrink — stop stepping the wrap size down here.
+    private static final float WRAP_FLOOR_SP = FIT_MIN_SP;
+    // Below this one-line font size the caption reads as "squeezed": try a
+    // 2-3 line wrap at a readable font instead. CJK glyph ≈ 1em, so the
+    // source font ≈ what fits in the Chinese box.
+    private static final float WRAP_DESIRED_SP = 12;
 
     private final Context context;
     private final WindowManager windowManager;
@@ -354,88 +362,230 @@ public class InlineOverlayManager {
         // leaves ~column width of room, not the whole screen to the right)
         int maxW = Math.max(48, screenWidth - x - SCREEN_EDGE_MARGIN);
         boolean closeRow = false;
+        int gapBelow = -1; // empty strip under the node, until the next node
         if (siblings != null) {
             int near = -1;
+            int y = parseY(spec.key);
+            int bottom = y + spec.height;
             for (OverlaySpec s : siblings) {
                 if (s == spec) continue;
                 int dx = parseX(s.key) - x;
                 if (dx > 0 && dx < ROW_NEIGHBOR_MAX
-                        && Math.abs(parseY(s.key) - parseY(spec.key)) <= ROW_SAME_ROW_MAX_DY) {
+                        && Math.abs(parseY(s.key) - y) <= ROW_SAME_ROW_MAX_DY) {
                     closeRow = true;
                     if (near < 0 || dx < near) near = dx;
+                }
+                // The nearest node below that overlaps the pill column
+                // bounds how far a wrapped caption may stretch down.
+                int dy = parseY(s.key) - y;
+                if (dy > 0 && dy < 600 && parseX(s.key) < x + maxW
+                        && parseX(s.key) + s.width > x) {
+                    int g = parseY(s.key) - bottom;
+                    if (gapBelow < 0 || g < gapBelow) gapBelow = g;
                 }
             }
             if (near > 48) maxW = Math.min(maxW, near - ROW_GAP);
         }
+        // A caption may grow below the node into at most 75% of that gap;
+        // with no node below (list bottom, nav band) it is unlimited.
+        int maxPillH = gapBelow >= 0
+            ? spec.height + (int) (Math.max(0, gapBelow) * 0.75f)
+            : Integer.MAX_VALUE;
 
-        // Wide row containers (section headers): the a11y bounds are the whole
-        // row (e.g. 704px for a 4-char title) while the source text fills only
-        // its start — a pill sized from the node swallows the row and the strip
-        // below it. Detected by: source text well smaller than the node width
-        // AND no close CJK row neighbor (grid tiles like 车锁|车窗 have one and
-        // keep their node size; tight text nodes fail the width test).
-        boolean standaloneRow = !closeRow && spec.estSourceWidthPx > 0
-            && spec.width > spec.estSourceWidthPx * 2.5f;
-        int textCap = 0;
-        int fitW = maxW;
+        // Font in absolute px (clamped to the 10..24sp reading range)
         float textSizePx = spec.textSizeSp * dm.density;
         textSizePx = Math.max(MIN_TEXT_SP * dm.density,
             Math.min(textSizePx, MAX_TEXT_SP * dm.density));
+        float basePx = textSizePx;
 
         int padH = Math.max(4, (int) (textSizePx * 0.4f));
         int padV = Math.max(2, (int) (textSizePx * 0.3f));
+        int est = spec.estSourceWidthPx;
+
+        // Three node shapes, all with the source text well smaller than the node:
+        //
+        // B) tall header container — the a11y bounds are a 2+ line row box
+        //    (e.g. a 704x108 node whose 4-char title sits in its left part).
+        //    Pill: capped to ~1.4x the source extent, one text line tall.
+        boolean standaloneRow = !closeRow && est > 0
+            && spec.width > est * 2.5f && spec.height > textSizePx * 1.8f;
+        //
+        // T) tall icon-card box — a near-square tile whose box is several font
+        //    lines tall but whose text is short (e.g. 184x130 for 充电服务,
+        //    常用服务; the car's 车锁/车窗 grid cells). The source CJK sits in
+        //    part of the box; the pill hugs the box width (the next column
+        //    starts far enough away) and is one line tall, centered on the box.
+        boolean tallIconBox = !closeRow && !standaloneRow && est > 0
+            && spec.width <= est * 1.35f + 2
+            && spec.height > textSizePx * 1.6f && spec.height < textSizePx * 6f;
+        //
+        // A) wide single-line row — a settings row / header line (e.g. 720x60
+        //    for a 4-char label, or 878x45 for "保养提醒"). The source text
+        //    fills the left part, the translation may legitimately be wider:
+        //    cap the node contribution to ~2.2x the source extent (never the
+        //    whole row), keep the font at the source size when it fits.
+        boolean wideRow = !closeRow && !standaloneRow && !tallIconBox && est > 0
+            && spec.width > est * 2.5f;
+
+        int textCap = 0;
+        int fitW = maxW;
         if (standaloneRow) {
             // ~1.4x the source extent: room for a longer translation, not a row
-            textCap = (int) (spec.estSourceWidthPx * 1.4f) + padH * 2;
+            textCap = (int) (est * 1.4f) + padH * 2;
             fitW = Math.min(maxW, textCap);
+        }
+
+        // Icon-card tiles: the a11y font of a 1-line CJK block can be wider
+        // than the tight box (常用服务 4×54px in a 184px tile). Cap the
+        // caption font so `est` (the CJK extent at the source font) still
+        // spans the box on one line — never below the floor.
+        if (tallIconBox && est > 0) {
+            float fsTib = basePx * (spec.width - 16f) / est;
+            if (fsTib < textSizePx && fsTib >= FIT_MIN_SP * dm.density) {
+                textSizePx = fsTib;
+                padH = Math.max(4, (int) (textSizePx * 0.4f));
+                padV = Math.max(2, (int) (textSizePx * 0.3f));
+            }
         }
 
         measurePaint.setTextSize(textSizePx);
         float textPxWidth = measurePaint.measureText(spec.text);
 
-        // Fit the column: shrink the font (down to FIT_MIN_SP) so the full text fits
-        // instead of ellipsizing; ellipsize remains the last resort at the floor size
-        if (!wordWrap && textPxWidth + padH * 2 > fitW) {
-            float floorPx = FIT_MIN_SP * dm.density;
-            float scale = floorPx >= textSizePx ? 1f : (fitW - padH * 2) / textPxWidth;
-            if (scale < 1f) {
-                textSizePx = Math.max(floorPx, textSizePx * scale);
+        // Fit the available width (fitW: the column limit / field).
+        // A one-liner that would need a font below the readability target
+        // becomes a wrapped caption: the CJK glyph is ~1em, so the source
+        // font is about what fits in the field, and the caption wraps to
+        // 2-3 lines inside the COLUMN (the node box alone is often too
+        // narrow for a readable wrap; the next column starts further).
+        boolean multiline = wordWrap && textPxWidth + padH * 2 > fitW;
+        int wrapLines = 0; // 0 = no wrap chosen
+        float fs1 = -1f;
+        if (!multiline && textPxWidth + padH * 2 > fitW) {
+            // Largest one-line font that fits fitW: width(fs) = t*fs + 0.8fs
+            // (t = text width per base-font px, 0.8 = 2*padH per px).
+            float t = textPxWidth / textSizePx;
+            fs1 = fitW / (t + 0.8f);
+            float desiredPx = WRAP_DESIRED_SP * dm.density;
+            float floorPx = WRAP_FLOOR_SP * dm.density;
+            if (fs1 < desiredPx) {
+                // The one-liner wants a font below the readability target:
+                // largest readable size. Box = the column (fitW); height is
+                // limited by the box, the pill may grow below the node.
+                // The pill may grow into the clearance below (maxPillH), so
+                // budget the lines from that at the candidate size (a smaller
+                // font fits more lines — a fixed base-font budget undercounts).
+                float fs = textSizePx;
+                while (fs >= floorPx &&
+                        (wrapLines = wrapLineCount(spec.text, fitW, fs,
+                                lineBudget(maxPillH, fs), maxPillH)) == 0) {
+                    fs -= 1f;
+                }
+                if (wrapLines > 0) {
+                    // Readable wrap found at fs: apply it.
+                    textSizePx = fs;
+                    padH = Math.max(4, (int) (textSizePx * 0.4f));
+                    padV = Math.max(2, (int) (textSizePx * 0.3f));
+                    measurePaint.setTextSize(textSizePx);
+                    textPxWidth = measurePaint.measureText(spec.text);
+                    multiline = true;
+                } else if (fs1 >= floorPx) {
+                    // No readable wrap (single unbreakable word / tight box):
+                    // the largest readable one-line font.
+                    textSizePx = fs1;
+                    padH = Math.max(4, (int) (textSizePx * 0.4f));
+                    padV = Math.max(2, (int) (textSizePx * 0.3f));
+                    if (standaloneRow) textCap = (int) (est * 1.4f) + padH * 2;
+                    measurePaint.setTextSize(textSizePx);
+                    textPxWidth = measurePaint.measureText(spec.text);
+                } else {
+                    // Below even the floor one-lined: shrink to FIT_MIN_SP;
+                    // ellipsize remains the last resort.
+                    float scale = (fitW - padH * 2) / textPxWidth;
+                    textSizePx = Math.max(floorPx, textSizePx * scale);
+                    padH = Math.max(4, (int) (textSizePx * 0.4f));
+                    padV = Math.max(2, (int) (textSizePx * 0.3f));
+                    if (standaloneRow) textCap = (int) (est * 1.4f) + padH * 2;
+                    measurePaint.setTextSize(textSizePx);
+                    textPxWidth = measurePaint.measureText(spec.text);
+                }
+            } else {
+                // Mild overflow: keep one line, fit it in the field
+                // (a small shrink below the CJK font is acceptable).
+                textSizePx = fs1;
                 padH = Math.max(4, (int) (textSizePx * 0.4f));
                 padV = Math.max(2, (int) (textSizePx * 0.3f));
-                if (standaloneRow) textCap = (int) (spec.estSourceWidthPx * 1.4f) + padH * 2;
+                if (standaloneRow) textCap = (int) (est * 1.4f) + padH * 2;
                 measurePaint.setTextSize(textSizePx);
                 textPxWidth = measurePaint.measureText(spec.text);
             }
         }
-
-        // Native wrapping: let the TextView itself break lines when the text does not
-        // fit in the available width (the old 13-char manual wrap is gone)
-        boolean multiline = wordWrap && textPxWidth + padH * 2 > fitW;
-
+        // The pad model (0.4em) is a hair optimistic for Cyrillic: guarantee
+        // the one-liner truly fits the pill interior (kills micro-ellipses).
+        // Never below the wrap floor — a hopeless one-liner ellipsizes instead
+        // of becoming an unreadable sliver.
+        if (!multiline && textPxWidth > fitW - padH * 2f && fitW >= 48) {
+            float clamped = textSizePx * (fitW - padH * 2f - 1f) / textPxWidth;
+            if (clamped >= WRAP_FLOOR_SP * dm.density) {
+                textSizePx = clamped;
+                padH = Math.max(4, (int) (textSizePx * 0.4f));
+                padV = Math.max(2, (int) (textSizePx * 0.3f));
+                measurePaint.setTextSize(textSizePx);
+                textPxWidth = measurePaint.measureText(spec.text);
+            }
+        }
         int width;
         if (multiline) {
-            width = fitW;
+            // Icon tiles keep the wrap inside the box; everything else
+            // takes the whole field width.
+            width = tallIconBox ? (int) Math.min(fitW, spec.width) : fitW;
+        } else if (tallIconBox) {
+            // One-line caption on the icon-card tile: hug the box (covers
+            // the CJK), growing right only if the translation is longer.
+            width = Math.min(maxW,
+                Math.max(spec.width, (int) (textPxWidth + padH * 2f)));
         } else {
             int textArea = (int) Math.min(textPxWidth, maxW - padH * 2);
             int nodeArea = (int) Math.min(spec.width, maxW - padH * 2);
             if (standaloneRow) {
                 textArea = Math.min(textArea, textCap - padH);
                 nodeArea = Math.min(nodeArea, textCap - padH);
+            } else if (wideRow) {
+                // The source label fills the row's left part, the pill may
+                // be wider than the label but must not swallow the row.
+                nodeArea = Math.min(nodeArea, (int) (est * 2.2f));
             }
             width = Math.max(nodeArea, textArea) + padH * 2;
         }
-
         int height;
         if (multiline) {
-            height = WindowManager.LayoutParams.WRAP_CONTENT;
+            int lh = (int) (textSizePx * 1.25f);
+            int lines = wrapLines > 0 ? wrapLines : 2;
+            if (wordWrap && wrapLines == 0) {
+                // User word-wrap mode: the TextView breaks on its own.
+                height = WindowManager.LayoutParams.WRAP_CONTENT;
+            } else {
+                height = lines * lh + padV * 2;
+                if (tallIconBox || spec.height > textSizePx * 2.2f) {
+                    // Loose/icon box: cover the CJK itself as well.
+                    height = Math.max(height, spec.height);
+                }
+                height = Math.min(height, maxPillH);
+            }
         } else {
             int minH = Math.max((int) (textSizePx + padV * 2), MIN_SINGLE_LINE_HEIGHT);
-            int h = spec.height + padV * 2;
+            int h;
             if (standaloneRow) {
-                // the container is several lines tall, the text one line
+                // The container is several lines tall, the text is one line.
                 h = (int) (textSizePx * 1.35f) + padV * 2;
+            } else if (tallIconBox) {
+                // Icon-card tile: one line, not a box-tall slab (the
+                // "Зарядка" 184x130 pill).
+                h = (int) (textSizePx * 1.4f) + padV * 2;
+            } else {
+                h = spec.height + padV * 2;
             }
             height = Math.max(h, minH);
+            height = Math.min(height, maxPillH);
         }
 
         int bgColor = darkOverlay ? BG_DARK_SETTING
@@ -443,16 +593,19 @@ public class InlineOverlayManager {
         int textColor = 0xFFFFFFFF;
 
         int gravity;
-        if (multiline) {
-            gravity = spec.centered
+        if (tallIconBox) {
+            // Icon-card tiles center the CJK under the icon: center the
+            // (1-2 line) caption in the box too.
+            gravity = Gravity.CENTER;
+        } else if (multiline) {
+            gravity = spec.centered && !wideRow
                 ? Gravity.TOP | Gravity.CENTER_HORIZONTAL
                 : Gravity.TOP | Gravity.START;
         } else {
-            gravity = spec.centered
+            gravity = spec.centered && !wideRow
                 ? Gravity.CENTER
                 : Gravity.CENTER_VERTICAL | Gravity.START;
         }
-
         // A carousel mid-slide leaves a node partially in: the widest the pill
         // may grow is the gap to the next node (~40px), so only a single
         // letter plus ellipsis fits ("А…"). Draw nothing while it stays in a
@@ -471,7 +624,8 @@ public class InlineOverlayManager {
         int ddx = 0, ddy = 0;
         if (!multiline) {
             ddy = (spec.height - height) / 2;
-            if (spec.centered && !standaloneRow && width >= spec.width) {
+            if (spec.centered && !standaloneRow && !wideRow && !tallIconBox
+                    && width >= spec.width) {
                 ddx = Math.min(0, (spec.width - width) / 2);
                 ddx = Math.max(ddx, -x); // never cross the screen edge
             }
@@ -479,6 +633,48 @@ public class InlineOverlayManager {
 
         return new Layout(width, height, textSizePx, bgColor, textColor,
             multiline, gravity, padH, padV, hidden, ddx, ddy);
+    }
+
+    // How many caption lines the box allows (pill may grow below the
+    // node, so at least 2; capped at 3 — a 4+ line slab is never right).
+    private int lineBudget(int boxHeightPx, float textSizePx) {
+        if (boxHeightPx <= 0) return 2;
+        int padV = Math.max(2, (int) (textSizePx * 0.3f));
+        int lh = (int) (textSizePx * 1.25f);
+        if (lh <= 0) return 2;
+        int n = (boxHeightPx - padV * 2) / lh + 1;
+        return Math.max(2, Math.min(3, n));
+    }
+
+    // Greedy word-wrap simulation matching TextView: breaks happen on
+    // spaces; a word wider than the box is NOT broken (it would clip),
+    // so that size is infeasible. Returns the wrapped line count (1-3),
+    // or 0 when the text cannot fit inside boxWidthPx at fsPx within the
+    // line budget, or the resulting block taller than maxHpx.
+    private int wrapLineCount(String text, float boxWidthPx, float fsPx,
+                              int maxLines, int maxHpx) {
+        measurePaint.setTextSize(fsPx);
+        int padH = Math.max(4, (int) (fsPx * 0.4f));
+        int padV = Math.max(2, (int) (fsPx * 0.3f));
+        float avail = boxWidthPx - 2f * padH;
+        if (avail < fsPx) return 0; // not even one glyph fits
+        int lines = 1;
+        float x = 0;
+        for (String word : text.split(" ", -1)) {
+            float ww = measurePaint.measureText(word);
+            float need = (x > 0 ? measurePaint.measureText(" ") : 0) + ww;
+            if (x + need > avail && x > 0) {
+                x = ww;
+                lines++;
+                if (lines > maxLines) return 0;
+            } else {
+                x += need;
+            }
+            if (x > avail) return 0; // unbreakable word: this size is unusable
+        }
+        float h = lines * fsPx * 1.25f + 2f * Math.max(2, (int) (fsPx * 0.3f));
+        if (h > maxHpx + 2f) return 0; // would run into the node below
+        return lines;
     }
 
     private void applyBackground(TextView tv, int color) {
