@@ -64,6 +64,7 @@ public class InlineOverlayManager {
 
     private final Context context;
     private final WindowManager windowManager;
+    private final Set<String> startLockedIds;
     private final Map<String, TextView> activeViews = new HashMap<>();
     private final Map<TextView, Long> lastSeenMs = new HashMap<>();
     private final Map<TextView, Integer> bgColors = new HashMap<>();
@@ -150,8 +151,20 @@ public class InlineOverlayManager {
     }
 
     public InlineOverlayManager(Context context) {
+        this(context, null);
+    }
+
+    public InlineOverlayManager(Context context, Set<String> startLockedIds) {
         this.context = context;
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+        this.startLockedIds = startLockedIds != null ? startLockedIds : new HashSet<String>();
+    }
+
+    // Id whose text is left-aligned in every layout the app ships: the pill
+    // must stay at the node's left edge no matter what the pixel-shaped
+    // centering gates would decide.
+    private boolean isStartLocked(String viewId) {
+        return viewId != null && startLockedIds.contains(viewId);
     }
 
     public void clearAll() {
@@ -723,6 +736,14 @@ public class InlineOverlayManager {
             //     (51,1884) 858x102): the label sits in the button center.
             //     List rows (878x53 / 878x45 headers) are shorter than
             //     96px; a real button is not.
+            //
+            // START-LOCK (id-keyed, density-independent): if the node's id is
+            // left-aligned in EVERY layout the app ships (no horizontal center
+            // gravity anywhere), the CJK is start-aligned and the pill must NOT
+            // be centered — regardless of what these pixel-shaped (A)/(B) gates
+            // would decide on another density. Closes (A) and (B) only; the
+            // left-inset (C) and the id-driven empty-state (D) are unaffected.
+            boolean startLocked = isStartLocked(spec.viewId);
             if (ddx == 0 && est > 0 && !closeRow
                     && !tallIconBox && !looseRow && width > est) {
                 int y0 = parseY(spec.key);
@@ -732,12 +753,14 @@ public class InlineOverlayManager {
                 // centers it; a left-aligned banner heading (服务权益
                 // 756x75, w≈4×est) stays at the node's left edge.
                 boolean toolbarCentered =
-                    !standaloneRow && y0 < 320 && x > 40 && x < screenWidth * 0.6f
+                    !startLocked && !standaloneRow && y0 < 320
+                    && x > 40 && x < screenWidth * 0.6f
                     && spec.width > est * 4.5f && spec.height < 74;
                 // A real toolbar title is a thin band (68/75px); a full-width
                 // PAGE header (商城 909x89) is not: keep it left-anchored.
                 boolean buttonCentered =
-                    x <= 60 && spec.width >= screenWidth * 0.83f
+                    !startLocked && x <= 60
+                    && spec.width >= screenWidth * 0.83f
                     && spec.height >= 96 && spec.height < 120
                     && spec.width > est * 2.5f;
                 // (C) a full-width header bar (设置 0x960 / 车辆设置 0x960):

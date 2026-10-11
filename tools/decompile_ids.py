@@ -144,7 +144,8 @@ def walk_view(node, styles, dimens):
     if vid:
         rec = styles.setdefault(
             vid, {"layouts": set(), "sizes": set(), "grav": set(),
-                  "padL": set(), "fullWidth": 0, "total": 0})
+                  "padL": set(), "fullWidth": 0, "total": 0,
+                  "hasCenter": False})
         lf = node.get("layout_file")
         if lf:
             rec["layouts"].add(lf)
@@ -155,6 +156,12 @@ def walk_view(node, styles, dimens):
         g = horiz_gravity(node.get(f"{{{A_NS}}}gravity"))
         if g:
             rec["grav"].add(g)
+        # ANY layout with an explicit horizontal center => the id's text
+        # alignment is NOT unambiguously start. Absent/vertical-only gravity
+        # means "left by default" — the only safe start evidence.
+        rawg = node.get(f"{{{A_NS}}}gravity") or ""
+        if any(p.strip() in CENTER_GRAV for p in rawg.split("|")):
+            rec["hasCenter"] = True
         for attr in ("paddingLeft", "paddingStart"):
             d = resolve_dp(node.get(f"{{{A_NS}}}{attr}"), dimens)
             if d is not None:
@@ -215,6 +222,11 @@ def main():
             "fullWidth": rec["fullWidth"],
             "occurrences": rec["total"],
             "layouts": sorted(rec["layouts"])[:12],
+            # True when NO layout of this id declares a horizontal center
+            # gravity. A pill on such a node may be LEFT-anchored
+            # unconditionally — density-independent (the app's own layout
+            # says the text is start-aligned).
+            "startLock": not rec["hasCenter"],
         }
 
     full = {vid: norm(rec) for vid, rec in styles.items()}
@@ -222,21 +234,32 @@ def main():
               ensure_ascii=False, indent=1)
     print(f"layouts parsed: {parsed}, ids: {len(full)}")
 
-    # Compact asset subset: only ids with a definite single sp.
+    # Compact asset subset: ids with a definite single sp, PLUS ids that only
+    # earn a start-lock flag (a layout size can be missing / set in code —
+    # that does not make the text alignment ambiguous).
     curated = {}
     for vid, r in sorted(full.items()):
-        if isinstance(r["sp"], (int, float)):
-            entry = {}
-            if r["grav"]:
-                entry["g"] = r["grav"]
-            if r["padLdp"]:
-                entry["p"] = r["padLdp"][-1]
-            if r["fullWidth"] >= r["occurrences"] and r["occurrences"] >= 1:
-                entry["fw"] = 1
+        has_sp = isinstance(r["sp"], (int, float))
+        if not (has_sp or r["startLock"]):
+            continue
+        entry = {}
+        if r["grav"]:
+            entry["g"] = r["grav"]
+        if r["padLdp"]:
+            entry["p"] = r["padLdp"][-1]
+        if r["fullWidth"] >= r["occurrences"] and r["occurrences"] >= 1:
+            entry["fw"] = 1
+        if r["startLock"]:
+            entry["sl"] = 1
+        if has_sp:
             curated[vid] = [float(r["sp"])] if not entry else [float(r["sp"]), entry]
+        else:
+            curated[vid] = [None, entry]  # size unknown, alignment known
     json.dump(curated, open(OUT_CURATED, "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)
-    print(f"curated ids (definite sp): {len(curated)}")
+    locks = sum(1 for v in curated.values()
+                if len(v) > 1 and isinstance(v[1], dict) and v[1].get("sl") == 1)
+    print(f"curated ids: {len(curated)} (start-locks: {locks})")
 
     print("\n== runtime ids (seen in a11y) -> resolved style ==")
     for vid in RUNTIME_IDS:
@@ -246,7 +269,8 @@ def main():
             continue
         sp = r["sp"] if r["sp"] is not None else "amb"
         print(f"  {vid:26s} sp={str(sp):9s} grav={str(r['grav'] or '-'):7s} "
-              f"padL={r['padLdp'] or '-'} fw={r['fullWidth']}/{r['occurrences']}")
+              f"padL={r['padLdp'] or '-'} fw={r['fullWidth']}/{r['occurrences']} "
+              f"{'SL' if r['startLock'] else '  '}")
 
 
 if __name__ == "__main__":

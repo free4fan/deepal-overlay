@@ -70,6 +70,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     // carried; everything else (server text, sizes set in code or via styles)
     // is absent and falls back to the height-based estimate.
     private volatile Map<String, Integer> viewProfiles = new HashMap<>();
+    // Ids whose text is left-aligned in EVERY layout the app ships (no
+    // layout declares a horizontal center gravity). Held for the overlay
+    // manager: those pills may be left-anchored unconditionally, which the
+    // px-calibrated centering gates are not.
+    private volatile Set<String> startLockedIds = new HashSet<String>();
     private boolean translationEnabled = true;
     private boolean trailingScanScheduled = false;
     private int scanEpoch = 0;
@@ -140,7 +145,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         config.notificationTimeout = 100;
         setServiceInfo(config);
 
-        inlineManager = new InlineOverlayManager(this);
+        // Load the id map before the manager is built: the left-anchor lock
+        // set is part of the manager's layout inputs.
+        loadViewProfiles();
+        inlineManager = new InlineOverlayManager(this, startLockedIds);
 
         // Read saved translation state
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
@@ -155,7 +163,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
 
         loadDictionary();
-        loadViewProfiles();
         loadPersistentCache();
         translateExecutor = Executors.newSingleThreadExecutor();
 
@@ -232,17 +239,26 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             JSONObject obj = new JSONObject(readAll(
                 getAssets().open("view_profiles.json")));
             Map<String, Integer> map = new HashMap<>();
+            Set<String> locks = new HashSet<String>();
             java.util.Iterator<String> keys = obj.keys();
             while (keys.hasNext()) {
                 String id = keys.next();
                 org.json.JSONArray v = obj.getJSONArray(id);
-                // [sp] | [sp, {g,p,fw}] — only the size is used so far
+                // [sp] | [sp|null, {g,p,fw,sl}] — sp is used later for the
+                // decoupled font; sl marks ids with no horizontal-center
+                // gravity in any layout (the left-anchor lock set).
                 if (v.length() > 0 && !v.isNull(0)) {
                     map.put(id, (int) Math.round(v.getDouble(0)));
                 }
+                if (v.length() > 1 && v.get(1) instanceof org.json.JSONObject
+                        && ((org.json.JSONObject) v.get(1)).optInt("sl", 0) == 1) {
+                    locks.add(id);
+                }
             }
             viewProfiles = map;
-            Log.i(TAG, "View profiles loaded: " + map.size() + " ids");
+            startLockedIds = locks;
+            Log.i(TAG, "View profiles loaded: " + map.size() + " ids, "
+                + locks.size() + " start-locks");
         } catch (Exception e) {
             Log.e(TAG, "View profiles load failed (estimates stay active): "
                 + e.getMessage());
