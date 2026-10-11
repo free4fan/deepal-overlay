@@ -6,9 +6,107 @@
 dark_overlay=off).
 
 ## Активные
-- (пока нет)
+- (пока нет — актуальная работа см. «Сделано/Т-22»)
 
 ## Сделано
+
+### Т-22. Встройка resource-id профилей: карта из APK + анкоринг по id (v2.10.34)
+- Исходник: `deepal.com.cn.app v1.10.2 (1914)` — universal APK (все ABI),
+  дан пользователем `/home/user/CB6C0BD254CC475CA2793E63CC55D384.apk`;
+  декомпака `/tmp/opencode/deepal_real` (apktool d -s).
+- Инструмент: `tools/decompile_ids.py` — apktool-распаковка, резолвинг
+  `@dimen/drb_sp_N`/`@dimen/drb_dp_N` (3530 dimens), парсинг 2431 layout.
+  Вывод: `/tmp/deepal_id_styles.json` (8169 id, полные записи),
+  `/tmp/deepal_id_curated.json` (1940 id с однозначным sp: [sp, {g, p, fw}]),
+  `/tmp/deepal_strings_all.json` (5436 CJK-строк — словарь и так закрывает
+  `tools/extract_strings.py`, строки нужны только для проверки покрытия).
+- **`sp=?` в первом прогоне — баг экстрактора**: размеры в layouts заданы
+  dimen-референсами (`@dimen/drb_sp_16`), а не литералами `16.0sp`.
+  Резолвинг починен.
+- Ключевые id (проверено против живых a11y-нодов v2.10.32):
+  - `tvTopTitle` — **24sp, center_vertical (т.е. левый якорь), paddingStart
+    20dp, fill_parent**, MediumBoldTextView; 14 layouts (车辆设置/设置/
+    смена ника/ОТА/…) — консистентно. Это универсальный id верхнего
+    заголовка: «Настройки» (Мой→шестерёнка, (0,297) 960×129) и «Настройки
+    автомобиля» (0,266) 960×123 — оба `tvTopTitle`. Текущая оценка
+    estimateTextSize(129/2.25×2/3)=19sp → на самом деле 24sp; отступ
+    24dp в headerContentLeft на деле 20dp из XML (px 59/55 = 24/20dp —
+    объясняет разброс «59 здесь, 55 там»).
+  - `titleTv` — 2 варианта: wrap_content **18sp gravity=center**
+    (тёмный toolbar, carcontrol_base_basetitle*) и fill_parent **24sp**
+    (collapsing bar, 4 из 7). Гравитацию даёт XML — не эвристика.
+  - `tvNotifyName` 16sp / `tvNotifyDesc` 14sp (страница уведомлений).
+  - `title_bar` — 83/84 вхождения fill_parent, padL 10dp (контейнер
+    toolbar — маркер darkZone/toolbar-center).
+  - `tab_text` 14/16/18sp center; `tv_ad_title` 17sp fill_parent;
+    `txt_user_name` 22sp; `tvMemberTask` 16sp.
+  - `exit_button` (btn «退出登录»): h=40dip (×2.25=90px), marginLeft/Right
+    `@dimen/page_margin`=10dp.
+- Ограничения: часть UI программная/адаптерная/серверная — `当日无旅程数据`
+  (пустое состояние) нет ни в ресурсах, ни в smali → серверный контент,
+  для таких строк остаётся эвристика (emptyCentered). Id без sp в XML
+  (контент из кода/`values`-ссылок-стилей) — «amb», также эвристика.
+- Предлагаемая встройка (не реализовано, ждём решения):
+  1. `app/src/main/assets/view_profiles.json` — компактный curated (1940 id).
+  2. `collectChineseNodes`: читать `node.getViewIdResourceName()` до recycle,
+     класть короткий id в `TextNodeInfo` (service уже делает это в
+     isToolbarLike — паттерн знакомый).
+  3. `estimateTextSize`: профиль.sp (clamp 10–24) в приоритете, эвристика
+     — fallback для неизвестных id.
+  4. `computeLayout`: `grav=center` → centered=1 (заменяет гате
+     buttonCentered/toolbarCentered для известных id); `padL` заменяет
+     хардкод 24dp в headerContentLeft; `title_bar`/`toolBar` — жёсткий
+     маркер toolbar (вместо contains("toolbar")).
+  5. Неизвестные id — ноль изменений (все регресс-гарды v2.10.32 работают
+     как сейчас).
+- **НАЙДЕН СВЯЗ (2026-10-10, устройство, v-code 85 эксперимент):**
+  «шаг 1» (font = профиль.sp по id) сам по себе **меняет геометрию пилюли**,
+  потому что в `computeLayout` одна величина `textSizeSp` питает и шрифт, и
+  `est` (`estimateSourceWidth`), и все shape-гейты (tallIconBox/standaloneRow/
+  wideRow/looseRow). Точный, но МЕНЬШИЙ шрифт из XML пересобирает shape:
+  - 常用服务 «Частые услуги» (гард **319×82** 1-строка): профиль 18sp против
+    оценки 24sp → пилюля **305×80**, CJK торчит слева/справа (Y-no-cover) —
+    регрессия на именованном гарде.
+  - 服务权益 «Бонусы» 756×75: 20sp vs 22sp → всё ещё ОК (CJK влезает).
+  - tv_entry_name сетка Сервис 12sp vs 13.3 → пилюли сдвинулись, без явного
+    брейка, но форма изменилась.
+  - На остальных экранах (Машина/Мой/Настройки авто/уведомления) профиль≈оценка —
+    геометрия идентична (Maшина 6/6 гардов не тронулись, «Настройки» 227×68).
+  Вывод: нельзя просто заменить оценку на профиль сп globally — сломает
+  откалиброванные по оценке гарды. Решение пользователя: (А) декуплинг
+  (геометрия/est/гейты — от оценки, ТОЛЬКО рисуемый шрифт — от профиля),
+  (Б) пропустить sp и идти сразу к gravity/маркерам toolbar, (В) не встраивать sp.
+  - Инфра сохранена в дереве: assets + loadViewProfiles + capture id +
+    resolveTextSize (вызов пока на estimateTextSize); OVERLAYDBG пока включён
+    (снять перед реальным ship). Версия сброшена на 84/2.10.32 (no-op не шью).
+  - Device-проверка «безопасного» билада (estimate): Машина 6/6 хардгардов
+    ровно как v2.10.32; Частые услуги 319×82; «Настройки» 227×68 (54,327);
+    «Настройки автомобиля» 439×69 (54,293); notify-строки font=16/14 OK 0 issues.
+    Строка загрузки в логе: `View profiles loaded: 1940 ids`.
+- **РЕАЛИЗОВАНО (решение пользователя: путь «анкоринг по id»):**
+  - `viewId` (короткий id) читается в `collectChineseNodes` до recycle,
+    хранится в `TextNodeInfo`, прокинут в `OverlaySpec` (обе ветки:
+    batch-`reconcile` + async-`showTranslation`, новый перегруженный конструктор
+    и overload) → `computeLayout`.
+  - (Р-C) `headerContentLeft`: primary-сигнал — `isPageHeaderId(viewId)`
+    (= `tvTopTitle`, проверенный в 14 layouts как левосторонний page-header);
+    `y<340` — fallback. (Р-D) `emptyCentered` исключает известный header-id.
+    Изменение поведения ровно одно: `tvTopTitle`-нод при y>340 теперь
+    левосторонний, а не центрированный (таких нод нет на текущем device —
+    на density 2.25 правило эквивалентно v2.10.32, на другой плотности —
+    устойчиво).
+  - Сизинг по сп из профиля НЕ включён (связь выше): `estimateTextSize` на
+    оценке; `view_profiles.json` лежит в assets как исходник для следующих
+    шагов (gravity-анкоринг/декуплянг шрифта).
+  - Устройство подтвердил (Pixel 9 Pro, 2026-10-11): билд code 85/2.10.33 с
+    id-прокидкой: Машина 6/6 (274×76, 615×63, 4×211×64, 285×81, 410×130,
+    292×94); «Настройки автомобиля» `id=tvTopTitle` → 439×69 (54,293) dx=54;
+    «Настройки» `id=titleTv` → 227×68 (54,327) dx=54; Сервис «Частые услуги»
+    319×82, «Бонусы» dx=0. Release-билд 86/2.10.34 = code 85 минус OVERLAYDBG
+    плюс версия — ноль поведенийых дифф.
+- Статус: **сделано (2026-10-11, v2.10.34)**. Дальнейшие шаги (по решению
+  пользователя): gravity-анкоринг по однозначным id / декупянг шрифта-от-профиля
+  (geometria stays on Оценка) / second-density retune.
 
 ### Т-21. Полный прогон: «Настройки» прилипает к левому краю + 4 дефекта позиционирования v2.10.31
 - Рекомендация пользователя (2026-10-09): «оверлей с переводом "настройка"

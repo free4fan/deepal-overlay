@@ -84,10 +84,21 @@ public class InlineOverlayManager {
         // header 704px wide with a 4-char title in its left part): the pill
         // must cover the text, not the whole container.
         public final int estSourceWidthPx;
+        // Short resource id (e.g. "tvTopTitle") of the a11y node, when the app
+        // exposes one. Enables id-keyed anchoring that is density-independent
+        // (the app's own layout names the role); null when unknown.
+        public final String viewId;
 
         public OverlaySpec(String key, String text, int width, int height,
                            float textSizeSp, boolean darkZone, boolean centered,
                            int estSourceWidthPx) {
+            this(key, text, width, height, textSizeSp, darkZone, centered,
+                estSourceWidthPx, null);
+        }
+
+        public OverlaySpec(String key, String text, int width, int height,
+                           float textSizeSp, boolean darkZone, boolean centered,
+                           int estSourceWidthPx, String viewId) {
             this.key = key;
             this.text = text;
             this.width = width;
@@ -96,6 +107,7 @@ public class InlineOverlayManager {
             this.darkZone = darkZone;
             this.centered = centered;
             this.estSourceWidthPx = estSourceWidthPx;
+            this.viewId = viewId;
         }
     }
 
@@ -235,11 +247,21 @@ public class InlineOverlayManager {
                                 boolean darkZone, boolean centered,
                                 int estSourceWidthPx,
                                 boolean wordWrap, boolean darkOverlay) {
+        showTranslation(left, top, width, height, translatedText, textSizeSp,
+            darkZone, centered, estSourceWidthPx, wordWrap, darkOverlay, null);
+    }
+
+    public void showTranslation(int left, int top, int width, int height,
+                                String translatedText, float textSizeSp,
+                                boolean darkZone, boolean centered,
+                                int estSourceWidthPx,
+                                boolean wordWrap, boolean darkOverlay,
+                                String viewId) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
         String key = left + "," + top;
         OverlaySpec spec = new OverlaySpec(key, translatedText, width, height,
-            textSizeSp, darkZone, centered, estSourceWidthPx);
+            textSizeSp, darkZone, centered, estSourceWidthPx, viewId);
 
         TextView existing = activeViews.get(key);
         if (existing != null) {
@@ -723,18 +745,27 @@ public class InlineOverlayManager {
                 //     (~24dp = 55-59px measured) inside the 0-based node —
                 //     the screen-edge-anchored pill left a 55px strip of
                 //     empty scrim. Anchor at the content edge instead.
-                boolean headerContentLeft =
-                    standaloneRow && x <= 30
-                    && spec.width >= screenWidth * 0.95f && y0 < 340
-                    && width < spec.width;
+                //     Two ways to recognize a page header:
+                //       (C1) by its resource id — tvTopTitle is the app's
+                //            page-header TextView (24sp, center_vertical =
+                //            left-aligned in every layout it appears in).
+                //            Density-independent, wins over the pixel split.
+                //       (C2) by geometry — y<340 (the density-2.25-calibrated
+                //            top-of-page split): fallback for headers without
+                //            the id.
+                boolean headerFullRow = standaloneRow && x <= 30
+                    && spec.width >= screenWidth * 0.95f && width < spec.width;
+                boolean headerContentLeft = headerFullRow
+                    && (isPageHeaderId(spec.viewId) || y0 < 340);
                 // (D) a full-width empty-state block (当日无旅程数据
                 //     (0,1107) 960x106, deep in the page): the app CENTERS
                 //     the CJK in the node, so a left-anchored pill leaves
                 //     the last CJK chars exposed. Center it like the header.
-                boolean emptyCentered =
-                    standaloneRow && x <= 30
-                    && spec.width >= screenWidth * 0.95f && y0 > 340
-                    && width < spec.width;
+                //     Never for a known page-header id (C1 is checked before
+                //     D in the chain below — a header deep in a scroll view
+                //     must stay left-inset, not centered).
+                boolean emptyCentered = headerFullRow
+                    && !isPageHeaderId(spec.viewId) && y0 > 340;
                 if (toolbarCentered || buttonCentered || emptyCentered) {
                     ddx = (spec.width - width) / 2;
                     ddx = Math.max(ddx, -x); // never cross the screen edge
@@ -863,5 +894,16 @@ public class InlineOverlayManager {
         int dx = parseX(keyA) - parseX(keyB);
         int dy = parseY(keyA) - parseY(keyB);
         return Math.abs(dx) + Math.abs(dy);
+    }
+
+    // The app's page-header TextView id. Verified against the decompiled
+    // Deepal v1.10.2 layouts (tools/decompile_ids.py): tvTopTitle is 24sp,
+    // center_vertical (= left-aligned, not horizontal center) and
+    // paddingStart 20dp in every one of the 14 layouts that use it
+    // (车辆设置/setting/nickname/ОТА/…). Naming the role by id is
+    // density-independent where the "y < 340" pixel split is not (that split
+    // only holds on the density-2.25 device it was tuned on).
+    private static boolean isPageHeaderId(String viewId) {
+        return "tvTopTitle".equals(viewId);
     }
 }

@@ -63,6 +63,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private Map<String, String> dictEn = new HashMap<>();
     private Map<String, String> dictRu = new HashMap<>();
     private volatile boolean dictLoaded = false;
+
+    // Static per-resource-id textSize (sp) map extracted from the decompiled
+    // Deepal APK (tools/decompile_ids.py -> assets/view_profiles.json). Only
+    // ids that declare exactly one textSize across all their layouts are
+    // carried; everything else (server text, sizes set in code or via styles)
+    // is absent and falls back to the height-based estimate.
+    private volatile Map<String, Integer> viewProfiles = new HashMap<>();
     private boolean translationEnabled = true;
     private boolean trailingScanScheduled = false;
     private int scanEpoch = 0;
@@ -148,6 +155,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
 
         loadDictionary();
+        loadViewProfiles();
         loadPersistentCache();
         translateExecutor = Executors.newSingleThreadExecutor();
 
@@ -217,6 +225,28 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 }
             }
         }).start();
+    }
+
+    private void loadViewProfiles() {
+        try {
+            JSONObject obj = new JSONObject(readAll(
+                getAssets().open("view_profiles.json")));
+            Map<String, Integer> map = new HashMap<>();
+            java.util.Iterator<String> keys = obj.keys();
+            while (keys.hasNext()) {
+                String id = keys.next();
+                org.json.JSONArray v = obj.getJSONArray(id);
+                // [sp] | [sp, {g,p,fw}] — only the size is used so far
+                if (v.length() > 0 && !v.isNull(0)) {
+                    map.put(id, (int) Math.round(v.getDouble(0)));
+                }
+            }
+            viewProfiles = map;
+            Log.i(TAG, "View profiles loaded: " + map.size() + " ids");
+        } catch (Exception e) {
+            Log.e(TAG, "View profiles load failed (estimates stay active): "
+                + e.getMessage());
+        }
     }
 
     private Map<String, String> loadDictFromAssets(String filename) throws IOException {
@@ -530,7 +560,8 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 node.bounds.left + "," + node.bounds.top,
                 display, node.bounds.width(), node.bounds.height(),
                 node.estimatedTextSize, node.darkZone, centered,
-                estimateSourceWidth(node.text, node.estimatedTextSize, density)));
+                estimateSourceWidth(node.text, node.estimatedTextSize, density),
+                node.viewId));
             if (hits[i] == null) {
                 toTranslate.add(node);
             }
@@ -664,7 +695,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     if (!edgeStrip && (!navBand || isTabLabel(clean))) {
                         float textSize = estimateTextSize(bounds, density);
                         boolean darkZone = isDarkZone(node, bounds, density);
-                        result.add(new TextNodeInfo(clean, bounds, textSize, darkZone));
+                        // Capture the short resource id now — the node is
+                        // recycled right after, and computeLayout wants it for
+                        // id-keyed anchoring (density-independent page-header
+                        // recognition; null for nodes without a view id).
+                        String shortId = shortViewId(node.getViewIdResourceName());
+                        result.add(new TextNodeInfo(clean, bounds, textSize,
+                            darkZone, shortId));
                     }
                 }
             }
@@ -734,6 +771,14 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         return toolbar && bounds.top < 240 * density;
     }
 
+    // Short id ("tvTopTitle") from a fully-qualified resource id
+    // ("deepal.com.cn.app:id/tvTopTitle"); null when absent.
+    private static String shortViewId(String viewIdResourceName) {
+        if (viewIdResourceName == null) return null;
+        int sep = viewIdResourceName.lastIndexOf('/');
+        return sep >= 0 ? viewIdResourceName.substring(sep + 1) : viewIdResourceName;
+    }
+
     private static boolean isToolbarLike(AccessibilityNodeInfo node) {
         String viewId = node.getViewIdResourceName();
         if (viewId != null) {
@@ -752,6 +797,24 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             node.recycle();
             node = next;
         }
+    }
+
+    // Prefer the static per-id textSize from the decompiled APK (the app's
+    // own layout declares the exact sp); fall back to the height estimate for
+    // ids without a definite declared size (server text, sizes set in code,
+    // views styled only via style refs that were not inlined in the layout).
+    private float resolveTextSize(AccessibilityNodeInfo node, Rect bounds,
+                                  float density) {
+        String viewId = node.getViewIdResourceName();
+        if (viewId != null) {
+            int sep = viewId.lastIndexOf('/');
+            String id = sep >= 0 ? viewId.substring(sep + 1) : viewId;
+            Integer sp = viewProfiles.get(id);
+            if (sp != null) {
+                return Math.max(10, Math.min(sp, 24));
+            }
+        }
+        return estimateTextSize(bounds, density);
     }
 
     private float estimateTextSize(Rect bounds, float density) {
@@ -851,7 +914,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                                 n.bounds.width(), n.bounds.height(),
                                 n.translated, n.estimatedTextSize, n.darkZone, centered,
                                 estimateSourceWidth(n.text, n.estimatedTextSize, density),
-                                ww, dk);
+                                ww, dk, n.viewId);
                         }
                     }
                     startBatchIfIdle();
@@ -1083,12 +1146,24 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         // Computed at collection time while the AccessibilityNodeInfo is still
         // valid (the node reference is not kept — it is recycled afterwards)
         boolean darkZone;
+        // Short resource id (e.g. "tvTopTitle") or null — same validity window
+        // as darkZone, used for id-keyed anchoring in the layout code.
+        String viewId;
 
         TextNodeInfo(String text, Rect bounds, float estimatedTextSize, boolean darkZone) {
             this.text = text;
             this.bounds = bounds;
             this.estimatedTextSize = estimatedTextSize;
             this.darkZone = darkZone;
+        }
+
+        TextNodeInfo(String text, Rect bounds, float estimatedTextSize,
+                     boolean darkZone, String viewId) {
+            this.text = text;
+            this.bounds = bounds;
+            this.estimatedTextSize = estimatedTextSize;
+            this.darkZone = darkZone;
+            this.viewId = viewId;
         }
     }
 }

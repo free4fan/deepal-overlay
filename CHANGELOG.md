@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.10.34 (2026-10-11)
+- **Анкоринг по resource-id (подготовка к переносу на другую плотность).**
+  Приложение само отдаёт `resource-id` в a11y-дереве; теперь service
+  читает короткий id до recycle нода, прокидывает его в `OverlaySpec` (обе
+  ветки: batch-`reconcile` и async-`showTranslation`) до `computeLayout`.
+  Правило (Р-C, headerContentLeft) теперь узнаёт полноширинный page-header
+  **по id `tvTopTitle`** (проверено в декомпаке Deepal v1.10.2: 14 layouts,
+  всех — 24sp / center_vertical = **левый** якорь / paddingStart 20dp) как
+  primary-сигнал; px-сплит `y<340` остался fallback для header без id.
+  emptyCentered (Р-D) исключает известный header-id: header глубоко в скролле
+  остаётся левосторонним, а не центрируется.
+- **Сизинг НЕ менялся** (весь шаг-1 на id→sp снят): обнаружено, что одна
+  величина `textSizeSp` в layout-коде питает и шрифт, и `est`, и все
+  shape-гейты (tallIconBox/standaloneRow/looseRow/wideRow). Точный, но меньший
+  сп из XML пересобирает shape и ломает откалиброванные на оценке хардгарды
+  (常用服务 «Частые услуги» 319×82 → 305×80, CJK торчит). Поэтому точный шрифт
+  из XML пока только asset `view_profiles.json` (1940 id) +
+  `tools/decompile_ids.py` для переиспользования после обновления APK;
+  рисование по профилю отложено до декуплинга «геометрия — от оценки, шрифт —
+  от профиля».
+- **Инструмент:** `tools/decompile_ids.py` — apktool-распаковка, резолвинг
+  `@dimen/drb_sp_N`-референсов, парсинг 2431 layout → `view_profiles.json`
+  (id → [sp, {g: center/left, p: padLdp, fw: fullwidth}]) и
+  `/tmp/deepal_strings_all.json` (5436 CJK-строк).
+- Проверяено на устройстве Pixel 9 Pro (density 360/2.25): Машина 6/6 хардгардов
+  ровно как v2.10.32; «Настройки» 227×68 (54,327); «Настройки автомобиля»
+  439×69 (54,293); Сервис «Частые услуги» 319×82 / «Бонусы» dx=0; notify-строки
+  font 16/14sp — 0 issue. OVERLAYDBG снят из release.
+
 ## v2.10.32 (2026-10-10)
 - **Мой → Настройки: «Настройки» прилипала к левому краю экрана.**
   Заголовок на полноширинном header-ноде (0,297) 960×129 сидел в ноде с
