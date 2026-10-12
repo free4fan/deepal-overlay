@@ -65,6 +65,7 @@ public class InlineOverlayManager {
     private final Context context;
     private final WindowManager windowManager;
     private final Set<String> startLockedIds;
+    private final Map<String, Integer> realFontSp;
     private final Map<String, TextView> activeViews = new HashMap<>();
     private final Map<TextView, Long> lastSeenMs = new HashMap<>();
     private final Map<TextView, Integer> bgColors = new HashMap<>();
@@ -87,7 +88,8 @@ public class InlineOverlayManager {
         public final int estSourceWidthPx;
         // Short resource id (e.g. "tvTopTitle") of the a11y node, when the app
         // exposes one. Enables id-keyed anchoring that is density-independent
-        // (the app's own layout names the role); null when unknown.
+        // (the app's own layout names the role) and per-id real font lookup;
+        // null when unknown.
         public final String viewId;
 
         public OverlaySpec(String key, String text, int width, int height,
@@ -151,13 +153,19 @@ public class InlineOverlayManager {
     }
 
     public InlineOverlayManager(Context context) {
-        this(context, null);
+        this(context, null, null);
     }
 
     public InlineOverlayManager(Context context, Set<String> startLockedIds) {
+        this(context, startLockedIds, null);
+    }
+
+    public InlineOverlayManager(Context context, Set<String> startLockedIds,
+                                Map<String, Integer> realFontSp) {
         this.context = context;
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         this.startLockedIds = startLockedIds != null ? startLockedIds : new HashSet<String>();
+        this.realFontSp = realFontSp != null ? realFontSp : new HashMap<String, Integer>();
     }
 
     // Id whose text is left-aligned in every layout the app ships: the pill
@@ -432,8 +440,29 @@ public class InlineOverlayManager {
             ? spec.height + (int) (Math.max(0, gapBelow) * 0.75f)
             : Integer.MAX_VALUE;
 
-        // Font in absolute px (clamped to the 10..24sp reading range)
-        float textSizePx = spec.textSizeSp * dm.density;
+        // TEXT vs GEOMETRY decoupling (v2.10.36):
+        //   estimatePx — the height-based estimate (clamped). The shape
+        //     class (standaloneRow/tallIconBox/wideRow/looseRow) and every
+        //     px gate below is decided on THIS, so the pill's shape class is
+        //     byte-for-byte the same as the estimate-only build: a profile
+        //     sp that differs from the estimate can no longer reshape the
+        //     pill (the v2.10.35-era coupling bug). est is also estimate-based.
+        //   textSizePx — the RENDERED font. When the id has an unambiguous
+        //     sp in the decompiled profile it is the app's real font (24sp
+        //     headers stop reading as 16sp subheadings), else the estimate.
+        //     The box (width/height/pad) is sized to this real font, which is
+        //     the "true sizing" the decoupled step delivers.
+        float estimatePx = spec.textSizeSp * dm.density;
+        estimatePx = Math.max(MIN_TEXT_SP * dm.density,
+            Math.min(estimatePx, MAX_TEXT_SP * dm.density));
+        // Real font: the app's per-id sp (decompiled profile) when the node's
+        // id resolves to one unambiguous size; otherwise the estimate.
+        float fontSp = spec.textSizeSp;
+        if (spec.viewId != null && realFontSp != null) {
+            Integer sp = realFontSp.get(spec.viewId);
+            if (sp != null) fontSp = sp;
+        }
+        float textSizePx = fontSp * dm.density;
         textSizePx = Math.max(MIN_TEXT_SP * dm.density,
             Math.min(textSizePx, MAX_TEXT_SP * dm.density));
         float basePx = textSizePx;
@@ -448,7 +477,7 @@ public class InlineOverlayManager {
         //    (e.g. a 704x108 node whose 4-char title sits in its left part).
         //    Pill: capped to ~1.4x the source extent, one text line tall.
         boolean standaloneRow = !closeRow && est > 0
-            && spec.width > est * 2.5f && spec.height > textSizePx * 1.8f;
+            && spec.width > est * 2.5f && spec.height > estimatePx * 1.8f;
         //
         // T) tall icon-card box — a near-square tile whose box is several font
         //    lines tall but whose text is short (e.g. 184x130 for 充电服务,
@@ -457,7 +486,7 @@ public class InlineOverlayManager {
         //    starts far enough away) and is one line tall, centered on the box.
         boolean tallIconBox = !closeRow && !standaloneRow && est > 0
             && spec.width <= est * 1.35f + 2
-            && spec.height > textSizePx * 1.6f && spec.height < textSizePx * 6f;
+            && spec.height > estimatePx * 1.6f && spec.height < estimatePx * 6f;
         //
         // A) wide single-line row — a settings row / header line (e.g. 720x60
         //    for a 4-char label, or 878x45 for "保养提醒"). The source text
@@ -473,7 +502,7 @@ public class InlineOverlayManager {
         //    overstate the real label, producing full-width 24sp slabs.
         //    Cap width to ~1.35x the source extent, one text-line tall.
         boolean looseRow = !closeRow && !standaloneRow && !tallIconBox && !wideRow
-            && est > 0 && spec.width > est * 1.7f && spec.height > textSizePx * 1.8f;
+            && est > 0 && spec.width > est * 1.7f && spec.height > estimatePx * 1.8f;
 
         int textCap = 0;
         int fitW = maxW;
@@ -639,7 +668,7 @@ public class InlineOverlayManager {
                 height = WindowManager.LayoutParams.WRAP_CONTENT;
             } else {
                 height = lines * lh + padV * 2;
-                if (tallIconBox || spec.height > textSizePx * 2.2f) {
+                if (tallIconBox || spec.height > estimatePx * 2.2f) {
                     // Loose/icon box: cover the CJK itself as well.
                     height = Math.max(height, spec.height);
                 }

@@ -146,9 +146,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         setServiceInfo(config);
 
         // Load the id map before the manager is built: the left-anchor lock
-        // set is part of the manager's layout inputs.
+        // set and the per-id real font (decoupled sizing) are layout inputs.
         loadViewProfiles();
-        inlineManager = new InlineOverlayManager(this, startLockedIds);
+        inlineManager = new InlineOverlayManager(this, startLockedIds, viewProfiles);
 
         // Read saved translation state
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
@@ -815,24 +815,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
     }
 
-    // Prefer the static per-id textSize from the decompiled APK (the app's
-    // own layout declares the exact sp); fall back to the height estimate for
-    // ids without a definite declared size (server text, sizes set in code,
-    // views styled only via style refs that were not inlined in the layout).
-    private float resolveTextSize(AccessibilityNodeInfo node, Rect bounds,
-                                  float density) {
-        String viewId = node.getViewIdResourceName();
-        if (viewId != null) {
-            int sep = viewId.lastIndexOf('/');
-            String id = sep >= 0 ? viewId.substring(sep + 1) : viewId;
-            Integer sp = viewProfiles.get(id);
-            if (sp != null) {
-                return Math.max(10, Math.min(sp, 24));
-            }
-        }
-        return estimateTextSize(bounds, density);
-    }
-
+    // Height-based font fallback (sp). The app's real per-id font is resolved
+    // directly in InlineOverlayManager from the same profile map (ids with an
+    // unambiguous declared sp win; everything else uses this estimate, which
+    // also — and decisively — drives the shape class and est).
     private float estimateTextSize(Rect bounds, float density) {
         // A typical text line is ~1.5x the font size (leading included); 10-24sp
         float size = bounds.height() / density * (2f / 3f);
