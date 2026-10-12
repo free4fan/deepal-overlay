@@ -831,6 +831,48 @@ public class InlineOverlayManager {
             }
         }
 
+        // Row-level vertical centering (v2.10.37): a wrapped (2-3 line) pill
+        // has NO ddy at all (the single-line centering above is gated
+        // !multiline), so it sticks to the node TOP while its one-line
+        // siblings in the same visual row sit centered ON the node — the boxes
+        // land at different y in one row (service / car "Сервис" icon grid:
+        // «Пункты обслуживания» y641 h78 vs «Авто-гид» y633 h61). Center the
+        // wrap on the node center like the other pills, when:
+        //   - it actually has a same-row-band sibling (nothing to match
+        //     otherwise), and
+        //   - the centered top stays below the previous row's text in this
+        //     column (the car page's «Bluetooth не подключен» wrap sits 5px
+        //     under the 数字钥匙 label — centering there would stack two dark
+        //     boxes, so it keeps the node-top anchor).
+        if (multiline && ddy == 0 && siblings != null) {
+            int yTop = parseY(spec.key);
+            boolean rowSibling = false;
+            int gapAbove = Integer.MAX_VALUE;
+            for (OverlaySpec s : siblings) {
+                if (s == spec) continue;
+                int sy = parseY(s.key);
+                if (Math.abs(sy - yTop) <= ROW_SAME_ROW_MAX_DY) rowSibling = true;
+                int sBottom = sy + s.height;
+                if (sBottom <= yTop && sy > yTop - 600
+                        && parseX(s.key) < x + width
+                        && parseX(s.key) + s.width > x) {
+                    int g = yTop - sBottom;
+                    if (g < gapAbove) gapAbove = g;
+                }
+            }
+            if (rowSibling) {
+                int desired = (spec.height - height) / 2; // ≤ 0: wrap is taller
+                if (desired < 0
+                        && (gapAbove == Integer.MAX_VALUE || -desired <= gapAbove)) {
+                    ddy = desired;
+                    if (yTop + ddy < 0) ddy = -yTop; // never above the screen
+                    if (yTop + ddy + height > yTop + maxPillH)
+                        ddy = maxPillH - height; // never past the next-row gap
+                    if (ddy > 0) ddy = 0;
+                }
+            }
+        }
+
         return new Layout(width, height, textSizePx, bgColor, textColor,
             multiline, gravity, padH, padV, hidden, ddx, ddy);
     }
