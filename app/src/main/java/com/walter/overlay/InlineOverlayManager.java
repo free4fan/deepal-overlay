@@ -397,6 +397,14 @@ public class InlineOverlayManager {
 
     private Layout computeLayout(OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
                                  List<OverlaySpec> siblings) {
+        return computeLayout(spec, wordWrap, darkOverlay, siblings, true);
+    }
+
+    // allowDeep=false — inner pass while resolving the row-above collision
+    // guard: reuse this layout for a sibling without triggering its own guard
+    // layout lookup (recursion stop).
+    private Layout computeLayout(OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
+                                 List<OverlaySpec> siblings, boolean allowDeep) {
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenWidth = dm.widthPixels;
         int x = parseX(spec.key);
@@ -844,21 +852,40 @@ public class InlineOverlayManager {
         //     column (the car page's «Bluetooth не подключен» wrap sits 5px
         //     under the 数字钥匙 label — centering there would stack two dark
         //     boxes, so it keeps the node-top anchor).
-        if (multiline && ddy == 0 && siblings != null) {
+        if (multiline && ddy == 0 && siblings != null && allowDeep) {
             int yTop = parseY(spec.key);
             boolean rowSibling = false;
+            for (OverlaySpec s : siblings) {
+                if (s == spec) continue;
+                if (Math.abs(parseY(s.key) - yTop) <= ROW_SAME_ROW_MAX_DY) rowSibling = true;
+            }
+            // Guard against stacking on the row above — but only for specs
+            // whose actual DRAWN pill reaches into this column. A full-row
+            // context node (section header Сервис Deepal 858px from x=51, a
+            // wideRow) is left-anchored and column-capped: its drawn pill ends
+            // at ~x=404 and cannot collide with a tile at x=522+ — it must not
+            // block centering. A real same-column label above (数字钥匙, whose
+            // pill 199..484 sits above «Bluetooth не подключен» 199..491) DOES
+            // collide and keeps the node-top anchor. Resolve the upper spec's
+            // real rectangle via the deep pass (no recursion).
             int gapAbove = Integer.MAX_VALUE;
             for (OverlaySpec s : siblings) {
                 if (s == spec) continue;
-                int sy = parseY(s.key);
-                if (Math.abs(sy - yTop) <= ROW_SAME_ROW_MAX_DY) rowSibling = true;
-                int sBottom = sy + s.height;
-                if (sBottom <= yTop && sy > yTop - 600
-                        && parseX(s.key) < x + width
-                        && parseX(s.key) + s.width > x) {
-                    int g = yTop - sBottom;
-                    if (g < gapAbove) gapAbove = g;
+                int sX = parseX(s.key), sY = parseY(s.key);
+                int sBottom = sY + s.height;
+                if (sBottom > yTop || sY <= yTop - 600) continue;
+                if (sX > x + width || sX + s.width < x) continue; // no node overlap
+                Layout up;
+                try {
+                    up = computeLayout(s, wordWrap, darkOverlay, siblings, false);
+                } catch (Exception e) {
+                    continue;
                 }
+                if (up.hidden) continue;
+                int upX = sX + up.dx, upY = sY + up.dy;
+                if (upX + up.width <= x) continue; // its pill stays left of us
+                int g = yTop - sBottom;
+                if (g < gapAbove) gapAbove = g;
             }
             if (rowSibling) {
                 int desired = (spec.height - height) / 2; // ≤ 0: wrap is taller
@@ -866,7 +893,11 @@ public class InlineOverlayManager {
                         && (gapAbove == Integer.MAX_VALUE || -desired <= gapAbove)) {
                     ddy = desired;
                     if (yTop + ddy < 0) ddy = -yTop; // never above the screen
-                    if (yTop + ddy + height > yTop + maxPillH)
+                    // ddy + height > maxPillH (== yTop+ddy+height > yTop+maxPillH with
+                    // yTop subtracted from both sides): the yTop-inclusive form
+                    // overflows to negative when maxPillH == MAX_VALUE (no node
+                    // below in the column) and silently kills the centering.
+                    if (ddy + height > maxPillH)
                         ddy = maxPillH - height; // never past the next-row gap
                     if (ddy > 0) ddy = 0;
                 }
