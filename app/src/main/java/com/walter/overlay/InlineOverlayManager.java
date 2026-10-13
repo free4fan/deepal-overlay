@@ -125,6 +125,13 @@ public class InlineOverlayManager {
         final int padH;
         final int padV;
         final boolean hidden;
+        // Text actually rendered. null = the full spec text. The caption
+        // shrinks to a 2-3 line preview only for long content nodes (a UGC
+        // post body whose CJK is itself an ellipsized snippet) — squeezing
+        // 3x the source length into one font-9px line reads as a thin
+        // micro-font sliver. Drift matching in reconcile() still uses the
+        // FULL spec text (the tv tag), so the preview never breaks matching.
+        final CharSequence caption;
         // Offset (in px) from the node's top-left where the window is anchored.
         // Single-line pills are centered on the node: the source CJK sits
         // centered in the node box, so a top-left-anchored window padded by
@@ -137,6 +144,13 @@ public class InlineOverlayManager {
         Layout(int width, int height, float textSizePx, int bgColor, int textColor,
                boolean multiline, int gravity, int padH, int padV, boolean hidden,
                int dx, int dy) {
+            this(width, height, textSizePx, bgColor, textColor, multiline, gravity,
+                padH, padV, hidden, dx, dy, null);
+        }
+
+        Layout(int width, int height, float textSizePx, int bgColor, int textColor,
+               boolean multiline, int gravity, int padH, int padV, boolean hidden,
+               int dx, int dy, CharSequence caption) {
             this.width = width;
             this.height = height;
             this.textSizePx = textSizePx;
@@ -149,6 +163,7 @@ public class InlineOverlayManager {
             this.hidden = hidden;
             this.dx = dx;
             this.dy = dy;
+            this.caption = caption;
         }
     }
 
@@ -314,7 +329,8 @@ public class InlineOverlayManager {
 
         // Tag holds the raw text — used for drift matching in reconcile()
         if (!spec.text.contentEquals(tv.getText())) {
-            tv.setText(spec.text);
+            CharSequence shown = layout.caption != null ? layout.caption : spec.text;
+            tv.setText(shown);
         }
         if (!spec.text.equals(tv.getTag())) {
             tv.setTag(spec.text);
@@ -350,7 +366,7 @@ public class InlineOverlayManager {
         if (layout.hidden) return null; // don't spawn a slide sliver
 
         TextView tv = new TextView(context);
-        tv.setText(spec.text);
+        tv.setText(layout.caption != null ? layout.caption : spec.text);
         tv.setTag(spec.text);
         tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, layout.textSizePx);
         tv.setTextColor(layout.textColor);
@@ -567,6 +583,7 @@ public class InlineOverlayManager {
         // narrow for a readable wrap; the next column starts further).
         boolean multiline = wordWrap && textPxWidth + padH * 2 > fitW;
         int wrapLines = 0; // 0 = no wrap chosen
+        CharSequence preview = null; // 2-3 line ellipsized caption for long UGC
         float fs1 = -1f;
         if (!multiline && textPxWidth + padH * 2 > fitW) {
             // Largest one-line font that fits fitW: width(fs) = t*fs + 0.8fs
@@ -606,15 +623,43 @@ public class InlineOverlayManager {
                     measurePaint.setTextSize(textSizePx);
                     textPxWidth = measurePaint.measureText(spec.text);
                 } else {
-                    // Below even the floor one-lined: shrink to FIT_MIN_SP;
-                    // ellipsize remains the last resort.
-                    float scale = (fitW - padH * 2) / textPxWidth;
-                    textSizePx = Math.max(floorPx, textSizePx * scale);
-                    padH = Math.max(4, (int) (textSizePx * 0.4f));
-                    padV = Math.max(2, (int) (textSizePx * 0.3f));
-                    if (standaloneRow && !headingCap) textCap = (int) (est * 1.4f) + padH * 2;
-                    measurePaint.setTextSize(textSizePx);
-                    textPxWidth = measurePaint.measureText(spec.text);
+                    // Below even the floor one-lined: the content is far longer
+                    // than its node (a UGC post body — the CJK is itself an
+                    // ellipsized snippet, the translation runs 3-4x longer).
+                    // Squeezing the WHOLE text into one line forces ~9sp
+                    // (a thin micro-font sliver, user report: "узкая полоска
+                    // с мелким шрифтом" while the CJK is 2-3 lines). Mirror the
+                    // app's own ellipsis instead: a readable 2-3 line preview
+                    // ending in "…". The micro one-liner stays the last
+                    // resort (no break points at all).
+                    float pFs = textSizePx;
+                    final int[] pLines = new int[1];
+                    while (pFs >= floorPx && preview == null) {
+                        preview = truncateToLines(spec.text, fitW, pFs,
+                            Math.min(3, lineBudget(maxPillH, pFs)), maxPillH, pLines);
+                        if (preview == null) pFs -= 1f;
+                    }
+                    if (preview != null) {
+                        textSizePx = pFs;
+                        padH = Math.max(4, (int) (textSizePx * 0.4f));
+                        padV = Math.max(2, (int) (textSizePx * 0.3f));
+                        measurePaint.setTextSize(textSizePx);
+                        textPxWidth = measurePaint.measureText(preview.toString());
+                        multiline = true;
+                        // The line count rides in wrapLines so the multi-line
+                        // height path sizes the box to the real number of lines
+                        // (wrapLines==0 is reserved for ww user word-wrap mode).
+                        wrapLines = pLines[0];
+                    } else {
+                        // Shrink to FIT_MIN_SP; ellipsize remains the last resort.
+                        float scale = (fitW - padH * 2) / textPxWidth;
+                        textSizePx = Math.max(floorPx, textSizePx * scale);
+                        padH = Math.max(4, (int) (textSizePx * 0.4f));
+                        padV = Math.max(2, (int) (textSizePx * 0.3f));
+                        if (standaloneRow && !headingCap) textCap = (int) (est * 1.4f) + padH * 2;
+                        measurePaint.setTextSize(textSizePx);
+                        textPxWidth = measurePaint.measureText(spec.text);
+                    }
                 }
             } else {
                 // Mild overflow: keep one line, fit it in the field
@@ -644,8 +689,10 @@ public class InlineOverlayManager {
         int width;
         if (multiline) {
             // Icon tiles keep the wrap inside the box; everything else
-            // takes the whole field width.
-            width = tallIconBox ? (int) Math.min(fitW, spec.width) : fitW;
+            // takes the whole field width. A preview caption always takes
+            // the field (the tile-box cap would clip the ellipsized text).
+            width = (tallIconBox && preview == null)
+                ? (int) Math.min(fitW, spec.width) : fitW;
         } else if (tallIconBox) {
             // One-line caption on the icon-card tile: hug the box (covers
             // the CJK), growing right only if the translation is longer.
@@ -905,7 +952,7 @@ public class InlineOverlayManager {
         }
 
         return new Layout(width, height, textSizePx, bgColor, textColor,
-            multiline, gravity, padH, padV, hidden, ddx, ddy);
+            multiline, gravity, padH, padV, hidden, ddx, ddy, preview);
     }
 
     // How many caption lines the box allows (pill may grow below the
@@ -917,6 +964,66 @@ public class InlineOverlayManager {
         if (lh <= 0) return 2;
         int n = (boxHeightPx - padV * 2) / lh + 1;
         return Math.max(2, Math.min(3, n));
+    }
+
+    // Long content node: the a11y node holds only an ellipsized snippet of a
+    // UGC post body (the app taps through to the full text), while the
+    // translation runs several times longer than the CJK. Building the FULL
+    // text into the pill cramps it to one unreadable line; instead return a
+    // readable 2-3 line preview ending in "…" — mirroring the app's own
+    // ellipsis. outLines[0] carries the line count. Null: the text fits
+    // without truncation, or even one line with break points does not fit.
+    private CharSequence truncateToLines(String text, float boxWidthPx, float fsPx,
+                                         int maxLines, int maxHpx, int[] outLines) {
+        measurePaint.setTextSize(fsPx);
+        int padH = Math.max(4, (int) (fsPx * 0.4f));
+        int padV = Math.max(2, (int) (fsPx * 0.3f));
+        float avail = boxWidthPx - 2f * padH;
+        if (avail < fsPx) return null;
+        // Same break model as wrapLineCount: spaces + UAX#14 hyphen breaks.
+        final java.util.List<String> words = new java.util.ArrayList<>();
+        for (String part : text.split(" ", -1)) {
+            if (part.length() > 1 && part.indexOf('-') >= 0) {
+                int from = 0, h;
+                while ((h = part.indexOf('-', from)) >= 0) {
+                    words.add(part.substring(from, h + 1));
+                    from = h + 1;
+                }
+                if (from < part.length()) words.add(part.substring(from));
+            } else {
+                words.add(part);
+            }
+        }
+        float ell = measurePaint.measureText("…");
+        float spaceW = measurePaint.measureText(" ");
+        // Reserve the ellipsis on every line: once we break, the current line
+        // may turn out to be the last one and needs room for "…".
+        float lineAvail = avail - ell;
+        int lines = 1;
+        float x = 0;
+        java.lang.StringBuilder sb = new java.lang.StringBuilder();
+        int i = 0;
+        for (; i < words.size(); i++) {
+            String word = words.get(i);
+            float ww = measurePaint.measureText(word);
+            if (ww > lineAvail) return null; // unbreakable word: this size is unusable
+            float need = (x > 0 ? spaceW : 0) + ww;
+            if (x + need > lineAvail && x > 0) {
+                if (lines >= maxLines) break; // last line cannot take more
+                lines++;
+                x = ww;
+            } else {
+                x += need;
+            }
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(word);
+        }
+        if (i >= words.size() || sb.length() == 0 || lines < 2) return null;
+        sb.append("…");
+        float h = lines * fsPx * 1.25f + 2f * padV;
+        if (h > maxHpx + 2f) return null; // would run into the node below
+        outLines[0] = lines;
+        return sb.toString();
     }
 
     // Greedy word-wrap simulation matching TextView: breaks happen on
