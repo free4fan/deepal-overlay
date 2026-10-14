@@ -873,40 +873,42 @@ public class InlineOverlayManager {
                 //     must stay left-inset, not centered).
                 boolean emptyCentered = headerFullRow
                     && !isPageHeaderId(spec.viewId) && y0 > 340;
-                // (E) a label whose CJK sits MID-ROW with large, near-equal
-                //     clearances on both sides (in-page toggle/hint captions:
-                //     AC «Включить» (434,1683) 92x68 clearances 434/426;
-                //     charging «Привязать» (390,1612) 180x53 clearances
-                //     390/382): the app centers the CJK in the open row
-                //     zone, so a pill anchored at the node's left edge looks
-                //     shifted. Tight box (w <= ~1.35*est — none of the capped
-                //     shapes), a single-line pill at least as wide as the CJK
-                //     extent, and measured balanced clearances (min >=
-                //     0.7*max) prove the CJK is row-centered; grid tiles /
-                //     menu / tab rows (closeRow) and left-aligned titles
-                //     (unbalanced clearances) never pass.
-                // Start-locked ids stay left-anchored EXCEPT when the node
-                // itself sits center-screen: the sl flag is per-ID global
-                // (one layout's gravity), but the charging page places
-                // bindTips (sl=1 from its left-aligned layout) at the row's
-                // mid-screen point (node center 480) — the app's own layout
-                // is the source of truth per screen. A card label whose
-                // left margin is filled by an icon (tvManagerHint, node
-                // center 452) is NOT screen-centered and keeps its anchor.
-                // Coverage is guaranteed either way: the tight box means the
-                // CJK fills the node, and the pill (width >= est >= 0.73*
-                // node) covers the whole node centered on it.
+                // (E) a label whose CJK is CENTERED in an open row zone, so the
+                //     RU pill must be centered on the node center too —
+                //     anchoring it at the node's left edge left the pill looking
+                //     shifted. The app places exactly these at the SCREEN's
+                //     horizontal midpoint (the whole UI is center-aligned): the
+                //     open-row toggles (AC «Включить» node (434,1683) 92w ->
+                //     center 480; charging «Привязать» (390,1612) 180w -> center
+                //     480) and a centered dialog title. A grid column
+                //     (Сервис-Deepal 4th col «Автогид» (732,651) 124w -> center
+                //     794), a left-aligned title, or an icon card NEVER does.
+                //     Gating on the node being screen-centered (±24px) is the
+                //     real discriminator — much stronger than a clearance ratio
+                //     alone, which a last-column grid cell (its only neighbor is
+                //     to the LEFT, so clearances measure "balanced" 86/96) would
+                //     pass and the pill would shift left into its neighbor.
+                //     Tight box (w <= ~1.35*est), a single-line pill at least as
+                //     wide as the CJK extent (coverage: the pill covers the
+                //     whole node centered on it), and balanced clearances kept
+                //     as a last guard (a centered label is inherently balanced).
+                //     startLocked is deliberately NOT consulted: the sl flag is
+                //     a per-ID global (one layout's gravity), while the app
+                //     centers bindTips (sl=1) on screen on the charging page —
+                //     the on-screen node position is the source of truth per
+                //     screen. An off-screen-center label (icon card
+                //     tvManagerHint center 452) keeps its left anchor either way.
+                int rightClear = screenWidth - x - spec.width - SCREEN_EDGE_MARGIN;
                 boolean screenMid =
                     Math.abs(x + spec.width / 2f - screenWidth / 2f) <= 24;
-                int rightClear = screenWidth - x - spec.width - SCREEN_EDGE_MARGIN;
                 boolean centeredLabel =
                     !standaloneRow && !wideRow
                     && spec.width <= est * 1.35f + 2
                     && width >= est
+                    && screenMid
                     && leftClear > 0 && rightClear > 0
                     && Math.min(leftClear, rightClear)
-                        >= 0.7f * Math.max(leftClear, rightClear)
-                    && (!startLocked || screenMid);
+                        >= 0.7f * Math.max(leftClear, rightClear);
                 if (toolbarCentered || buttonCentered || emptyCentered) {
                     ddx = (spec.width - width) / 2;
                     ddx = Math.max(ddx, -x); // never cross the screen edge
