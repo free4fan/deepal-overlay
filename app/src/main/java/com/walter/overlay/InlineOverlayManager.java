@@ -873,6 +873,40 @@ public class InlineOverlayManager {
                 //     must stay left-inset, not centered).
                 boolean emptyCentered = headerFullRow
                     && !isPageHeaderId(spec.viewId) && y0 > 340;
+                // (E) a label whose CJK sits MID-ROW with large, near-equal
+                //     clearances on both sides (in-page toggle/hint captions:
+                //     AC «Включить» (434,1683) 92x68 clearances 434/426;
+                //     charging «Привязать» (390,1612) 180x53 clearances
+                //     390/382): the app centers the CJK in the open row
+                //     zone, so a pill anchored at the node's left edge looks
+                //     shifted. Tight box (w <= ~1.35*est — none of the capped
+                //     shapes), a single-line pill at least as wide as the CJK
+                //     extent, and measured balanced clearances (min >=
+                //     0.7*max) prove the CJK is row-centered; grid tiles /
+                //     menu / tab rows (closeRow) and left-aligned titles
+                //     (unbalanced clearances) never pass.
+                // Start-locked ids stay left-anchored EXCEPT when the node
+                // itself sits center-screen: the sl flag is per-ID global
+                // (one layout's gravity), but the charging page places
+                // bindTips (sl=1 from its left-aligned layout) at the row's
+                // mid-screen point (node center 480) — the app's own layout
+                // is the source of truth per screen. A card label whose
+                // left margin is filled by an icon (tvManagerHint, node
+                // center 452) is NOT screen-centered and keeps its anchor.
+                // Coverage is guaranteed either way: the tight box means the
+                // CJK fills the node, and the pill (width >= est >= 0.73*
+                // node) covers the whole node centered on it.
+                boolean screenMid =
+                    Math.abs(x + spec.width / 2f - screenWidth / 2f) <= 24;
+                int rightClear = screenWidth - x - spec.width - SCREEN_EDGE_MARGIN;
+                boolean centeredLabel =
+                    !standaloneRow && !wideRow
+                    && spec.width <= est * 1.35f + 2
+                    && width >= est
+                    && leftClear > 0 && rightClear > 0
+                    && Math.min(leftClear, rightClear)
+                        >= 0.7f * Math.max(leftClear, rightClear)
+                    && (!startLocked || screenMid);
                 if (toolbarCentered || buttonCentered || emptyCentered) {
                     ddx = (spec.width - width) / 2;
                     ddx = Math.max(ddx, -x); // never cross the screen edge
@@ -882,8 +916,27 @@ public class InlineOverlayManager {
                     ddx = inset;
                     ddx = Math.max(ddx, -x);
                     if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
+                } else if (centeredLabel) {
+                    ddx = (spec.width - width) / 2;
+                    ddx = Math.max(ddx, -x); // never cross the screen edge
+                    if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
                 }
             }
+        }
+
+        // A "wrapped" label that resolved back to ONE line takes the
+        // multi-line height path (one text line tall) and misses the
+        // single-line ddy above (gated !multiline): it sticks to the node
+        // TOP and the CJK's bottom half pokes out below the pill
+        // («Bluetooth-ключ» in a 184x68 node: a 44px pill at the top, CJK
+        // centered in the node). For TIGHT boxes (w <= ~1.35*est — the CJK
+        // fills the node, not a 2-line container) where the one-line pill
+        // is shorter than the node, apply the single-line centering: the
+        // pill lands on the node's mid-axis. ddy is always >= 0 and
+        // ddy+height <= spec.height, so the pill stays inside the node.
+        if (multiline && wrapLines == 1 && ddy == 0 && est > 0
+                && spec.width <= est * 1.35f + 2 && height < spec.height) {
+            ddy = (spec.height - height) / 2;
         }
 
         // Row-level vertical centering (v2.10.37): a wrapped (2-3 line) pill
