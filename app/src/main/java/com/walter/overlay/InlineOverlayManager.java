@@ -599,10 +599,49 @@ public class InlineOverlayManager {
                 // The pill may grow into the clearance below (maxPillH), so
                 // budget the lines from that at the candidate size (a smaller
                 // font fits more lines — a fixed base-font budget undercounts).
+                // Wrap-line cap. The default (lineBudget, hard max 3) exists
+                // for LONG UGC snippets: the a11y node holds a 2-line excerpt
+                // while the translation runs 3-4x longer — a full wrap would
+                // swamp the next card, so the 2-3 line preview is the design.
+                // Two shapes break that default:
+                //  - a COMPLETE multi-line block (a dialog paragraph: the node
+                //    shows the whole source — shown lines ≈ est-implied lines,
+                //    both ~2.5+). The translation is then the FULL text and a
+                //    3-line cap ellipsizes it while the CJK's bottom lines
+                //    stick out untranslated (keyless-driving dialog, 5-line
+                //    tv_content). Cap at WRAP_MAX_LINES; the height budget
+                //    (maxPillH, checked inside wrapLineCount) does the
+                //    limiting, so the pill never runs into the node below.
+                //  - a SINGLE-LINE CJK node (a one-line button/label). Letting
+                //    it wrap to 3 lines turns a 79px 一键添加 button into a 208px
+                //    slab floated ddy=-64 above the card (Блоки сцен cards):
+                //    cap at 2 lines and let the font drop instead.
+                float shownLines = estimatePx > 0
+                    ? spec.height / (float) estimatePx : 0;
+                float impliedLines = est > spec.width
+                    ? est / (float) spec.width : 1f;
+                boolean completeBlock = est > 0 && estimatePx > 0
+                    && shownLines >= 2.5f
+                    && impliedLines >= 2.5f
+                    && shownLines >= impliedLines - 0.6f;
+                boolean singleLineNode = est > 0 && estimatePx > 0
+                    && spec.height <= 1.9f * estimatePx;
+                // A COMPLETE tallBox's pill is drawn at min(fitW, spec.width)
+                // (the width path below), not fitW — simulating at fitW
+                // counts fewer lines than the TextView wraps at the narrower
+                // drawn width, so the last line clips (keyless-driving
+                // dialog: 7 lines budgeted, 8 wrapped at 748px). Simulate the
+                // wrap at the real drawn width for those only; every other
+                // node (a Korgos snippet in a tight icon box wraps at the
+                // wider fitW by design) keeps fitW exactly as before.
+                float wrapW = (tallIconBox && completeBlock)
+                    ? Math.min(fitW, spec.width) : fitW;
                 float fs = textSizePx;
-                while (fs >= floorPx &&
-                        (wrapLines = wrapLineCount(spec.text, fitW, fs,
-                                lineBudget(maxPillH, fs), maxPillH)) == 0) {
+                while (fs >= floorPx && (wrapLines = wrapLineCount(spec.text,
+                        wrapW, fs, completeBlock ? WRAP_MAX_LINES
+                            : singleLineNode ? Math.min(2, lineBudget(maxPillH, fs))
+                                            : lineBudget(maxPillH, fs),
+                        maxPillH)) == 0) {
                     fs -= 1f;
                 }
                 if (wrapLines > 0) {
@@ -923,6 +962,27 @@ public class InlineOverlayManager {
                     ddx = Math.max(ddx, -x); // never cross the screen edge
                     if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
                 }
+            }
+            // (F) A DIALOG ACTION BUTTON (取消/确定 — the two buttons of the
+            //     keyless-driving dialog, ~368x102, x-inset): the app CENTERS
+            //     the short CJK inside the button, but a same-row button PAIR
+            //     makes closeRow=true, so the (A)-(E) block above is skipped
+            //     and the left-anchored RU pill leaves the centered CJK
+            //     exposed (the 定 of 确定 pokes out past the narrow «Конечно»
+            //     pill). Button-shaped (96-130px tall), medium width (a
+            //     half-width dialog button — NOT the full-width logout button
+            //     (B) and NOT a full-screen header row), x-inset (headers
+            //     start at x 0/30), short CJK far narrower than the button →
+            //     center the pill on the button center.
+            if (ddx == 0 && est > 0 && width > est
+                    && !startLocked && x > 30
+                    && spec.width > screenWidth * 0.28f
+                    && spec.width < screenWidth * 0.65f
+                    && spec.height >= 96 && spec.height <= 130
+                    && spec.width > est * 2f) {
+                ddx = (spec.width - width) / 2;
+                ddx = Math.max(ddx, -x); // never cross the screen edge
+                if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
             }
         }
 
