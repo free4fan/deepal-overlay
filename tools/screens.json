@@ -1,0 +1,13 @@
+[
+  {"name": "mashina_top",       "how": "am start -n deepal.com.cn.app/.SplashActivity, wait for the car (Машина) tab to load"},
+  {"name": "mashina_scroll",    "how": "from mashina_top: swipe up once (script does it), wait for content to settle"},
+  {"name": "dialog_keyless",    "how": "Машинa → keyless driving (Бесключевое вождение) toggle → dialog «Включите бесключевое вождение» stays open (WAIT=45)"},
+  {"name": "service_deepal_grid", "how": "tab Сервис → section Сервис Deepal (4x2 icon grid)", "wait": 30},
+  {"name": "service_acc",       "how": "tab Сервис → accordion rows (Автогид/Карта зарядок) area", "wait": 30},
+  {"name": "my_tab",            "how": "bottom tab Мой", "wait": 30},
+  {"name": "settings_car",      "how": "Мой/Настройки → car settings page (vehicle 车辆设置)", "wait": 45},
+  {"name": "trip_info",         "how": "Машинa → trip/charge history card (Порт Хоргос area)", "wait": 30},
+  {"name": "notifications",     "how": "bell icon top-right → notifications", "wait": 30},
+  {"name": "explore",           "how": "bottom tab Обзор (Исследовать)", "wait": 30},
+  {"name": "shop",              "how": "bottom tab Магазин", "wait": 30}
+]

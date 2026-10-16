@@ -33,3 +33,6 @@ __pycache__/
 
 # Release artifacts — APKs live on GitHub Releases, not in the repo
 *.apk
+
+# golden runs (baselines are committed explicitly)
+tools/golden/
