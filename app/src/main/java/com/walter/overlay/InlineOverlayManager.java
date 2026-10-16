@@ -68,7 +68,7 @@ public class InlineOverlayManager {
     private final Map<String, Integer> realFontSp;
     private final Map<String, TextView> activeViews = new HashMap<>();
     private final Map<TextView, Long> lastSeenMs = new HashMap<>();
-    private final Map<TextView, Integer> bgColors = new HashMap<>();
+    private final Map<TextView, Long> bgColors = new HashMap<>();
     private final Paint measurePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int cornerRadiusPx = -1;
 
@@ -140,17 +140,22 @@ public class InlineOverlayManager {
         // Multiline wraps grow downward and stay top-anchored.
         final int dx;
         final int dy;
+        // Pill corners rounded to height/2 — the app's dialog buttons are
+        // stadiums (radius = h/2). A full-button pill with the generic 6dp
+        // corner shows gray fill poking past the button's arc in the four
+        // corners; the stadium radius matches the button exactly.
+        final boolean stadium;
 
         Layout(int width, int height, float textSizePx, int bgColor, int textColor,
                boolean multiline, int gravity, int padH, int padV, boolean hidden,
                int dx, int dy) {
             this(width, height, textSizePx, bgColor, textColor, multiline, gravity,
-                padH, padV, hidden, dx, dy, null);
+                padH, padV, hidden, dx, dy, null, false);
         }
 
         Layout(int width, int height, float textSizePx, int bgColor, int textColor,
                boolean multiline, int gravity, int padH, int padV, boolean hidden,
-               int dx, int dy, CharSequence caption) {
+               int dx, int dy, CharSequence caption, boolean stadium) {
             this.width = width;
             this.height = height;
             this.textSizePx = textSizePx;
@@ -164,6 +169,7 @@ public class InlineOverlayManager {
             this.dx = dx;
             this.dy = dy;
             this.caption = caption;
+            this.stadium = stadium;
         }
     }
 
@@ -337,7 +343,7 @@ public class InlineOverlayManager {
         }
         tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, layout.textSizePx);
         tv.setTextColor(layout.textColor);
-        applyBackground(tv, layout.bgColor);
+        applyBackground(tv, layout.bgColor, layout.stadium ? layout.height : -1);
         tv.setSingleLine(!layout.multiline);
         tv.setMaxLines(layout.multiline ? WRAP_MAX_LINES : 1);
         tv.setEllipsize(TextUtils.TruncateAt.END);
@@ -370,7 +376,7 @@ public class InlineOverlayManager {
         tv.setTag(spec.text);
         tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, layout.textSizePx);
         tv.setTextColor(layout.textColor);
-        applyBackground(tv, layout.bgColor);
+        applyBackground(tv, layout.bgColor, layout.stadium ? layout.height : -1);
         tv.setTypeface(Typeface.DEFAULT);
         tv.setIncludeFontPadding(false);
         tv.setSingleLine(!layout.multiline);
@@ -429,6 +435,9 @@ public class InlineOverlayManager {
         // leaves ~column width of room, not the whole screen to the right)
         int maxW = Math.max(48, screenWidth - x - SCREEN_EDGE_MARGIN);
         boolean closeRow = false;
+        // Set by gate (F) when the pill hugs a button node exactly (the
+        // app's dialog buttons are stadiums) → pill takes radius h/2.
+        boolean stadium = false;
         int gapBelow = -1; // empty strip under the node, until the next node
         int leftClear = x; // empty space to the node's left (screen edge default);
         // a left row neighbor shrinks it — the pill must not cover that column
@@ -980,6 +989,55 @@ public class InlineOverlayManager {
                     && spec.width < screenWidth * 0.65f
                     && spec.height >= 96 && spec.height <= 130
                     && spec.width > est * 2f) {
+                // The node IS the button (both halves of the dialog-action
+                // pair): the a11y box is the drawn stadium button. Cover it
+                // exactly so the pill cannot stick out of the border in any
+                // direction and both buttons stay uniform:
+                //   - «Отмена»: RU 24sp pill (388) is WIDER than the 368px
+                //     button → centered it overhanged ~10px each side; now it
+                //     hugs and the font shrinks to the button interior.
+                //   - «Конечно»: its own text-sized pill (199×78) sat centered
+                //     on the 368px button — a pill-on-the-button with a
+                //     smaller font than its pair; now the full button,
+                //     same font as «Отмена». Note the pair is NOT always
+                //     closeRow-detected (the buttons don't overlap: a gap
+                //     between), so one half can be standaloneRow — the (F)
+                //     override must cover it regardless. tallIconBox
+                //     contradicts (F) by construction (w ≤ est*1.35+2 vs
+                //     w > est*2); looseRow is blocked by (F)'s x/size gates.
+                if (!tallIconBox && !looseRow) {
+                    // A full-button pill carries the button's own label: take
+                    // the CJK estimate size so the pair is uniform (both
+                    // buttons same font), then shrink if the RU is wider than
+                    // the button interior.
+                    textSizePx = Math.max(textSizePx, estimatePx);
+                    padH = Math.max(4, (int) (textSizePx * 0.4f));
+                    padV = Math.max(2, (int) (textSizePx * 0.3f));
+                    measurePaint.setTextSize(textSizePx);
+                    textPxWidth = measurePaint.measureText(spec.text);
+                    float target = spec.width - padH * 2f - 1f;
+                    if (textPxWidth > target) {
+                        textSizePx = Math.max(MIN_TEXT_SP * dm.density,
+                            textSizePx * target / textPxWidth);
+                        padH = Math.max(4, (int) (textSizePx * 0.4f));
+                        padV = Math.max(2, (int) (textSizePx * 0.3f));
+                        measurePaint.setTextSize(textSizePx);
+                        textPxWidth = measurePaint.measureText(spec.text);
+                    }
+                    width = spec.width;
+                    // node+2*padV grows ~16px past the top/bottom border;
+                    // hug the node: height = node, ddy 0, stadium radius.
+                    // If the (shrunk) text were still taller than the button,
+                    // keep the old box rather than clip the glyphs.
+                    int minH = Math.max((int) (textSizePx + padV * 2),
+                        MIN_SINGLE_LINE_HEIGHT);
+                    if (minH <= spec.height) {
+                        height = Math.min(spec.height, maxPillH);
+                        ddy = (spec.height - height) / 2; // 0 unless clipped
+                    }
+                    stadium = true;
+                    gravity = Gravity.CENTER; // label centered in the button
+                }
                 ddx = (spec.width - width) / 2;
                 ddx = Math.max(ddx, -x); // never cross the screen edge
                 if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
@@ -1067,7 +1125,7 @@ public class InlineOverlayManager {
         }
 
         return new Layout(width, height, textSizePx, bgColor, textColor,
-            multiline, gravity, padH, padV, hidden, ddx, ddy, preview);
+            multiline, gravity, padH, padV, hidden, ddx, ddy, preview, stadium);
     }
 
     // How many caption lines the box allows (pill may grow below the
@@ -1190,14 +1248,21 @@ public class InlineOverlayManager {
         return lines;
     }
 
-    private void applyBackground(TextView tv, int color) {
-        Integer current = bgColors.get(tv);
-        if (current != null && current == color) return;
+    // Draws the pill background. radius: -1 = generic 6dp corner;
+    // otherwise the exact diameter px (stadium pills from gate F pass
+    // the pill height — the app's dialog buttons are fully-rounded
+    // stadiums and a 6dp-corner pill hugging them shows gray fill in
+    // the four corners).
+    private void applyBackground(TextView tv, int color, int radius) {
+        long key = ((long) color << 1) | (radius >= 0 ? 1 : 0);
+        Long current = bgColors.get(tv);
+        if (current != null && current.longValue() == key) return;
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(color);
-        bg.setCornerRadius(cornerRadiusPx());
+        bg.setCornerRadius(radius >= 0
+            ? Math.max(0f, radius * 0.5f) : cornerRadiusPx());
         tv.setBackground(bg);
-        bgColors.put(tv, color);
+        bgColors.put(tv, key);
     }
 
     private int cornerRadiusPx() {
