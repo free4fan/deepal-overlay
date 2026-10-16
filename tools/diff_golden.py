@@ -1,34 +1,34 @@
 #!/usr/bin/env python3
 """Golden diff (brief prompt.md, step 1) — replaces pixel-based "хардгарды".
 
-Compares two capture runs of the same screen list (dirs like
-tools/golden/<run>, each with <screen>/a11y.xml + overlays.txt and a
-manifest.txt) and reports, per screen:
-  * app nodes whose bounds changed (delta px) — "регрессия ≠ изменение":
-    any non-target change here must be justified in the CHANGELOG
-  * per pill: coverage of the CJK run it replaces (brief rule 4,
-    reformulated from px snapshots to invariants):
-      label model (short CJK inside a wider node — dialog/action buttons,
-        icon tiles): the pill must cover the CJK run in BOTH its possible
-        positions (node-left and node-center — position is only known from
-        the g flag in view_profiles) AND must not overhang the node's own
-        frame by more than OVERHANG_MAX px on any side (the «pill must not
-        escape the button frame» invariant).
-      block model (CJK fills/wraps the node — paragraphs): the pill must
-        not escape the node's TOP or LEFT edge (top-anchored wrap); the
-        gap below the node is free screen estate, growth there is allowed
-        and reported, never failed (the «8-я строка режется / превью …»
-        class of defects becomes a diffable number).
-    No raw «211×64 @ y1120» hardguards anywhere — only these checks.
+Compares two capture runs (dirs like tools/golden/<run>, each with
+<screen>/{a11y.xml, overlays.txt, pills.json, screenshot.png, manifest.txt}).
+The per-screen files come from tools/capture_golden.sh: a11y.xml = node
+bounds (uiautomator), pills.json = the EXACT pill geometry the app itself
+dumps while its dev golden flag is armed (overlay windows are invisible to
+uiautomator/dumpsys — no package/title — so the app is the only
+deterministic source).
 
-Pill rect sources, per run (flagged in report, first available wins):
-  1. a11y.xml nodes of package com.walter.overlay
-  2. com.walter.overlay windows from overlays.txt (dumpsys)
-If neither yields pills -> "PILL SOURCE MISSING" hard-fail (visible on
-the first run, not silently).
+HARD signals = the baseline->new DELTA (brief rules 3/5: «было/стало», any
+non-target drift is a regression to justify in the CHANGELOG):
+  * NODE-CHG  an a11y node moved/resized beyond +/-2px;
+  * PILL-CHG  a pill's geometry RELATIVE TO ITS OWN NODE changed beyond
+    +/-2px, appeared (NEW), or vanished (GONE). Relative-to-node by
+    design: a whole-screen app scroll moves the node and its pill together
+    and is not a layout regression.
+No view_profiles involvement in the hard path -> a clean build's baseline
+is always green.
+
+ADVISORY (informational, not a gate): the absolute id-first coverage model
+(profile g=center / p=padStart -> where the CJK run sits; label vs block;
+overhang <=2px past the node frame). It is the input to step 3 (mixed-
+gravity flagging) — today it also prints known code/profile contradictions
+(e.g. tvTopTitle: profile g=center p=20dp, app places CJK at the ~56px
+content edge) instead of asserting them as truth.
 
 Usage:
   diff_golden.py BASELINE_DIR NEW_DIR [--json report.json]
+Exit code: 0 = no hard deltas, 1 = hard deltas or PILL SOURCE MISSING.
 """
 import json
 import re
@@ -37,21 +37,6 @@ from pathlib import Path
 
 TOL_PX = 2          # brief rule 4: CJK-box coverage margin invariant
 MOVE_EPS_PX = 2     # bounds change above this is "moved"
-
-CJK_RANGES = ((0x1100, 0x115F), (0x2E80, 0xA4CF), (0xAC00, 0xD7A3),
-              (0xF900, 0xFAFF), (0xFE30, 0xFE4F), (0xFF00, 0xFF60),
-              (0xD800, 0xDFFF))
-
-
-def est_width(text, density, em_sp):
-    """Mirror of TranslationService.estimateSourceWidth (deterministic)."""
-    em = max(10.0, min(em_sp, 24.0)) * density
-    w = 0.0
-    for ch in text:
-        cp = ord(ch)
-        wide = any(a <= cp <= b for a, b in CJK_RANGES)
-        w += em if wide else em * 0.55
-    return max(1, int(w + 0.5))
 
 
 def load_nodes(path):
@@ -95,25 +80,22 @@ def profile_flags(view_id):
     return {}
 
 
-def load_pkg_windows(path, pkg):
-    """overlays.txt (dumpsys window windows) -> [(x0,y0,x1,y1)] for pkg.
-    dumpsys formats vary; accept bounds near the package name on the line
-    or the next (Window{...}/Frames lines)."""
+def load_pills(path):
+    """pills.json (app-golden-dump) -> [{key,id,text,node,pill,est,fsPx}].
+    The deterministic source of pill geometry (overlay windows are
+    invisible to uiautomator/dumpsys); produced by the app itself only
+    while the dev flag is armed (invisible to the shipped build)."""
     try:
         raw = path.read_text(encoding="utf-8", errors="replace")
-    except FileNotFoundError:
+        data = json.loads(raw)
+        out = []
+        for e in data:
+            if not isinstance(e, dict) or not e.get("pill"):
+                continue
+            out.append(e)
+        return out
+    except (FileNotFoundError, json.JSONDecodeError):
         return []
-    out = []
-    lines = raw.splitlines()
-    for i, ln in enumerate(lines):
-        if pkg not in ln:
-            continue
-        scope = ln + " " + "\n".join(lines[i + 1:i + 3])
-        for m in re.finditer(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", scope):
-            x0, y0, x1, y1 = map(int, m.groups())
-            if (x1 - x0) >= 20 and (y1 - y0) >= 20:
-                out.append((x0, y0, x1, y1))
-    return out
 
 
 def density(dump_path, fallback=2.25):
@@ -129,39 +111,52 @@ def density(dump_path, fallback=2.25):
     return fallback
 
 
-def coverage_model(node, density, profile):
-    """Deterministic coverage model (v1).
-    est_w = width of the node's source CJK at the 24sp cap (app formula).
-      label : est_w < 0.85·nodeW — a short CJK run inside a wider node
-              (dialog/action buttons, icon tiles). The run may sit at the
-              node's left (app default) or centered (buttons/profile
-              g=center); the invariant: the pill covers BOTH candidates
-              (union) AND does not overhang the node frame by > OVERHANG
-              on any side (the «pill must not escape the button frame»
-              invariant, expressed without px snapshots).
-      block : est_w ≥ 0.85·nodeW — the CJK fills/wraps the node (content
-              paragraphs). The invariant: the pill may not escape the
-              node's TOP or LEFT (top-left/center-top anchored), i.e. the
-              CJK block is not revealed above/left of the pill; growing
-              down/right into the clear gap below is allowed (reported).
-    profile: view_profiles entry (dict) or None; only g=center is used.
+def coverage_model(node, est, sp, density, profile):
+    """Deterministic coverage model (v1), id-first (brief prompt.md).
+    node: rect; est: the app's CJK estimate for the node (px); sp: the
+    node's estimated font (sp). The candidate CJK runs the pill MUST cover
+    come from the view_profile of the id — the layout XML is the source of
+    truth for where the CJK sits, not a guess:
+      g == center   -> centered run (the app centers it)
+      p (padStart)  -> content-edge run at x0 + p*density
+      neither       -> BOTH the node-left and the centered run must be
+                       covered (conservative fallback: unknown position)
+    em for the run height = min(sp, 24)*density == the CJK glyph step that
+    `est` was computed with, so coverage margins are measured in the same
+    em the app used for width.
+    A wider CJK (est >= 0.85*nodeW, e.g. a wrapping paragraph) is the block
+    model: the pill must not escape the node's TOP/LEFT; growth down/right
+    into the clear gap below is allowed (reported).
+    overhang invariant (label): the pill must not exceed the node's own
+    frame by > OVERHANG_MAX px on any side.
     """
-    x0, y0, x1, y1 = node["b"]
+    x0, y0, x1, y1 = node
     nw, nh = x1 - x0, y1 - y0
-    em = min(24.0, 24.0) * density  # 24sp cap, sp->px
-    est_w = est_width(node["text"], density, 24.0)
+    em = min(max(10.0, (sp or 24.0)), 24.0) * density
+    est_w = est if est and est > 0 else nw
     gy = y0 + max(0, (nh - int(em)) // 2)
+    gcenter = (profile or {}).get("g") == "center"
+    pad_dp = (profile or {}).get("p")
     runs = []
     if est_w < 0.85 * nw:                     # label
-        w = min(est_w, nw)
-        runs.append((x0, gy, x0 + w, gy + int(em)))               # left
-        cx = x0 + (nw - w) // 2
-        if cx != x0:
-            runs.append((cx, gy, cx + w, gy + int(em)))           # center
-        return {"model": "label", "runs": runs, "est": est_w,
-                "centered_profile": (profile or {}).get("g") == "center"}
-    return {"model": "block", "runs": [(x0, y0, x1, y1)], "est": est_w,
-            "centered_profile": (profile or {}).get("g") == "center"}
+        w = min(int(est_w), nw)
+        if gcenter:
+            cx = x0 + (nw - w) // 2
+            runs.append((cx, gy, cx + w, gy + int(em)))
+        elif pad_dp is not None:
+            ex = x0 + int(pad_dp * density)
+            runs.append((ex, gy, ex + w, gy + int(em)))
+        else:                                 # unknown position -> cover both
+            runs.append((x0, gy, x0 + w, gy + int(em)))
+            cx = x0 + (nw - w) // 2
+            if cx != x0:
+                runs.append((cx, gy, cx + w, gy + int(em)))
+        return {"model": "label", "runs": runs, "est": int(est_w),
+                "pos": "center" if gcenter else
+                        ("edge+%.0fpx" % (pad_dp * density)
+                         if pad_dp is not None else "left+center")}
+    return {"model": "block", "runs": [(x0, y0, x1, y1)], "est": int(est_w),
+            "pos": "fill"}
 
 
 OVERHANG_MAX = 2  # px the pill may exceed the app node's own frame
@@ -260,68 +255,123 @@ def main():
                               "d(x,y,w,h)": d, "was": list(n["b"]),
                               "now": list(best["b"])})
 
-        pills_a11y = [n["b"] for n in nn if n["pkg"] == "com.walter.overlay"]
-        pills_dmp = load_pkg_windows(new_dir / s / "overlays.txt",
-                                     "com.walter.overlay")
-        src = "a11y" if pills_a11y else ("dumpsys" if pills_dmp else "MISSING")
+        # ---- pill coverage: HARD = baseline->new DELTA (brief rules 3/5:
+        # "было/стало", any non-target drift = regression); profile-free so a
+        # clean v-code baseline is always green. Advisory = the absolute
+        # id-first model (g/p from view_profiles) — informational input to
+        # step 3 (mixed-gravity), NOT a hard gate while the profile is
+        # known-incomplete (e.g. tvTopTitle: profile g=center, p=20dp while
+        # the app places the CJK at the ~56px content edge — a mixed case).
+        pills_n = load_pills(new_dir / s / "pills.json")
+        pills_b = load_pills(base_dir / s / "pills.json")
+        src = "app-dump" if (pills_n or pills_b) else "MISSING"
         ent["pill_source"] = src
         if src == "MISSING":
             hard_fail = True
-            ent["note"] = ("no pill windows in a11y.xml or dumpsys for this "
-                           "screen — pill geometry unavailable (visible gap, "
-                           "fix source next)")
-        pill_rects = pills_a11y or pills_dmp
-        cov = ent["coverage_new"]
-        for n in nn:
-            if n["pkg"] == "com.walter.overlay" or not n["text"]:
+            ent["note"] = ("no pills.json in either run — arm the app golden "
+                           "dump (debug build + tools/capture_golden.sh); "
+                           "pill geometry unavailable")
+        ent["coverage_new"] = {}
+        # Pills move WITH their node on an app scroll, so (id,text) is the
+        # stable identity, not the node position. Baseline map keyed by
+        # (id, text); on a duplicate (same id+text twice on one screen, e.g.
+        # nav tab labels) keep them in a list and disambiguate by nearest
+        # node position.
+        bmap = {}
+        for p in pills_b:
+            bmap.setdefault((p.get("id", ""), p.get("text", "")), []).append(p)
+        used = set()
+
+        def nearest_baseline(p):
+            cands = bmap.get((p.get("id", ""), p.get("text", "")), [])
+            best, bd = None, 1e18
+            for c in cands:
+                if id(c) in used:
+                    continue
+                cn = c["node"]; dn = p["node"]
+                dd = sum((a - b) ** 2 for a, b in zip(cn, dn))
+                if dd < bd:
+                    best, bd = c, dd
+            return best
+
+        # hard signals: node-relative pill geometry delta
+        for p in pills_n:
+            node, pill = tuple(p["node"]), tuple(p["pill"])
+            rel = (pill[0] - node[0], pill[1] - node[1],
+                   node[2] - pill[2], node[3] - pill[3])
+            ob = nearest_baseline(p)
+            drift = None
+            if ob is None:
+                drift = "NEW (no baseline pill with id+text %s)" % (
+                    (p.get("id", "") or p.get("text", "")[:8],))
+            else:
+                used.add(id(ob))
+                on, op = tuple(ob["node"]), tuple(ob["pill"])
+                ores = (op[0] - on[0], op[1] - on[1],
+                        on[2] - op[2], on[3] - op[3])
+                d = [rel[i] - ores[i] for i in range(4)]
+                if max(abs(v) for v in d) > TOL_PX:
+                    drift = "pill moved relative to node d(L,T,R,B)=%s " \
+                            "(was %s)" % (d, ores)
+            # advisory absolute model
+            est = int(p.get("est", 0) or 0)
+            sp = float(p.get("sp", 0) or 0) or 24.0
+            prof = profile_flags(p.get("id", "")) if p.get("id") else {}
+            nobj = {"b": node, "text": p.get("text", ""), "id": p.get("id", "")}
+            model = coverage_model(node, est, sp, dens, prof)
+            aok, areasons, anums = check_coverage(pill, nobj, model)
+            key = "%s|%.16s" % (p.get("id", "") or p.get("text", "")[:8],
+                                p.get("text", ""))
+            ent["coverage_new"][key] = {
+                "drift": drift, "node": list(node), "pill": list(pill),
+                "rel_L_TR_B": rel, "est": est, "sp": sp,
+                "model": model["model"], "pos": model["pos"],
+                "profile": dict(prof), "overhang": anums,
+                "advisory_ok": aok, "advisory_reasons": areasons}
+        for p in pills_b:
+            if id(p) in used:
                 continue
-            prof = profile_flags(n["id"]) if n["id"] else {}
-            model = coverage_model(n, dens, prof)
-            best = None  # (score, pill, reasons)
-            for p in pill_rects:
-                ox = min(p[2], n["b"][2]) - max(p[0], n["b"][0])
-                if ox <= 0:
-                    continue  # this pill does not sit on this node
-                ok, reasons, nums = check_coverage(p, n, model)
-                score = sum(nums.values())
-                if best is None or score < best[0]:
-                    best = (score, p, reasons, nums)
-            key = "%s|%.16s" % (n["id"] or n["cls"], n["text"])
-            cov[key] = {
-                "model": model["model"],
-                "profile": {k: v for k, v in prof.items()},
-                "cjk_runs": [list(r) for r in model["runs"]]
-                if model["model"] == "label" else [list(n["b"])],
-                "pill": list(best[1]) if best else None,
-                "overhang": best[3] if best else None,
-                "ok": bool(best and not best[2]),
-                "reasons": best[2] if best else ["pill missing for node"]}
+            key = "%s|%.16s|gone" % (p.get("id", "") or p.get("text", "")[:8],
+                                     p.get("text", ""))
+            ent["coverage_new"][key] = {
+                "drift": "GONE (was in baseline)", "node": list(p["node"]),
+                "pill": list(p["pill"]), "rel_L_TR_B": None,
+                "est": int(p.get("est", 0) or 0), "sp": 0.0,
+                "model": "?", "pos": "?", "profile": {}, "overhang": {},
+                "advisory_ok": False,
+                "advisory_reasons": ["pill disappeared"]}
 
     print("GOLDEN DIFF  baseline=%s  new=%s" % (base_dir, new_dir))
+    hard_n = 0
     for s, ent in report["screens"].items():
         if "status" in ent:
             print("  [%s] %s" % (s.upper(), ent["status"]))
             continue
+        moved = ent["nodes_moved"]
         print("  [%s] nodes moved: %d   pill_source: %s"
-              % (s, len(ent["nodes_moved"]), ent.get("pill_source")))
-        for m in ent["nodes_moved"][:15]:
+              % (s, len(moved), ent.get("pill_source")))
+        for m in moved[:15]:
             extra = m["d(x,y,w,h)"] if "d(x,y,w,h)" in m else m["was"]
-            print("    - %s %s %r -> %s" % (m["kind"], m["node"],
-                                            m["text"], extra))
-        fails = {k: v for k, v in ent["coverage_new"].items() if not v["ok"]}
-        for k, v in list(fails.items())[:15]:
-            print("    ! COVERAGE-FAIL %s  model=%s overhang=%s"
-                  % (k, v["model"], v["overhang"]))
-            for r in v["reasons"][:3]:
-                print("        - " + r)
+            print("    - NODE-CHG %s %s %r -> %s" % (
+                m["kind"], m["node"], m["text"], extra))
+            hard_n += 1
+        for k, v in sorted(ent["coverage_new"].items()):
+            if v["drift"]:
+                print("    - PILL-CHG %s  %s  rel=%s" % (k, v["drift"],
+                                                         v["rel_L_TR_B"]))
+                hard_n += 1
+            if not v["advisory_ok"]:
+                print("      ~ advisory(profile) %s model=%s pos=%s %s" % (
+                    k, v["model"], v["pos"], v["advisory_reasons"][:1]))
         if ent.get("note"):
             print("    ! " + ent["note"])
-    print("RESULT: %s" % ("HARD-FAIL" if hard_fail else "complete"))
+    print("HARD signals (baseline->new deltas): %d" % hard_n)
+    print("RESULT: %s" % ("HARD-FAIL" if (hard_fail or hard_n) else "clean"))
     if out_json:
         out_json.write_text(json.dumps(report, ensure_ascii=False, indent=2),
                             encoding="utf-8")
         print("json ->", out_json)
-    sys.exit(1 if hard_fail else 0)
+    sys.exit(1 if (hard_fail or hard_n) else 0)
 
 
 if __name__ == "__main__":

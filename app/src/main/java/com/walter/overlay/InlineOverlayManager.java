@@ -282,7 +282,60 @@ public class InlineOverlayManager {
                 }
             }
         }
+
+        writeGoldenDumpIfArmed(specs);
     }
+
+    // Golden capture (brief prompt.md, step 1): while the dev flag file
+    // files/golden_capture exists (tools/capture_golden.sh arms/disarms it
+    // on a DEBUG build via run-as), dump the exact active pill geometry to
+    // files/pills.json. That is the ONLY deterministic source of pill rects:
+    // overlay windows are invisible to both uiautomator dumps and
+    // `dumpsys window` (no package/title on a11y-service windows), and the
+    // coverage invariants must be computed from rects, not pixels.
+    // Inert in production: the flag lives in the app's private dir and no
+    // external process can create it on a non-debuggable install; no
+    // per-event cost (one flag exists() check per reconcile).
+    private void writeGoldenDumpIfArmed(List<OverlaySpec> specs) {
+        java.io.File flag = new java.io.File(context.getFilesDir(),
+            "golden_capture");
+        if (!flag.exists()) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - lastGoldenDumpMs < 700) return; // reconcile fires per event
+        lastGoldenDumpMs = now;
+        try {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (OverlaySpec s : specs) {
+                TextView tv = activeViews.get(s.key);
+                if (tv == null) continue;
+                WindowManager.LayoutParams lp =
+                    (WindowManager.LayoutParams) tv.getLayoutParams();
+                if (lp.width <= 0) continue; // hidden / parked sliver
+                org.json.JSONObject o = new org.json.JSONObject();
+                o.put("key", s.key);
+                o.put("id", s.viewId != null ? s.viewId : "");
+                o.put("text", s.text);
+                // node rect: the a11y bounds the pill was computed from
+                int nx = parseX(s.key), ny = parseY(s.key);
+                o.put("node", new org.json.JSONArray()
+                    .put(nx).put(ny).put(nx + s.width).put(ny + s.height));
+                o.put("pill", new org.json.JSONArray()
+                    .put(lp.x).put(lp.y).put(lp.width).put(lp.height));
+                o.put("est", s.estSourceWidthPx);
+                o.put("sp", s.textSizeSp); // node's estimated font (sp) -> 1em
+                o.put("fsPx", tv.getPaint().getTextSize());
+                arr.put(o);
+            }
+            try (java.io.Writer w = new java.io.OutputStreamWriter(
+                     context.openFileOutput("pills.json",
+                         Context.MODE_PRIVATE), "UTF-8")) {
+                w.write(arr.toString());
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private long lastGoldenDumpMs;
 
     public void showTranslation(int left, int top, int width, int height,
                                 String translatedText, float textSizeSp,

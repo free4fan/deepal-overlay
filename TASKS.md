@@ -11,6 +11,19 @@ dark_overlay=off).
   px-сплитов `h<74` / `h 96-120` / `y<320`. Пока на текущем телефоне лок по id
   (Т-24) уже даёт плотностную независимость левосторонней якорки, а shape-гейты
   работают на оценке.
+- Т-34. Золотой конвейер v2 + baseline v2.10.43. Состояние:
+  - источник rects пилюль = **само приложение**: `writeGoldenDumpIfArmed()`
+    в `reconcile` (флаг `files/golden_capture`, троттлинг 700мс) — overlay-
+    окна невидимы uiautomator И dumpsys (live-проверено);
+  - `diff_golden.py` пересобран: HARD = дельта baseline→new (NODE-CHG,
+    PILL-CHG «относительно своего узла», NEW/GONE), profile-модель —
+    ADVISORY (вход в шаг 3, mixed-gravity); синтетика зелёная
+    (базовый green, скролл=тишина, дрейф=ловится);
+  - `capture_golden.sh`: SplashActivity-пуск, `trap disarm EXIT`,
+    pills.json per-screen.
+  - **Осталось**: завести устройство → поставить DEBUG → снять baseline
+    v2.10.43 по 11 экранам → sanity-diff → единый коммит инструментария
+    (без бампа версии: прод-поведение не меняется).
 
 ## Рабочие правила (жёсткие, из prompt.md — с 2026-10-16, до отмены)
 Мораторий на новые геометрические гейты; один PR = одна причина; golden-
