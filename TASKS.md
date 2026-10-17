@@ -21,9 +21,19 @@ dark_overlay=off).
     (базовый green, скролл=тишина, дрейф=ловится);
   - `capture_golden.sh`: SplashActivity-пуск, `trap disarm EXIT`,
     pills.json per-screen.
-  - **Осталось**: завести устройство → поставить DEBUG → снять baseline
-    v2.10.43 по 11 экранам → sanity-diff → единый коммит инструментария
-    (без бампа версии: прод-поведение не меняется).
+  - **Снято (10-17)**: baseline v2.10.43, 11 экранов,
+    `tools/golden/v2_10_43_baseline/` (commit `0990d1e`). Sanity:
+    self-diff = clean (0 hard); инект +12px drift на реальных данных =
+    PILL-CHG пойман; живые каноны в дампе сошлись (диалог-пара
+    368×102 ddx=ddy=0 fs=54, title ddx=−144, BT 292×94, Хоргос H=130).
+    Находка: плавающая ON/OFF-кнопка перевода лежит в фиксированной
+    зоне [826..914]×[424..512] и **перехватывает тапы** по строкам
+    под ней (один тап случайно выключил перевод mid-run — вернул
+    через `shared_prefs/deepal.xml` + install -r).
+  - **Осталось**: шаг 3 (расширить view_profiles: tvNegative/tvPositive/
+    tv_title/tv_content/tv1/tvAirTile/tvAir/tvTopTitle + mixed-пометка
+    по advisory-выходу) → шаг 4 (layoutFromProfile; удаление (A)/(B)/(D)
+    по одному релизу с diff'ом).
 
 ## Рабочие правила (жёсткие, из prompt.md — с 2026-10-16, до отмены)
 Мораторий на новые геометрические гейты; один PR = одна причина; golden-
