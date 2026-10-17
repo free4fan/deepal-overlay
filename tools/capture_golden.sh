@@ -33,7 +33,12 @@ echo "device: ${DEV:-<offline>}"
 
 OUT="${OUT:-tools/golden}"
 RUN="${RUN:-${RUN:-$(date +%Y%m%d_%H%M%S)}}"
-LIST="${1:-tools/screens.json}"
+# --resume mode takes <dir> as $1, not a screen list — default the list away
+# before the file check so the handler below stays reachable.
+case "$1" in
+  --resume) LIST="tools/screens.json" ;;
+  *) LIST="${1:-tools/screens.json}" ;;
+esac
 [ -f "$LIST" ] || { echo "screen list not found: $LIST" >&2; exit 1; }
 SCREENS=$(jq -r '.[].name' "$LIST")
 mkdir -p "$OUT"

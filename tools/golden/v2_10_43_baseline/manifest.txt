@@ -1,0 +1,13 @@
+run=v2_10_43_baseline dev=127.0.0.1:35115 ts=2026-10-17T20:15:52Z
+apk_version=versionName=2.10.43
+screen=mashina_top
+screen=mashina_scroll
+screen=dialog_keyless
+screen=service_deepal_grid
+screen=service_acc
+screen=my_tab
+screen=settings_car
+screen=trip_info
+screen=notifications
+screen=explore
+screen=shop
