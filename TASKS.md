@@ -75,9 +75,12 @@ dark_overlay=off).
       7265→7265, sl 6626→6626, у 17 новых id нет ни sp, ни sl. Рантайм читает из
       профиля только sp (realFontSp) и sl (startLockedIds) (loadViewProfiles, л.
       237-266) → оба набора не отличаются побайтово → **поведение не может
-      измениться**. Флаги g/p/fw/btn/mx рантайм игнорирует (адвизорные, diff-модель).
+      измениться**. Флаги g/p/fw/btn/mx рантайм игнорирует (адвизорные,
+      diff-модель). Проверка автоматизирована: `tools/proof_profile_nochange.py
+      <base.json> <new.json>` — exit 0 = релиз поведение не меняет, exit 1 =
+      меняет рантайм (проверено: на этой паре exit 0, на намеренно-неверной — 1).
       Живой W4-A (code 95) снят и сохранён как отчёт о деградации драйвера v1;
-      v2-драйвер (`/tmp/opencode/ab_cap.sh`) готов с фиксами: focus-assert
+      v2-драйвер (`tools/capture_retest.sh`) готов с фиксами: focus-assert
       (gallery/shade/launcher → force-stop+relaunch), readpills-ретрай на 700мс-
       гонку app-dump'а, медленный 1:1-драг x=150 (измерено 412px==412px без fling),
       hard-top по sentinel, grab_sub для под-экранов (settings/notifications без
@@ -89,7 +92,7 @@ dark_overlay=off).
       `TASKS.md`).
    - **Осталось**: установка release `/tmp/opencode/ship96.apk` (md5
      1f8f02ec8d5a8cfaccc4cb6b0bc97eb0) после коммитов; чистый 11-экранный
-     baseline под шаг 4 снять v2-драйвером (это же станет pre-шаг-4 baseline);
+     baseline под шаг 4 снять `tools/capture_retest.sh` (это же станет pre-шаг-4 baseline);
      шаг 4 (layoutFromProfile; удаление (A)/(B)/(D) по одному релизу с diff'ом;
      (C1)/tvTopTitle — отдельный релиз).
 
