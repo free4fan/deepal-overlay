@@ -98,6 +98,40 @@ def load_pills(path):
         return []
 
 
+def pills_nodes(pills):
+    """pills.json -> node list in load_nodes() shape, from the app's own
+    rect per pill. Fallback for the NODE-CHG universe when a11y.xml is
+    missing or STALE: uiautomator dump needs the display to reach a11y
+    'idle', which live Deepal screens (3D car / live map) intermittently
+    refuse ('could not get idle state' -> the file is not rewritten -> a
+    leftover from an earlier run would poison the diff)."""
+    out = {}
+    for p in pills:
+        n = p.get("node")
+        if not n or len(n) != 4:
+            continue
+        key = (p.get("id", ""), p.get("text", ""))
+        if key not in out:
+            out[key] = {"id": p.get("id", ""), "text": p.get("text", ""),
+                        "cls": "", "pkg": "", "b": tuple(n)}
+    return list(out.values())
+
+
+def pills_coverage(nodes, pnodes):
+    """fraction of pills' resource-ids present in an a11y node list.
+
+    Discriminates a FRESH same-screen a11y tree (its resource-id set
+    SUPERSET-COVERs the pills' ids → ~1.0) from a STALE/different-screen
+    one (barely overlaps → ~0). NOTE: matched by id, NOT (id,text) — the
+    a11y tree carries the CJK source text while the pills carry the
+    translated RU text, so text equality is structurally false."""
+    pills = [p for p in pnodes if p.get("id")]
+    if not pills:
+        return 1.0
+    ids = {n["id"] for n in nodes if n["id"]}
+    return sum(1 for p in pills if p["id"] in ids) / len(pills)
+
+
 def density(dump_path, fallback=2.25):
     try:
         raw = dump_path.read_text(encoding="utf-8", errors="replace")
@@ -112,15 +146,17 @@ def density(dump_path, fallback=2.25):
 
 
 def coverage_model(node, est, sp, density, profile):
-    """Deterministic coverage model (v1), id-first (brief prompt.md).
+    """Deterministic coverage model (v2, step 3), id-first (brief prompt.md).
     node: rect; est: the app's CJK estimate for the node (px); sp: the
     node's estimated font (sp). The candidate CJK runs the pill MUST cover
     come from the view_profile of the id — the layout XML is the source of
     truth for where the CJK sits, not a guess:
-      g == center   -> centered run (the app centers it)
+      g == center (or btn == 1) -> centered run (btn = hug-stadium
+        dialog button, gate (F): pill == button, centered)
       p (padStart)  -> content-edge run at x0 + p*density
-      neither       -> BOTH the node-left and the centered run must be
-                       covered (conservative fallback: unknown position)
+      neither / mx == 1 (mixed) -> BOTH the node-left and the centered
+        run must be covered (conservative fallback; mx only adds +mx to
+        the pos tag, not the check)
     em for the run height = min(sp, 24)*density == the CJK glyph step that
     `est` was computed with, so coverage margins are measured in the same
     em the app used for width.
@@ -135,8 +171,12 @@ def coverage_model(node, est, sp, density, profile):
     em = min(max(10.0, (sp or 24.0)), 24.0) * density
     est_w = est if est and est > 0 else nw
     gy = y0 + max(0, (nh - int(em)) // 2)
-    gcenter = (profile or {}).get("g") == "center"
-    pad_dp = (profile or {}).get("p")
+    prof = profile or {}
+    # btn (hug-stadium dialog button) implies a centered label: gate (F)
+    # lifts the font and centers it, and the pill == the button exactly.
+    gcenter = prof.get("g") == "center" or prof.get("btn") == 1
+    pad_dp = prof.get("p")
+    mx = prof.get("mx") == 1
     runs = []
     if est_w < 0.85 * nw:                     # label
         w = min(int(est_w), nw)
@@ -151,10 +191,15 @@ def coverage_model(node, est, sp, density, profile):
             cx = x0 + (nw - w) // 2
             if cx != x0:
                 runs.append((cx, gy, cx + w, gy + int(em)))
+        pos = ("center" if gcenter else
+               ("edge+%.0fpx" % (pad_dp * density) if pad_dp is not None
+                else "left+center"))
+        if mx:
+            # mixed-gravity id: 'g' intentionally NOT asserted, both
+            # candidates are kept (brief step 3)
+            pos += "+mx"
         return {"model": "label", "runs": runs, "est": int(est_w),
-                "pos": "center" if gcenter else
-                        ("edge+%.0fpx" % (pad_dp * density)
-                         if pad_dp is not None else "left+center")}
+                "pos": pos}
     return {"model": "block", "runs": [(x0, y0, x1, y1)], "est": int(est_w),
             "pos": "fill"}
 
@@ -222,7 +267,37 @@ def main():
         nn = load_nodes(new_dir / s / "a11y.xml")
         dens = density(new_dir / s / "overlays.txt") or \
             density(base_dir / s / "overlays.txt")
+        pb0 = load_pills(base_dir / s / "pills.json")
+        pn0 = load_pills(new_dir / s / "pills.json")
+        # Screen-level node-source choice so BOTH sides share one text
+        # domain (uiautomator a11y.xml carries CJK source; the app's
+        # pills.json node rects carry translated RU). A fresh same-screen
+        # a11y tree SUPERSET-COVERs its pills' ids (pills_coverage≥0.6);
+        # a stale/absent one does not. If both are fresh → compare full
+        # CJK trees; otherwise compare BOTH sides from pills.json (RU) so
+        # (id,text) never straddles the CJK/RU boundary.
+        fb = bool(nb) and pills_coverage(nb, pb0) >= 0.6
+        fn = bool(nn) and pills_coverage(nn, pn0) >= 0.6
+        if fb and fn:
+            nb_src = nn_src = "a11y.xml"
+        else:
+            nb = pills_nodes(pb0); nn = pills_nodes(pn0)
+            why = ("" if not fb and not fn else
+                   " [one side's a11y stale/missing]")
+            nb_src = nn_src = "pills.json" + why
+        ent["node_source"] = [nb_src, nn_src]
         ent.update(nodes_moved=[], coverage_new={})
+
+        # asymmetry guard: if one side fell back to pills-derived nodes
+        # (few ~pill-covered ids) while the other has the full a11y tree
+        # (~100+ ids), the universe of NODE-CHG is restricted to the
+        # common (id,text) — otherwise dozens of false GONEs.
+        if ("pills.json" in nb_src or "pills.json" in nn_src):
+            common = {(x["id"], x["text"]) for x in nb} & \
+                     {(x["id"], x["text"]) for x in nn}
+            nb = [x for x in nb if (x["id"], x["text"]) in common]
+            nn = [x for x in nn if (x["id"], x["text"]) in common]
+            ent["node_universe_capped"] = len(common)
 
         used = set()
         moved = ent["nodes_moved"]
@@ -294,11 +369,17 @@ def main():
                     best, bd = c, dd
             return best
 
-        # hard signals: node-relative pill geometry delta
+        # hard signals: node-relative pill geometry delta. The app dump
+        # stores the pill as [x,y,w,h]; the node as [x0,y0,x1,y1]. Work with
+        # absolute pill corners (pa) so R/B are measured against the node's
+        # real edges (width-only changes must NOT read as a move relative
+        # L/T, and must not shift the pill's own position).
         for p in pills_n:
-            node, pill = tuple(p["node"]), tuple(p["pill"])
-            rel = (pill[0] - node[0], pill[1] - node[1],
-                   node[2] - pill[2], node[3] - pill[3])
+            node = tuple(p["node"])
+            pill = tuple(p["pill"])
+            pa = (pill[0], pill[1], pill[0] + pill[2], pill[1] + pill[3])
+            rel = (pa[0] - node[0], pa[1] - node[1],
+                   node[2] - pa[2], node[3] - pa[3])
             ob = nearest_baseline(p)
             drift = None
             if ob is None:
@@ -307,19 +388,20 @@ def main():
             else:
                 used.add(id(ob))
                 on, op = tuple(ob["node"]), tuple(ob["pill"])
-                ores = (op[0] - on[0], op[1] - on[1],
-                        on[2] - op[2], on[3] - op[3])
+                oap = (op[0], op[1], op[0] + op[2], op[1] + op[3])
+                ores = (oap[0] - on[0], oap[1] - on[1],
+                        on[2] - oap[2], on[3] - oap[3])
                 d = [rel[i] - ores[i] for i in range(4)]
                 if max(abs(v) for v in d) > TOL_PX:
                     drift = "pill moved relative to node d(L,T,R,B)=%s " \
-                            "(was %s)" % (d, ores)
+                            "(was %s, now %s)" % (d, ores, rel)
             # advisory absolute model
             est = int(p.get("est", 0) or 0)
             sp = float(p.get("sp", 0) or 0) or 24.0
             prof = profile_flags(p.get("id", "")) if p.get("id") else {}
             nobj = {"b": node, "text": p.get("text", ""), "id": p.get("id", "")}
             model = coverage_model(node, est, sp, dens, prof)
-            aok, areasons, anums = check_coverage(pill, nobj, model)
+            aok, areasons, anums = check_coverage(pa, nobj, model)
             key = "%s|%.16s" % (p.get("id", "") or p.get("text", "")[:8],
                                 p.get("text", ""))
             ent["coverage_new"][key] = {
@@ -348,8 +430,9 @@ def main():
             print("  [%s] %s" % (s.upper(), ent["status"]))
             continue
         moved = ent["nodes_moved"]
-        print("  [%s] nodes moved: %d   pill_source: %s"
-              % (s, len(moved), ent.get("pill_source")))
+        print("  [%s] nodes moved: %d   pill_source: %s   node_source: %s -> %s"
+              % (s, len(moved), ent.get("pill_source"),
+                 *ent.get("node_source", ["?", "?"])))
         for m in moved[:15]:
             extra = m["d(x,y,w,h)"] if "d(x,y,w,h)" in m else m["was"]
             print("    - NODE-CHG %s %s %r -> %s" % (
