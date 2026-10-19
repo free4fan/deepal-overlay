@@ -7265,6 +7265,12 @@
    "sl": 1
   }
  ],
+ "content": [
+  null,
+  {
+   "mx": 1
+  }
+ ],
  "content2": [
   13.0,
   {
@@ -14650,6 +14656,12 @@
   null,
   {
    "sl": 1
+  }
+ ],
+ "item_help_center_tv": [
+  null,
+  {
+   "g": "center"
   }
  ],
  "item_imag": [
@@ -31174,6 +31186,12 @@
    "sl": 1
   }
  ],
+ "tab_text": [
+  null,
+  {
+   "g": "center"
+  }
+ ],
  "tab_text_one": [
   14.0,
   {
@@ -31700,6 +31718,12 @@
    "sl": 1
   }
  ],
+ "title": [
+  null,
+  {
+   "mx": 1
+  }
+ ],
  "title1": [
   null,
   {
@@ -31751,6 +31775,12 @@
   {
    "fw": 1,
    "sl": 1
+  }
+ ],
+ "titleTv": [
+  null,
+  {
+   "g": "center"
   }
  ],
  "titleTvTop": [
@@ -32703,6 +32733,12 @@
    "sl": 1
   }
  ],
+ "tv1": [
+  null,
+  {
+   "g": "center"
+  }
+ ],
  "tv3": [
   12.0,
   {
@@ -32875,6 +32911,12 @@
   {
    "g": "right",
    "sl": 1
+  }
+ ],
+ "tvAirTile": [
+  null,
+  {
+   "g": "center"
   }
  ],
  "tvAliPayTitle": [
@@ -35534,6 +35576,13 @@
    "sl": 1
   }
  ],
+ "tvNegative": [
+  null,
+  {
+   "g": "center",
+   "btn": 1
+  }
+ ],
  "tvNetworkStatus": [
   16.0,
   {
@@ -36117,6 +36166,13 @@
   {
    "fw": 1,
    "sl": 1
+  }
+ ],
+ "tvPositive": [
+  null,
+  {
+   "g": "center",
+   "btn": 1
   }
  ],
  "tvPostContent": [
@@ -38746,6 +38802,12 @@
    "sl": 1
   }
  ],
+ "tv_car_owner": [
+  null,
+  {
+   "mx": 1
+  }
+ ],
  "tv_car_owner_label": [
   null,
   {
@@ -39181,6 +39243,12 @@
   13.0,
   {
    "g": "center"
+  }
+ ],
+ "tv_content": [
+  null,
+  {
+   "mx": 1
   }
  ],
  "tv_content_1": [
@@ -40833,6 +40901,12 @@
    "sl": 1
   }
  ],
+ "tv_main_car_update": [
+  null,
+  {
+   "g": "center"
+  }
+ ],
  "tv_main_charge_kilometers": [
   null,
   {
@@ -41135,6 +41209,12 @@
    "sl": 1
   }
  ],
+ "tv_name": [
+  null,
+  {
+   "mx": 1
+  }
+ ],
  "tv_name_collection": [
   14.0,
   {
@@ -41249,6 +41329,12 @@
   14.0,
   {
    "sl": 1
+  }
+ ],
+ "tv_num": [
+  null,
+  {
+   "mx": 1
   }
  ],
  "tv_numberplate": [
@@ -42910,6 +42996,12 @@
    "sl": 1
   }
  ],
+ "tv_text": [
+  null,
+  {
+   "g": "center"
+  }
+ ],
  "tv_text_sticker": [
   12.0,
   {
@@ -43048,6 +43140,12 @@
   {
    "fw": 1,
    "sl": 1
+  }
+ ],
+ "tv_title": [
+  null,
+  {
+   "mx": 1
   }
  ],
  "tv_title1": [
@@ -44084,6 +44182,12 @@
   null,
   {
    "sl": 1
+  }
+ ],
+ "txt_title": [
+  null,
+  {
+   "g": "center"
   }
  ],
  "txt_toast_content": [
