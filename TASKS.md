@@ -84,9 +84,10 @@ dark_overlay=off).
       шторка Notifications висела открытой (Focus=NotificationShade), глотала
       все свайпы, 0 глубоких-пильтюль в captures, a11y отсутствовал на 10/10.
       Тем не менее **живой A/B-дедиф W4_A→W4_B: GEOMETRY (scroll-независимый
-      PILL-CHG) = 0 на 5 из 11 экранах (mashina_top/shop/notifications/
-      dialog_keyless/service_acc; там же nodes_moved=0) — прямой live-сигнал,
-      что v95 и v96 геометрически тождественны**. Остальные 6 экранов =
+      PILL-CHG) = 0 на 4 экранах (mashina_top/shop/notifications/
+      service_acc; там же nodes_moved=0) — прямой live-сигнал, что v95
+      и v96 геометрически тождественны**. dialog_keyless REMOVED (W4-B
+      не открыл диалог — шторка). Остальные 6 экранов =
       ENVIRONMENT (ротация live-контента explore + разные скролл-состояния
       двух деградировавших прогонов), не геометрия — классифицировано
       tools/golden_report.py. **Заключение: live-сигнал подтверждает офлайн-
