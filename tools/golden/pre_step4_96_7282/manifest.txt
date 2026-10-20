@@ -1,0 +1,13 @@
+run=pre_step4_96_7282 dev=127.0.0.1:42019 ts=2026-10-20T17:58:58Z
+overlay=versionName=2.10.44 mode=interactive
+screen=mashina_top pills=16 a11y=130 shot=631558
+screen=mashina_scroll pills=20 a11y=130 shot=634495
+screen=trip_info pills=13 a11y=74 shot=507418
+screen=dialog_keyless pills=4 a11y=13 shot=374485
+screen=service_deepal_grid pills=14 a11y=96 shot=622533
+screen=service_acc pills=17 a11y=93 shot=392444
+screen=my_tab pills=32 a11y=124 shot=284758
+screen=settings_car pills=18 a11y=64 shot=246175
+screen=notifications pills=11 a11y=44 shot=280642
+screen=explore pills=18 a11y=125 shot=1416417
+screen=shop pills=8 a11y=47 shot=293490
