@@ -194,6 +194,18 @@ dark_overlay=off).
    что п. 2); не повторяется: W4-данные-релиз несёт только строки профиля
    (sp/sl — единственное, что рантайм читает: zero-поведение, доказывается
    A/B golden-diff 0 hard).
+7. **После переподключения/перезагрузки телефона a11y-биндинг stale — лечится
+   переустановкой, а не force-stop/focus-циклом** (зафиксировано 10-20,
+   гибридный baseline): wireless ADB меняет порт, и после реконнекта сервис
+   оставался в Enabled (и даже Bound), но reconcile молчал (watchdog ходил,
+   pills.json не писался, лог пуст). force-stop + MainActivity + Splash НЕ
+   лечили. Лечила переустановка той же debug-сборки (`install -r -d -t`,
+   данные/consent сохраняются) — после неё liveness OK. Порядок такого
+   случая: `adb devices` заново (порт сменился!) → переустановка debug-APK →
+   `golden_interactive.sh start` (сам проверит run-as/translation/liveness).
+   НЕ ковырять `enabled_accessibility_services` toggle'ами: off→on одной
+   строки оставил сервис Enabled-but-not-Bound; строку править только
+   целиком (оба сервиса), как правило сессии.
 
 ## Сделано
 
