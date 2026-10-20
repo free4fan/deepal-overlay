@@ -71,9 +71,15 @@
 # on Pixel 9 Pro 960x2142 @360 (400px drag -> 412px content, no fling).
 #
 # Device rules inherited from capture_golden.sh: Deepal ONLY via
-# deepal.com.cn.app/.SplashActivity; NEVER force-stop com.walter.overlay (the
-# golden dump flag files/golden_capture is armd here via run-as, DEBUG builds
-# only — on a release install run-as is blocked and the dump is inert).
+# deepal.com.cn.app/.SplashActivity; NEVER force-stop com.walter.overlay
+# DURING the sweep (the golden dump flag files/golden_capture is armed here
+# via run-as, DEBUG builds only — on a release install run-as is blocked and
+# the dump is inert). One documented exception: the pre-run liveness healing
+# cycle (before any arm/capture) force-stops the overlay ONCE to force AMS to
+# rebind an accessibility service left unbound by a fresh reinstall; it is
+# gated by the LIVE flag (runs only if the probe is failing) and the probe
+# itself is the safety net — if healing doesn't restore reconciliation, the
+# run aborts before consuming the sweep.
 # =============================================================================
 set -uo pipefail
 A="$1"; APK="$2"; R="$3"; RID="$4"; VER="$5"
