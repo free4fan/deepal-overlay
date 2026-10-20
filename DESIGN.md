@@ -200,14 +200,13 @@ Java), прогнанная по baseline `pre_step4` в двух режимах
   ddx КАЖДОЙ single-line пилюли baseline (171 pills; wrap-пилюли
   — вне дерева, ddx=0 — проверено). 0 mismatches — проекция
   заслуживает доверия (это не «догадка», а порты кода).
-- **Cadre-(1) movers = 28**: 27 × `was-left → centered (INTENDED)` —
+- **Кадр (1): movers = 28**: 27 × `was-left → centered (INTENDED)` —
   профиль реально центрирует id, которые px-путь оставляла левыми
-  (`tab_text`×3, `tv1`×6, `tv_text`×7, `item_help_center_tv`×4,
-  `tv_entry_name`×4, `tvAirTile`, `tv_main_car_update`, `txt_title`,
-  `txt_content`-нет — см. ниже) + **1 известное расхождение**
-  `titleTv` (notifications): app держит header left-inset (C2, ddx=54),
-  профиль говорит center — остаётся на px-пути до (C1) релиза,
-  **не** блокирует кадры 2–4.
+  (`tv_text`×7, `tv1`×6, `item_help_center_tv`×4, `tv_entry_name`×4,
+   `tab_text`×3, `tvAirTile`, `tv_main_car_update`, `txt_title`)
+   + **1 известное расхождение** `titleTv` (notifications):
+   профиль говорит center — остаётся на px-пути до (C1) релиза, **не**
+   блокирует кадры 2–4.
 - **1 амбивалентная пилюля** (`my_tab` `txt_content`, est=816 vs pill 794)
   — single-vs-wrapped offline неразрешимо; но по guard кадра (1)
   `width > est` она НЕ может сдвинуться (794 < 816) → скрытых 29-х
