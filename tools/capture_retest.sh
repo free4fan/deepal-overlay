@@ -44,6 +44,31 @@
 # golden capture needed); this script is the live retest that backs a geometry
 # release or a pre-step-4 clean baseline.
 #
+# STATUS: v3.2 (10-20, W4-C finding — the user watched the live run):
+#   W4-A/B/C all degraded NOT (only) from the notification shade but from two
+#   SILENT driver bugs that made every POSITION read blind, so anchor/to_top
+#   never converged and the whole sweep ran blind:
+#   (e) BUG1 stdin: cy_of()/pill_c() piped readpills INTO `python3 - args
+#       <<'PY' ... PY` — an explicit heredoc redirect OVERRIDES the pipe, so
+#       python read its own source on stdin, json.load got EOF, and every
+#       position read returned empty. Fixed: data on the pipe (true stdin),
+#       code via -c.
+#   (f) BUG2 direction: anchor()'s off-screen fallback dragged DOWN (reveal
+#       above) but all 11 canonical screens start at the TOP, so the target
+#       is BELOW — now drags UP (drag +500 = reveal below). This is exactly
+#       what the user reported: "tries to scroll top->bottom, nothing moves;
+#       it should go bottom->top".
+#   (g) BUG3 a11y validator quote: the regex captured the resource-id value
+#       INCLUDING the closing quote ('title"' != 'title') -> id-overlap was
+#       mathematically ALWAYS 0 -> every valid deepal tree was dropped as
+#       "stale" (a11y=0 on all 11 screens of EVERY run, shade or no shade).
+#       Fixed the capture group; a dropped dump is now kept as
+#       a11y.rejected.attN.xml (not deleted) so we can see what was dropped.
+#   Regression gate: tools/test_driver_units.sh (NO device) extracts the
+#   shipped functions verbatim and tests them on the W4-C fixtures: cy_of/
+#   pill_c read the right values, the anchor fallback drags UP, the validator
+#   KEEPS a full deepal tree + the real shop tree and REJECTS a foreign shade.
+#
 # STATUS: v3 (10-20) — fixes the three concrete root-causes found in the
 # W4-A (10-19) and W4-B (10-20) degraded runs, where the NotificationShade
 # held focus and absorbed every gesture:
@@ -101,25 +126,33 @@ readpills() { # -> stdout json; "" on failure
   done
   printf ''
 }
+# BUGFIX v3.2 (W4-C finding, user-observed): the previous version piped
+# readpills INTO `python3 - args <<'PY' ... PY` — an explicit heredoc
+# redirection OVERRIDES the pipe, so python's stdin was its own source text,
+# not the JSON: json.load got EOF and EVERY position read returned empty.
+# That is why all anchors/to_top/sentinels were blind and the fallback
+# scrolled the wrong way (the screen is at top, the target is BELOW —
+# "drag up to bring content down" = finger UP, not down). The script must be
+# in -c (single-quoted), the data in the pipe is then truly stdin.
 cy_of() { # $1=id $2=text-prefix -> int cy or ""
-  readpills | python3 - "$1" "$2" <<'PY'
+  readpills | python3 -c '
 import json,sys
 try: d=json.load(sys.stdin)
 except: sys.exit()
 for p in d:
-    if p.get('id')==sys.argv[1] and p.get('text','').startswith(sys.argv[2]):
-        n=p['node']; print(int((n[1]+n[3])/2)); sys.exit()
-PY
+    if p.get("id")==sys.argv[1] and p.get("text","").startswith(sys.argv[2]):
+        n=p["node"]; print(int((n[1]+n[3])/2)); sys.exit()
+' "$1" "$2"
 }
 pill_c() { # $1=id $2=exact text -> "cx cy" or ""
-  readpills | python3 - "$1" "$2" <<'PY'
+  readpills | python3 -c '
 import json,sys
 try: d=json.load(sys.stdin)
 except: sys.exit()
 for p in d:
-    if p.get('id')==sys.argv[1] and p.get('text','')==sys.argv[2]:
-        x,y,w,h=p['pill']; print(int(x+w/2), int(y+h/2)); sys.exit()
-PY
+    if p.get("id")==sys.argv[1] and p.get("text","")==sys.argv[2]:
+        x,y,w,h=p["pill"]; print(int(x+w/2), int(y+h/2)); sys.exit()
+' "$1" "$2"
 }
 # ---- scroll: slow 1:1 drags, measured 412px==412px; scale-up for micro-residual
 drag() { # $1=dy(+) up-content(+/reveal-below)=finger up, (-)=finger down
@@ -142,17 +175,22 @@ anchor() { # $1=id $2=text-prefix $3=tgt_cy $4=tol($default 10)
   for i in $(seq 1 24); do
     cy=$(cy_of "$id" "$tp")
     if [ -z "$cy" ]; then
-      # off-screen (above current) — reveal content downward. Guard against the
-      # W4 failure: if Deepal isn't ownable at all, dragging forever is useless —
-      # say so and stop after 3 such iterations.
+      # off-screen. The 11-screen list always starts at the TOP and anchor
+      # targets sit BELOW (we only scroll forward/deeper). "Reveal below"
+      # = finger moves UP. BUGFIX v3.2, observed live by the user in W4-C:
+      # the old `drag -500` pulled the finger DOWN to reveal ABOVE — at the
+      # top-reached position that moves nothing ("tries to scroll top-to-
+      # bottom, nothing scrolls; it should go bottom-to-top"). Guard against
+      # the W4 failure: if Deepal isn't ownable at all, dragging forever is
+      # useless — say so and stop after 3 such iterations.
       if ! focus_ok; then
         if [ "$i" -ge 3 ]; then
           echo "    anchor $id@$tp ABORTED: deepal window not usable (focus=$(focus_line | grep -o 'Window{[^}]*}') after $i reads)"
           return 1
         fi
-        ensure_main; drag -500; continue
+        ensure_main; drag 500; continue
       fi
-      drag -500; continue
+      drag 500; continue
     fi
     d=$((tgt - cy))
     if [ "${d#-}" -le $tol ]; then echo "    anchor $id@$tp cy=$cy≈$tgt OK (iter $i)"; return 0; fi
@@ -296,18 +334,27 @@ a11y_one() {
       sleep 2; continue
     fi
     timeout 15 adb -s "$A" pull /sdcard/_g.xml "$R/$s/a11y.xml" >/dev/null 2>&1
+    # BUGFIX v3.2 (W4-C finding): the previous regex captured the resource-id
+    # value INCLUDING the closing quote, and rsplit('/',1)[-1] kept it — so a
+    # dump id like 'title"' could never equal a pill id 'title', and overlap was
+    # mathematically ALWAYS 0. Every valid deepal tree was classified "stale" and
+    # deleted (that is why a11y=0 in ALL of W4-A/W4-B/W4-C, shade or no shade).
+    # Capture the value without quotes instead.
     if python3 - "$R/$s/a11y.xml" "$R/$s/pills.json" <<'PY' >/dev/null 2>&1
 import json,re,sys
 raw=open(sys.argv[1],encoding='utf-8',errors='replace').read()
 pills=json.load(open(sys.argv[2],encoding='utf-8'))
-ids={i.rsplit('/',1)[-1] for i in re.findall(r'resource-id="deepal[^"]*"',raw)}
+ids={i.rsplit('/',1)[-1] for i in re.findall(r'resource-id="(deepal[^"]*)"',raw)}
 p=[e.get('id','') for e in pills if e.get('id')]
 sys.exit(0 if (not p or sum(1 for q in p if q in ids)/len(p)>=0.6) else 1)
 PY
     then echo "    a11y kept (att $att)"; return 0
     else
-      echo "    a11y dropped(stale) att $att (foreign tree — e.g. shade)"
-      rm -f "$R/$s/a11y.xml"; ensure_main; sleep 2
+      echo "    a11y dropped(stale) att $att (tree/pills id-overlap < 0.6)"
+      # keep the evidence instead of deleting it (W4-C: 33 deletes meant we
+      # could not see WHAT was dropped):
+      mv -f "$R/$s/a11y.xml" "$R/$s/a11y.rejected.att$att.xml" 2>/dev/null || true
+      ensure_main; sleep 2
     fi
   done
   rm -f "$R/$s/a11y.xml"
