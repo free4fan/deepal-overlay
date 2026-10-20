@@ -80,6 +80,22 @@ dark_overlay=off).
       <base.json> <new.json>` — exit 0 = релиз поведение не меняет, exit 1 =
       меняет рантайм (проверено: на этой паре exit 0, на намеренно-неверной — 1).
       Живой W4-A (code 95) снят и сохранён как отчёт о деградации драйвера v1;
+      **W4-B (code 96, 10-20) снят тем же инструментом — деградирует ИДЕНТИЧНО**:
+      шторка Notifications висела открытой (Focus=NotificationShade), глотала
+      все свайпы, 0 глубоких-пильтюль в captures, a11y отсутствовал на 10/10.
+      Тем не менее **живой A/B-дедиф W4_A→W4_B: GEOMETRY (scroll-независимый
+      PILL-CHG) = 0 на 5 из 11 экранах (mashina_top/shop/notifications/
+      dialog_keyless/service_acc; там же nodes_moved=0) — прямой live-сигнал,
+      что v95 и v96 геометрически тождественны**. Остальные 6 экранов =
+      ENVIRONMENT (ротация live-контента explore + разные скролл-состояния
+      двух деградировавших прогонов), не геометрия — классифицировано
+      tools/golden_report.py. **Заключение: live-сигнал подтверждает офлайн-
+      доказательство; данных-релизу clean-capture не требуется.**
+      Root-cause driver (зафиксирован, правка capture_retest.sh отложена на
+      свободное окно): (а) Focus=NotificationShade — свайпы глотаются шторкой;
+      драйвер обязан свернуть шторку ПОТЯЖКАЯ каждого drag; (б) to_top
+      sentinel «never stable» — при App в фоне dumpsys не отдаёт дерево;
+      (в) a11y 11/11 stale — uiautomator дампил дерево шторки.
       v2-драйвер (`tools/capture_retest.sh`) готов с фиксами: focus-assert
       (gallery/shade/launcher → force-stop+relaunch), readpills-ретрай на 700мс-
       гонку app-dump'а, медленный 1:1-драг x=150 (измерено 412px==412px без fling),
