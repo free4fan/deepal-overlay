@@ -44,10 +44,31 @@
 # golden capture needed); this script is the live retest that backs a geometry
 # release or a pre-step-4 clean baseline.
 #
-# STATUS: v2, assembled from interactive 10-19 debugging
-# (focus/read-race/scroll hard-top/sub-screen all measured live on Pixel 9 Pro
-# 960x2142 @360). The full 11-screen autonomous run is the next step once the
-# device is reconnected; it is expected to supersede the manual W4 runs.
+# STATUS: v3 (10-20) — fixes the three concrete root-causes found in the
+# W4-A (10-19) and W4-B (10-20) degraded runs, where the NotificationShade
+# held focus and absorbed every gesture:
+#   (a) shade_ensure_closed() — closes the notification shade/lock via
+#       KEYCODE_BACK (which reaches the shade, not Deepal) and is wired into
+#       drag() (the single chokepoint for every scroll gesture) and
+#       a11y_one() (each dump retry); the W4 runs only re-checked focus at
+#       grab time, so a shade that opened mid-run ate the entire scroll loop.
+#   (b) focus_ok() / anchor() / to_top() — a read that comes up empty now
+#       distinguishes "off-screen" (drag) from "window not usable" (focus
+#       can't be established -> ensure_main, then ABORT after 3 strikes
+#       instead of burning 24 loops at nothing; W4-B sat in the empty-read
+#       loop for all 10 screens).
+#   (c) a11y_one() gets the shade-close + 3 attempts (was a single attempt),
+#       so a one-off wrong-tree dump recovers instead of shipping a11y ABSENT.
+#   (d) liveness probe at boot: arm the golden flag over the Mashina screen
+#       and wait for a real pills.json write before committing to the 20-min
+#       run. On failure it HEALS the W4-B precondition (fresh reinstall left
+#       the accessibility service UNBOUND, Binding services: {}) with a
+#       force-stop -> overlay -> Deepal focus-shift cycle, and still fails
+#       fast (exit 4) with the precise cause: unbound service vs RELEASE
+#       build (run-as blocked -> the probe is the only way to know run-as
+#       died, since adbrw just returns empty).
+# v2 (10-19): focus/read-race/scroll hard-top/sub-screen, all measured live
+# on Pixel 9 Pro 960x2142 @360 (400px drag -> 412px content, no fling).
 #
 # Device rules inherited from capture_golden.sh: Deepal ONLY via
 # deepal.com.cn.app/.SplashActivity; NEVER force-stop com.walter.overlay (the
@@ -97,6 +118,9 @@ PY
 # ---- scroll: slow 1:1 drags, measured 412px==412px; scale-up for micro-residual
 drag() { # $1=dy(+) up-content(+/reveal-below)=finger up, (-)=finger down
   local dy=$1
+  # shade at the top EATS the swipe (W4-A/W4-B root cause): the single
+  # chokepoint for every scroll gesture, so close it right before each one.
+  shade_ensure_closed >/dev/null 2>&1
   if [ "$dy" -ge 0 ]; then
     timeout 20 adb -s "$A" shell input swipe $S 1150 $S $((1150-dy)) 700 >/dev/null 2>&1
   else
@@ -112,7 +136,16 @@ anchor() { # $1=id $2=text-prefix $3=tgt_cy $4=tol($default 10)
   for i in $(seq 1 24); do
     cy=$(cy_of "$id" "$tp")
     if [ -z "$cy" ]; then
-      # off-screen (above current) — reveal content downward
+      # off-screen (above current) — reveal content downward. Guard against the
+      # W4 failure: if Deepal isn't ownable at all, dragging forever is useless —
+      # say so and stop after 3 such iterations.
+      if ! focus_ok; then
+        if [ "$i" -ge 3 ]; then
+          echo "    anchor $id@$tp ABORTED: deepal window not usable (focus=$(focus_line | grep -o 'Window{[^}]*}') after $i reads)"
+          return 1
+        fi
+        ensure_main; drag -500; continue
+      fi
       drag -500; continue
     fi
     d=$((tgt - cy))
@@ -130,7 +163,7 @@ anchor() { # $1=id $2=text-prefix $3=tgt_cy $4=tol($default 10)
 }
 # hard top: repeated down-drags until the sentinel cy stops changing
 to_top() { # $1=sentinel-id $2=sentinel-prefix ; stop when sentinel==top value twice
-  local sid="$1" stp="$2" i cur prev="" same=0
+  local sid="$1" stp="$2" i cur prev="" same=0 bad=0
   for i in $(seq 1 16); do
     drag -620
     cur=$(cy_of "$sid" "$stp")
@@ -138,6 +171,16 @@ to_top() { # $1=sentinel-id $2=sentinel-prefix ; stop when sentinel==top value t
       if [ "$cur" = "$prev" ]; then same=$((same+1)); else same=0; fi
       [ "$same" -ge 2 ] && { echo "    to_top done (sentinel $sid@$stp cy=$cur stable, iter $i)"; return 0; }
       prev="$cur"
+    else
+      # W4-B mode: window not usable -> the sentinel can never be read
+      if ! focus_ok; then
+        bad=$((bad+1))
+        ensure_main
+        if [ "$bad" -ge 3 ]; then
+          echo "    to_top ABORTED: deepal window not usable (focus=$(focus_line | grep -o 'Window{[^}]*}')) after $i drags"
+          return 1
+        fi
+      fi
     fi
   done
   echo "    to_top: sentinel never stable (last cur=${cur:-?}) — continuing at best effort"
@@ -146,9 +189,43 @@ to_top() { # $1=sentinel-id $2=sentinel-prefix ; stop when sentinel==top value t
 
 focus_line() { timeout 12 adb -s "$A" shell dumpsys window 2>/dev/null | grep -m1 mCurrentFocus; }
 in_deepal_main() { focus_line | grep -q 'deepal.com.cn.app' && focus_line | grep -q 'main.MainActivity'; }
+# True only when Deepal Main is focused AND the window tree actually yields the
+# app's nodes (an empty/degraded dumpsys — the W4-B "sentinel never stable"
+# case — fails this even if the focus text looks right).
+focus_ok() {
+  focus_line | grep -q 'deepal.com.cn.app' \
+    && timeout 15 adb -s "$A" shell dumpsys window windows 2>/dev/null \
+         | grep -q 'deepal.com.cn.app.main.MainActivity'
+}
+# Close the notification shade / quick-settings / lockscreen if it sits on top
+# (Focus=NotificationShade ABSORBS every input swipe — the W4-A/W4-B root cause,
+# 10-19/10-20: the driver dragged the page for nothing, anchors never saw any
+# content move, and uiautomator dumped the shade's tree). KEYCODE_BACK while
+# the shade owns focus closes the shade, not the app. Patterns are kept NARROW
+# (only the observed systemui/lock tokens) so a BACK is never fired for an
+# app window (which would pop a dialog / sub-screen).
+shade_ensure_closed() {
+  local f; f=$(focus_line)
+  case "$f" in
+    *NotificationShade*|*Keyguard*|*lockscreen*|*LockScreen*|*com.android.keyguard*)
+      timeout 10 adb -s "$A" shell input keyevent KEYCODE_BACK >/dev/null 2>&1
+      sleep 0.8
+      f=$(focus_line)
+      case "$f" in
+        *NotificationShade*|*Keyguard*|*lockscreen*|*com.android.keyguard*)
+          echo "    [shade] still open — wake + BACK again"
+          wake
+          timeout 10 adb -s "$A" shell input keyevent KEYCODE_BACK >/dev/null 2>&1
+          sleep 0.8;;
+      esac
+      return 0;;
+  esac
+  return 0
+}
 # force Deepal back to Main from any state (sub-screen / launcher / shade / viewer)
 ensure_main() {
   local i
+  shade_ensure_closed
   for i in 1 2 3; do
     local f; f=$(focus_line)
     case "$f" in
@@ -156,7 +233,7 @@ ensure_main() {
       *com.simplemobiletools.gallery*|*gallery*)
         echo "    [focus] gallery open — force-stop"; adb -s "$A" shell am force-stop com.simplemobiletools.gallery.pro >/dev/null 2>&1
         break;;
-      *NotificationShade*|*StatusB*|*Keyguard*|*lockscreen*)
+      *NotificationShade*|*Keyguard*|*lockscreen*)
         echo "    [focus] shade/lock in focus — dismiss"; wake
         break;;
       *) break;;
@@ -194,14 +271,20 @@ grab_sub() { # like grab() but WITHOUT ensure_main (sub-screens: BACK would exit
   echo "  [$s] pills=$n a11y=$a$tag"
 }
 a11y_one() {
-  local s="$1"
-  timeout 12 adb -s "$A" shell "am force-stop com.android.uiautomator.stub; am force-stop com.android.uiautomator.core" >/dev/null 2>&1
-  sleep 1
-  timeout 12 adb -s "$A" shell rm -f /sdcard/_g.xml >/dev/null 2>&1
-  local msg; msg=$(timeout 25 adb -s "$A" shell uiautomator dump /sdcard/_g.xml 2>&1 | tail -1)
-  if echo "$msg" | grep -q "UI hierchary dumped"; then
+  local s="$1" att msg
+  for att in 1 2 3; do
+    shade_ensure_closed
+    wake
+    timeout 12 adb -s "$A" shell "am force-stop com.android.uiautomator.stub; am force-stop com.android.uiautomator.core" >/dev/null 2>&1
+    sleep 1
+    timeout 12 adb -s "$A" shell rm -f /sdcard/_g.xml >/dev/null 2>&1
+    msg=$(timeout 25 adb -s "$A" shell uiautomator dump /sdcard/_g.xml 2>&1 | tail -1)
+    if ! echo "$msg" | grep -q "UI hierchary dumped"; then
+      echo "    a11y skip (busy, att $att) — pills cover"
+      sleep 2; continue
+    fi
     timeout 15 adb -s "$A" pull /sdcard/_g.xml "$R/$s/a11y.xml" >/dev/null 2>&1
-    python3 - "$R/$s/a11y.xml" "$R/$s/pills.json" <<'PY' >/dev/null 2>&1 && echo "    a11y kept" || { echo "    a11y dropped(stale)"; rm -f "$R/$s/a11y.xml"; }
+    if python3 - "$R/$s/a11y.xml" "$R/$s/pills.json" <<'PY' >/dev/null 2>&1
 import json,re,sys
 raw=open(sys.argv[1],encoding='utf-8',errors='replace').read()
 pills=json.load(open(sys.argv[2],encoding='utf-8'))
@@ -209,7 +292,14 @@ ids={i.rsplit('/',1)[-1] for i in re.findall(r'resource-id="deepal[^"]*"',raw)}
 p=[e.get('id','') for e in pills if e.get('id')]
 sys.exit(0 if (not p or sum(1 for q in p if q in ids)/len(p)>=0.6) else 1)
 PY
-  else echo "    a11y skip (busy) — pills cover"; rm -f "$R/$s/a11y.xml"; fi
+    then echo "    a11y kept (att $att)"; return 0
+    else
+      echo "    a11y dropped(stale) att $att (foreign tree — e.g. shade)"
+      rm -f "$R/$s/a11y.xml"; ensure_main; sleep 2
+    fi
+  done
+  rm -f "$R/$s/a11y.xml"
+  return 0
 }
 grab() {
   local s="$1" ci="${2:-}" ct="${3:-}"
@@ -243,12 +333,67 @@ INVER=$(timeout 15 adb -s "$A" shell dumpsys package com.walter.overlay 2>/dev/n
 echo "device: $INVER"
 [ "$INVER" = "$VER" ] || { echo "  !! FATAL: version mismatch, aborting"; exit 2; }
 sleep 3
+# run-as capability first: on a RELEASE install run-as is blocked and every
+# adbrw call returns empty — surface that here (not as a confusing "pref OFF").
+if ! timeout 8 adb -s "$A" shell "run-as com.walter.overlay id" >/dev/null 2>&1; then
+  echo "  !! FATAL: run-as com.walter.overlay is blocked — this is a RELEASE"
+  echo "      install (or not debuggable). The golden dump needs the DEBUG"
+  echo "      build: pass /tmp/opencode/dbgB.apk (same version, debuggable)."
+  exit 4
+fi
 EN=$(adbrw "cat shared_prefs/deepal.xml" 2>/dev/null | grep -o 'translation_enabled[^\n]*')
 echo "prefs: $EN"
-grep -q 'value="true"' <<<"$EN" || { echo "  !! translation_enabled OFF — stopping (turn it ON in device UI)"; exit 3; }
+grep -q 'value="true"' <<<"$EN" || { echo "  !! translation_enabled OFF — stopping (open the overlay app to reactivate)"; exit 3; }
 # Mashina tab
 ensure_main
 readpills | grep -q "Моя машина" 2>/dev/null || { timeout 12 adb -s "$A" shell input tap 480 2052; sleep 4; }
+# LIVENESS PROBE: prove the service is actually reconciling (writes pills.json
+# while armed) BEFORE spending 20 min on 11 screens. A release/unbound install
+# silently returns nothing and would otherwise burn the whole run (W4-B lesson).
+# Placed over a live Mashina screen so the next reconcile has fresh CJK nodes
+# to translate -> guaranteed dump.
+echo "liveness probe: arm + wait for pills.json write over Mashina..."
+adbrw "rm -f files/pills.json files/golden_capture" >/dev/null 2>&1
+adbrw "touch files/golden_capture" >/dev/null 2>&1
+LIVE=0
+HEALED=0
+for k in $(seq 1 12); do
+  sleep 1.5
+  if adbrw "cat files/pills.json" 2>/dev/null | grep -q '"id"'; then LIVE=1; break; fi
+  if [ "$HEALED" = "0" ] && [ "$k" -ge 5 ]; then
+    # Mid-probe heal: a FRESH REINSTALL leaves the accessibility service
+    # UNBOUND (Binding services:{}). Focus changes make AMS re-evaluate the
+    # enabled list -> open the overlay (reactivate + process start), then back
+    # to Deepal; each focus shift is a rebind trigger.
+    HEALED=1
+    echo "  probe heal: focus-shift cycle (overlay -> Deepal)"
+    timeout 15 adb -s "$A" shell am force-stop com.walter.overlay >/dev/null 2>&1
+    sleep 1
+    timeout 15 adb -s "$A" shell am start -n com.walter.overlay/.MainActivity >/dev/null 2>&1
+    sleep 3
+    timeout 25 adb -s "$A" shell am start -n deepal.com.cn.app/.SplashActivity >/dev/null 2>&1
+    sleep 3
+    continue
+  fi
+  # nudge a reconcile: tap the same tab (cheap, no navigation)
+  timeout 12 adb -s "$A" shell input tap 480 2052 >/dev/null 2>&1
+done
+adbrw "rm -f files/golden_capture files/pills.json" >/dev/null 2>&1
+if [ "$LIVE" != "1" ]; then
+  # run-as is BLOCKED on a release install -> adbrw always empty -> this probe
+  # fires. Say the cause plainly so it isn't chased as "unbound service".
+  if timeout 8 adb -s "$A" shell "run-as com.walter.overlay id" >/dev/null 2>&1; then
+    echo "  !! FATAL: service not reconciling (no pills.json while armed)."
+    echo "      Reinstall left the accessibility service unbound — re-enable in"
+    echo "      Settings > Accessibility, or force-stop com.walter.overlay and reopen."
+  else
+    echo "  !! FATAL: run-as is blocked — this is a RELEASE install (or not debuggable)."
+    echo "      The golden dump needs the DEBUG build: pass /tmp/opencode/dbgB.apk"
+    echo "      (same version, debuggable) instead of the release ship APK."
+  fi
+  exit 4
+fi
+echo "liveness OK (service is reconciling)"
 adbrw "touch files/golden_capture" >/dev/null 2>&1
 sleep 2
 ensure_main
