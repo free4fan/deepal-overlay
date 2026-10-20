@@ -151,13 +151,20 @@ dark_overlay=off).
       артефактах W4_C: cy_of=235, pill_c центральные px, anchor-фолбэк =
       DRAG 500 (поп. знаки), валидатор KEEP full-overlap + KEEP настоящий
       shop-дамп/шоп Pills + REJECT чужое systemui-дерево).
-   - **Осталось**: (1) чистый 11-экранный baseline `tools/capture_retest.sh`
-     на DEBUG `/tmp/opencode/dbgB.apk` (96/7282/2.10.44, md5
-     5b7b927ae03f841c041245fecdb2aad0) → это же pre-шаг-4 baseline;
-     **устройство сейчас на debug** (переустановка для golden-dump), после
-     прогона вернуть release `/tmp/opencode/ship96.apk` (md5
-     1f8f02ec8d5a8cfaccc4cb6b0bc97eb0, тот же debug-ключ — перепроверено
-     apksigner'ом, апдейт в обе стороны свободно); (2) шаг 4
+   - **СДЕЛАНО 10-20 (гибрид)**: (1) чистый 11-экранный baseline снят
+     **гибридным** драйвером `tools/golden_interactive.sh` (пользователь
+     вёл навигацию, скрипт — только read-only-снимки pills/a11y/overlays/
+     screenshot; единственный возможный input — KEYCODE_WAKEUP при гаснущем
+     экране) → `tools/golden/pre_step4_96_7282/` (committer c07535f-first
+     10-20, 45 файлов): 11/11 экранов с валидными pills.json И a11y,
+     прошедшим цитат-фикс-валидатор (0 rejected — впервые за историю
+     проекта). Авто-драйвер (capture_retest v3.2) оставлен для будущих
+     full-A/B; v3.2 зафиксировал 3 тихих бага, пойманных live (stdin-
+     heredoc, направление fallback-скролла, кавычка в a11y-regex) + офлайн-
+     регресс-гейт tools/test_driver_units.sh (без телефона). release
+     `/tmp/opencode/ship96.apk` (md5 1f8f02ec8d5a8cfaccc4cb6b0bc97eb0)
+     возвращён на устройство (install -r -d -t, тот же debug-ключ).
+     (2) шаг 4
      (layoutFromProfile; удаление (A)/(B)/(D) по одному релизу с diff'ом;
      (C1)/tvTopTitle — отдельный релиз).
 
