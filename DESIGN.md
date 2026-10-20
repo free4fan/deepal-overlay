@@ -154,10 +154,11 @@ baseline.
 ### Контракт (жёсткий, из ревью)
 - **Профиль > px** для id с определённым флагом; px-гейты — fallback для id
   без флага. Точка входа одна: `enum AlignSource { PROFILE_CENTER,
-  PROFILE_START, PROFILE_BTN, MIXED, CONFLICT, NONE }` + `alignFor(viewId)`
-  в `InlineOverlayManager`.
-  - `MIXED` (mx=1) и `CONFLICT` → оба профильных флага игнорируются,
-    px-fallback. Это долг уровня `decompile_ids.py` (см. аудит ниже).
+  PROFILE_START, PROFILE_BTN, MIXED, NONE }` + `alignFor(viewId)` в
+  `InlineOverlayManager` (реализован как чистый `ProfileAlign`, 5d7ef0e).
+  - `MIXED` — и mx=1, И конфликты флагов (sl+g; g+p для non-btn id):
+    оба профильных флага игнорируются, px-fallback. Это долг уровня
+    `decompile_ids.py` (см. аудит ниже).
   - `PROFILE_BTN` (btn=1) → отдельная семантика гейта (F) (hug-stadium),
     НЕ схлопывается в простое центрирование (иначе регресс v2.10.43).
 - **Кадры**: (0) аудит+классификация — без поведения; (1) `layoutFromProfile`
@@ -173,24 +174,42 @@ baseline.
 - **Окна с телефоном**: одно — кадр (1); дальше по одному 5–10-минутному
   окна на (A)/(B)/(D), после каждого кадра release возвращается на устройство.
 
-### Кадры (0)+аудит профиля — РЕЗУЛЬТАТ (10-20)
-`tools/audit_profile_conflicts.py --json`:
-- `sl ∩ g:center` = **0** (самый чистый левый-центральный конфликт отсутствует).
+### Аудит — РЕЗУЛЬТАТ (10-20/21, кадры 0)
+`tools/audit_profile_conflicts.py --json` + JVM self-test `bash tools/test_profile_align.sh`
+(7282 id, verdict 1-в-1 с Java `ProfileAlign`: 7281/7281 agree — PASS):
+- `sl ∩ g:center` = **0** (чистый левый-центральный конфликт отсутствует).
 - `g:center ∩ p:<dp>` = **43 id** — center + явный left-inset одновременно:
-  это **center-vs-inset** расхождение; правило — CONFLICT→px-fallback, долг
-  чинится в `decompile_ids.py` (какой из фактов layout'а верен решается по
-  observed pill↔node). Среди них: `tvTopTitle` (п=20dp, уже известно как
-  расхождение, НЕ трогаем в шаге 4), `tvBigTitle`, `tvBack`, `tvBill`,
-  `tv_no_data` (p=50) и другие.
+  **center-vs-inset** расхождение; правило — MIXED→px-fallback, долг чинится
+  в `decompile_ids.py` (какой из фактов layout'а верен решается по observed
+  pill↔node). Среди них: `tvTopTitle` (p=20dp, уже известно как расхождение,
+  НЕ трогаем в шаге 4), `tvBigTitle`, `exitBtn`, `tv_bill`, `tv_no_data`
+  (p=50) и другие. **Срок закрытия долга — до удаления гейта, который
+  покрывает данный id, на конкретном экране** (см. ниже).
 - `g ∩ mx` = 0; `btn ∩ {sl,p,mx}` = 0 (2 btn-id несут g:center по
-  конструкциям c3 — не конфликт).
+  конструкции c3 — не конфликт; btn исключён из g+p правила).
 - Распределение вердиктов: PROFILE-START 6626, PROFILE-CENTER 600,
-  CONFLICT→fallback 43, MIXED→fallback 7 (mx-id из c3), BTN 2, NONE 3.
-- Следствие для кадра (2): любой toolbar-title id, попавший в 43 CONFLICT,
-  **не** закрывается профилем — (A) с ним НЕ удаляется; список «кто
-  закрывает (A) профилем» вычисляется из этого audit'а (все id с
-  г=center, ИДНЕ CONFLICT, И которые проходят px-условия (A) на baseline-
-  экранах).
+  MIXED(conflict)→fallback 43, MIXED(mx)→fallback 7 (mx-id из c3),
+  BTN 2, NONE 3. (43+7 = 50 MIXED в classifier.)
+
+**layout-аудит кадра (1) оффлайн** (`tools/step4_layout_audit.py`, один
+зеркальный прогон `computeLayout` по baseline `pre_step4_96_7282`):
+- Все **171** baseline pills атрибутированы px-путём, **0 unexplained** —
+  зеркало согласуется с наблюдаемым px-рантаймом (self-test зеркала).
+- **Cadre-(1) movers = 44**: 43 × `was-left → centered (INTENDED)` —
+  профиль реально центрирует id, которые px-гейты оставляли левыми
+  (`tab_text`/`tv1`/`tv_text`/`tv_entry_name`/`item_help_center_tv`/
+  `tvAirTile`/`txt_title`/`tv_main_car_update`) + **1 известное расхождение**
+  `titleTv` (notifications): app держит header left-inset (C2, ddx=54),
+  профиль говорит center — остаётся на px-пути до (C1) релиза, **не**
+  блокирует кадры 2–4.
+- **Критично для кадров 2/3/4**: гейты **(A), (B), (D) размещают 0 pills**
+  на 11 канонических экранах baseline. Т.е. их удаление доказывается
+  **пустым diff** (ни один pill не помещается под их px-условия, которые
+  перекрывались бы профилем ИДНЕ-MIXED). Это снимает вопрос «кто
+  закрывает (A) профилем»: **никто из 11 экранов не требует** — удаление
+  (A)/(B)/(D) безопасно на canonical set, и их отсутствие в baseline
+  = допустимое обоснование (долг декомпилии по toolbar-titles остаётся
+  в 43 CONFLICT, но ни один из них не попадает в baseline-экраны под (A)).
 
 ### Known deviations
 
