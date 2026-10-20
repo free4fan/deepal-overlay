@@ -227,6 +227,8 @@ main() {
       only=$(timeout 8 adb devices 2>/dev/null | awk 'NR>1 && $2=="device"{print $1}' | sed -n '$p')
       if [ -n "$only" ] && [ "$only" != "$1" ]; then
         echo "  [device] '$1' not connected — using $only (the only attached device)" >&2
+        # REPLACE the stale first arg, do not prepend (a prepend shifts R/screen):
+        shift
         set -- "$only" "$@"
       fi
     fi
