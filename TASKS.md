@@ -94,25 +94,39 @@ dark_overlay=off).
       странице), не геометрия — классифицировано
       tools/golden_report.py. **Заключение: live-сигнал подтверждает офлайн-
       доказательство; данных-релизу clean-capture не требуется.**
-      Root-cause driver (зафиксирован, правка capture_retest.sh отложена на
-      свободное окно): (а) Focus=NotificationShade — свайпы глотаются шторкой;
-      драйвер обязан свернуть шторку ПОТЯЖКАЯ каждого drag; (б) to_top
-      sentinel «never stable» — при App в фоне dumpsys не отдаёт дерево;
-      (в) a11y 11/11 stale — uiautomator дампил дерево шторки.
-      v2-драйвер (`tools/capture_retest.sh`) готов с фиксами: focus-assert
-      (gallery/shade/launcher → force-stop+relaunch), readpills-ретрай на 700мс-
-      гонку app-dump'а, медленный 1:1-драг x=150 (измерено 412px==412px без fling),
-      hard-top по sentinel, grab_sub для под-экранов (settings/notifications без
-      ensure_main).
+      Root-cause driver зафиксирован 10-19 → **починен 10-20 (v3 = 717654d,
+      v3.1 = 31ccb63, `tools/capture_retest.sh`)**: (а) `shade_ensure_closed()`
+      (BACK доходит до шторки; узоры сужены до NotificationShade/keyguard,
+      чтобы BACK не падал в app-окно) вшита в `drag()` — единственную точку
+      всех скролл-жестов — и в `a11y_one()` (W4 сверял фокус только при grab'е:
+      шторка, открывшаяся в середине, съедала весь цикл); (б) `focus_ok()`
+      (фокус И дерево содержит activity) — пустые чтения различают «вне
+      экрана» (drag) / «окно негодно» (ensure_main → ABORT после 3 страйков с
+      печатью focus вместо 24/16 слепых итераций); (в) a11y: shade-close +
+      3 попытки вместо одной (разовый негодный дамп восстанавливается).
+      Liveness-проба на старте: arm над живым Mashina + ожидание реальной
+      записи pills.json, self-heal (force-stop overlay → MainActivity → Deepal
+      = AMS-rebind), FATAL exit 4 с точной причиной (RELEASE: run-as blocked /
+      сервис unbound) вместо тихих 20 минут. v3.1: SplashActivity в
+      ensure_main — ждать, не BACK (BACK по Splash отменяет transition —
+      5 relaunch-циклов на W4-C-буте); screen_off_timeout — restore trap'ом на
+      каждом выходе (FATAL-путь застрягивал на 30 мин).
       **Коммиты: 3 (не 2 — по разбору)**: C1 capture-фикс
       (`tools/capture_golden.sh`); C2 аудит-инфраструктура (`tools/diff_golden.py`
       + test + golden_report + noderect_match, `DESIGN.md`); C3 данные-релиз
       (`view_profiles.json` 7265→7282, `build.gradle` 96/2.10.44, `CHANGELOG.md`,
       `TASKS.md`).
-   - **Осталось**: установка release `/tmp/opencode/ship96.apk` (md5
-     1f8f02ec8d5a8cfaccc4cb6b0bc97eb0) после коммитов; чистый 11-экранный
-     baseline под шаг 4 снять `tools/capture_retest.sh` (это же станет pre-шаг-4 baseline);
-     шаг 4 (layoutFromProfile; удаление (A)/(B)/(D) по одному релизу с diff'ом;
+      W4-C, 1-я попытка (10-20, v3): typo в аргументах запуска (версия уехала
+      в runid) → exit 2 на version-check до arming флага — 0 ущерба; бут
+      заодно выявил Splash-BACK-flap и timeout-leak → v3.1 (31ccb63).
+   - **Осталось**: (1) чистый 11-экранный baseline `tools/capture_retest.sh`
+     на DEBUG `/tmp/opencode/dbgB.apk` (96/7282/2.10.44, md5
+     5b7b927ae03f841c041245fecdb2aad0) → это же pre-шаг-4 baseline;
+     **устройство сейчас на debug** (переустановка для golden-dump), после
+     прогона вернуть release `/tmp/opencode/ship96.apk` (md5
+     1f8f02ec8d5a8cfaccc4cb6b0bc97eb0, тот же debug-ключ — перепроверено
+     apksigner'ом, апдейт в обе стороны свободно); (2) шаг 4
+     (layoutFromProfile; удаление (A)/(B)/(D) по одному релизу с diff'ом;
      (C1)/tvTopTitle — отдельный релиз).
 
 ## Рабочие правила (жёсткие, из prompt.md — с 2026-10-16, до отмены.
