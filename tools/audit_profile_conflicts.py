@@ -61,12 +61,16 @@ def main():
         if not (sl or g or fw or mx or btn or p is not None):
             continue
         conflict = None
+        # Clashes (the Java ProfileAlign.isClash mirror — keep in sync):
+        #  sl+g        hard left-vs-center contradiction
+        #  g+p (non-btn)  center vs explicit left-inset contradiction
+        # btn ids are EXEMPT from the p clash: a button carries g:center by
+        # step-3 design (centered label inside a hug-stadium; p is the
+        # button's inset, not a placement fact) — the runtime routes btn ids
+        # to their own gate-(F) semantics.
         if sl and g:
             conflict = "sl+g:center (LEFT vs CENTER) — hard"
         elif g and p is not None and not mx and not btn:
-            # btn ids carry g:center BY DESIGN (step 3: a centered label in a
-            # hug-stadium button; the coverage model treats btn as centered),
-            # so g+p on a pure (non-btn) id is the real center-vs-inset clash.
             conflict = "g:center+p=%sdp (CENTER vs LEFT-inset) — hard" % p
         elif g and mx:
             conflict = "g:center+mx (contradictory; mx must win → fallback)"
@@ -110,6 +114,33 @@ def main():
             print("   %s  sl=%d g=%s fw=%d mx=%d btn=%d p=%s sp=%s" %
                   (r["id"], int(r["sl"]), r["g"], int(r["fw"]),
                    int(r["mx"]), int(r["btn"]), r["p"], r["sp"]))
+    # Machine-readable Java classifier input (TSV) — the Java-side
+    # self-test reads this set, feeds it to ProfileAlign, and checks the
+    # verdicts match. One line per flagged id.
+    if "--tsv" in sys.argv:
+        tsv = Path(sys.argv[sys.argv.index("--tsv") + 1])
+        lines = ["id\talign\tsl\tg\tp\tfw\tmx\tbtn\tnote"]
+        for r in rows:
+            if r["verdict"].startswith("PROFILE-START"):
+                ja = "PROFILE-START"
+            elif r["verdict"].startswith("PROFILE-CENTER"):
+                ja = "PROFILE-CENTER"
+            elif r["verdict"].startswith("CENTER-btn"):
+                ja = "PROFILE-BTN"
+            elif r["verdict"].startswith("MIXED"):
+                ja = "MIXED"
+            elif r["verdict"].startswith("CONFLICT"):
+                ja = "MIXED"
+            else:
+                ja = "NONE"
+            note = r["conflict"] or ""
+            lines.append("%s\t%s\t%d\t%d\t%s\t%d\t%d\t%d\t%s" % (
+                r["id"], ja, int(r["sl"]), 1 if r["g"] else 0,
+                "" if r["p"] is None else str(r["p"]),
+                int(r["fw"]), int(r["mx"]), int(r["btn"]), note))
+        tsv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print("tsv ->", tsv)
+
     # verdict histogram
     from collections import Counter
     hist = Counter(r["verdict"] for r in rows)

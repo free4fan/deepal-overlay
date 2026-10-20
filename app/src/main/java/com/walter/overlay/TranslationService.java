@@ -70,6 +70,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     // carried; everything else (server text, sizes set in code or via styles)
     // is absent and falls back to the height-based estimate.
     private volatile Map<String, Integer> viewProfiles = new HashMap<>();
+    // Step-4 alignment classifier (see ProfileAlign). Built by
+    // loadViewProfiles() before the overlay manager is constructed;
+    // null until the profile loads (the manager treats null as all-NONE).
+    private volatile ProfileAlign alignClassifier;
     // Ids whose text is left-aligned in EVERY layout the app ships (no
     // layout declares a horizontal center gravity). Held for the overlay
     // manager: those pills may be left-anchored unconditionally, which the
@@ -240,25 +244,60 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 getAssets().open("view_profiles.json")));
             Map<String, Integer> map = new HashMap<>();
             Set<String> locks = new HashSet<String>();
+            // Step-4 alignment-class input sets (DESIGN.md «Шаг 4»): ids with
+            // a DEFINITE single alignment flag. g:"center" without a p-inset
+            // clash (a g+p id carries contradictory placement facts — it is
+            // routed to MIXED, the px gates stay the decider until
+            // decompile_ids.py resolves the id, step-4 debt). sl+g is the
+            // same clash in the other direction; the audit tool
+            // (tools/audit_profile_conflicts.py) reports both intersections.
+            Set<String> centers = new HashSet<String>();
+            Set<String> buttons = new HashSet<String>();
+            Set<String> mixed = new HashSet<String>();
             java.util.Iterator<String> keys = obj.keys();
             while (keys.hasNext()) {
                 String id = keys.next();
                 org.json.JSONArray v = obj.getJSONArray(id);
-                // [sp] | [sp|null, {g,p,fw,sl}] — sp is used later for the
-                // decoupled font; sl marks ids with no horizontal-center
+                // [sp] | [sp|null, {g,p,fw,sl,btn,mx}] — sp is used later for
+                // the decoupled font; sl marks ids with no horizontal-center
                 // gravity in any layout (the left-anchor lock set).
                 if (v.length() > 0 && !v.isNull(0)) {
                     map.put(id, (int) Math.round(v.getDouble(0)));
                 }
-                if (v.length() > 1 && v.get(1) instanceof org.json.JSONObject
-                        && ((org.json.JSONObject) v.get(1)).optInt("sl", 0) == 1) {
-                    locks.add(id);
+                boolean sl = false, g = false, btn = false, mx = false;
+                Boolean p = null;
+                if (v.length() > 1 && v.get(1) instanceof org.json.JSONObject) {
+                    org.json.JSONObject f = (org.json.JSONObject) v.get(1);
+                    sl = f.optInt("sl", 0) == 1;
+                    g = "center".equals(f.optString("g", null));
+                    btn = f.optInt("btn", 0) == 1;
+                    mx = f.optInt("mx", 0) == 1;
+                    if (f.has("p")) p = Boolean.TRUE; // value unused: only
+                }                                       // presence clashes with g
+                if (sl) locks.add(id);
+                if (ProfileAlign.isClash(sl, g, mx, btn, p != null)) {
+                    mixed.add(id); // g↔p or sl+g contradiction: px fallback
+                } else if (mx) {
+                    mixed.add(id);
+                } else if (btn) {
+                    buttons.add(id);
+                } else if (g) {
+                    centers.add(id);
                 }
             }
             viewProfiles = map;
             startLockedIds = locks;
+            alignClassifier = ProfileAlign.of(locks, centers, buttons, mixed);
             Log.i(TAG, "View profiles loaded: " + map.size() + " ids, "
-                + locks.size() + " start-locks");
+                + locks.size() + " start-locks, align=" + alignClassifier.size()
+                + " (center " + alignClassifier.count(
+                    ProfileAlign.AlignSource.PROFILE_CENTER)
+                + ", start " + alignClassifier.count(
+                    ProfileAlign.AlignSource.PROFILE_START)
+                + ", btn " + alignClassifier.count(
+                    ProfileAlign.AlignSource.PROFILE_BTN)
+                + ", mixed " + alignClassifier.count(
+                    ProfileAlign.AlignSource.MIXED) + ")");
         } catch (Exception e) {
             Log.e(TAG, "View profiles load failed (estimates stay active): "
                 + e.getMessage());

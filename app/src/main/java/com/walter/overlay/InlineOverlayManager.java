@@ -66,6 +66,13 @@ public class InlineOverlayManager {
     private final WindowManager windowManager;
     private final Set<String> startLockedIds;
     private final Map<String, Integer> realFontSp;
+    // Step-4: the single per-id alignment verdict (see ProfileAlign). Frame 1
+    // wires it into computeLayout's single-line placement: PROFILE_CENTER and
+    // PROFILE_BTN beat the px gates, PROFILE_START is what isStartLocked
+    // already is, MIXED/NONE keep the px gates as deciders. Built from the
+    // id profile at load time; an empty classifier (asset load failure)
+    // returns NONE for every id — identical behavior to pre-step-4.
+    private final ProfileAlign alignClassifier;
     private final Map<String, TextView> activeViews = new HashMap<>();
     private final Map<TextView, Long> lastSeenMs = new HashMap<>();
     private final Map<TextView, Long> bgColors = new HashMap<>();
@@ -183,10 +190,22 @@ public class InlineOverlayManager {
 
     public InlineOverlayManager(Context context, Set<String> startLockedIds,
                                 Map<String, Integer> realFontSp) {
+        this(context, startLockedIds, realFontSp, null);
+    }
+
+    public InlineOverlayManager(Context context, Set<String> startLockedIds,
+                                Map<String, Integer> realFontSp,
+                                ProfileAlign alignClassifier) {
         this.context = context;
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         this.startLockedIds = startLockedIds != null ? startLockedIds : new HashSet<String>();
         this.realFontSp = realFontSp != null ? realFontSp : new HashMap<String, Integer>();
+        // No classifier (legacy construction / profile-load failure) is an
+        // all-NONE classifier: every id falls to the px gates, exactly the
+        // pre-step-4 behavior.
+        this.alignClassifier = alignClassifier != null
+            ? alignClassifier
+            : ProfileAlign.of(null, null, null, null);
     }
 
     // Id whose text is left-aligned in every layout the app ships: the pill
@@ -194,6 +213,15 @@ public class InlineOverlayManager {
     // centering gates would decide.
     private boolean isStartLocked(String viewId) {
         return viewId != null && startLockedIds.contains(viewId);
+    }
+
+    // Step-4 (DESIGN.md «Шаг 4»): the SINGLE alignment verdict for an id.
+    // Frame 1 switches computeLayout's single-line placement on it; frame 0
+    // (this change) only classifies — no gate consults it yet, so behavior
+    // is byte-for-byte the pre-step-4 one. See ProfileAlign for the
+    // precedence (mx/clash > btn > g > sl > NONE) and the audit trail.
+    public ProfileAlign.AlignSource alignFor(String viewId) {
+        return alignClassifier.alignFor(viewId);
     }
 
     public void clearAll() {
