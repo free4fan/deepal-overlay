@@ -191,25 +191,37 @@ baseline.
   MIXED(conflict)→fallback 43, MIXED(mx)→fallback 7 (mx-id из c3),
   BTN 2, NONE 3. (43+7 = 50 MIXED в classifier.)
 
-**layout-аудит кадра (1) оффлайн** (`tools/step4_layout_audit.py`, один
-зеркальный прогон `computeLayout` по baseline `pre_step4_96_7282`):
-- Все **171** baseline pills атрибутированы px-путём, **0 unexplained** —
-  зеркало согласуется с наблюдаемым px-рантаймом (self-test зеркала).
-- **Cadre-(1) movers = 44**: 43 × `was-left → centered (INTENDED)` —
-  профиль реально центрирует id, которые px-гейты оставляли левыми
-  (`tab_text`/`tv1`/`tv_text`/`tv_entry_name`/`item_help_center_tv`/
-  `tvAirTile`/`txt_title`/`tv_main_car_update`) + **1 известное расхождение**
+**layout-аудит кадра (1) оффлайн** (`tools/step4_layout_audit.py`,
+одна зеркальная реализация горизонтального дерева `computeLayout`
+(band/(A)/(B)/(C1/C2)/(D)/(E)/(F) + shape-классы, константы 1-в-1 с
+Java), прогнанная по baseline `pre_step4` в двух режимах:
+`profile=False` = текущий рантайм, `profile=True` = кадр (1)):
+- **Зеркальный self-test**: `profile=False` воспроизводит наблюдаемый
+  ddx КАЖДОЙ single-line пилюли baseline (171 pills; wrap-пилюли
+  — вне дерева, ddx=0 — проверено). 0 mismatches — проекция
+  заслуживает доверия (это не «догадка», а порты кода).
+- **Cadre-(1) movers = 28**: 27 × `was-left → centered (INTENDED)` —
+  профиль реально центрирует id, которые px-путь оставляла левыми
+  (`tab_text`×3, `tv1`×6, `tv_text`×7, `item_help_center_tv`×4,
+  `tv_entry_name`×4, `tvAirTile`, `tv_main_car_update`, `txt_title`,
+  `txt_content`-нет — см. ниже) + **1 известное расхождение**
   `titleTv` (notifications): app держит header left-inset (C2, ddx=54),
-  профиль говорит center — остаётся на px-пути до (C1) релиза, **не**
-  блокирует кадры 2–4.
+  профиль говорит center — остаётся на px-пути до (C1) релиза,
+  **не** блокирует кадры 2–4.
+- **1 амбивалентная пилюля** (`my_tab` `txt_content`, est=816 vs pill 794)
+  — single-vs-wrapped offline неразрешимо; но по guard кадра (1)
+  `width > est` она НЕ может сдвинуться (794 < 816) → скрытых 29-х
+  movers нет.
 - **Критично для кадров 2/3/4**: гейты **(A), (B), (D) размещают 0 pills**
   на 11 канонических экранах baseline. Т.е. их удаление доказывается
-  **пустым diff** (ни один pill не помещается под их px-условия, которые
-  перекрывались бы профилем ИДНЕ-MIXED). Это снимает вопрос «кто
-  закрывает (A) профилем»: **никто из 11 экранов не требует** — удаление
-  (A)/(B)/(D) безопасно на canonical set, и их отсутствие в baseline
-  = допустимое обоснование (долг декомпилии по toolbar-titles остаётся
-  в 43 CONFLICT, но ни один из них не попадает в baseline-экраны под (A)).
+  **пустым diff** (ни один pill не помещается под их px-условия). Долг
+  декомпилии по toolbar-titles остаётся в 43 CONFLICT, но ни один из них
+  не попадает в baseline-экраны под (A).
+
+Критерий принятия кадра (1) в телефоне: `diff_golden` против
+`pre_step4` обязан перечислить **ровно эти 28** PILL-CHG (±схлопывание
+±2px) и 0 HARD-вне их; каждый из 28 = узел кадра с причинной строкой
+(«профиль g:center против px-left») — список расхождений закрыт.
 
 ### Known deviations
 

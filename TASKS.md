@@ -164,9 +164,22 @@ dark_overlay=off).
      регресс-гейт tools/test_driver_units.sh (без телефона). release
      `/tmp/opencode/ship96.apk` (md5 1f8f02ec8d5a8cfaccc4cb6b0bc97eb0)
      возвращён на устройство (install -r -d -t, тот же debug-ключ).
-     (2) шаг 4
-     (layoutFromProfile; удаление (A)/(B)/(D) по одному релизу с diff'ом;
-     (C1)/tvTopTitle — отдельный релиз).
+     (2) шаг 4 (layoutFromProfile; удаление (A)/(B)/(D) по одному релизу с
+     diff'ом; (C1)/tvTopTitle — отдельный релиз). Статус на 10-21:
+     **кадр (0) закрыт оффлайн, без телефона** (d5418ba, 5d7ef0e, de248f5):
+     контракт шага 4 зафиксирован в DESIGN.md; аудит флагов
+     (audit_profile_conflicts.py + JVM self-test 7282 id, PASS): sl∩g=0,
+     g∩p=43 (долг → MIXED/px-fallback, декомпилия), g∩mx=0, btn∩{sl,p,mx}=0;
+     явный AlignSource + alignFor (ProfileAlign, поведение не изменено —
+     классификация только); оффлайн-проекция кадра (1)
+     (step4_layout_audit.py, зеркало computeLayout по baseline): 171/171
+     pills атрибутированы (0 unexplained), movers=44 (43 INTENDED
+     was-left→centered + 1 известное расхождение titleTv → (C1)-релиз);
+     гейты (A)/(B)/(D) размещают 0 pills на 11 канонических экранах →
+     кадры 2/3/4 доказываются пустым diff'ом. **Осталось: окно с телефоном
+     (длинный прогон, анонсировать) — debug v97 + гибридный after-снимок,
+     diff против pre_step4 обязан показать ровно 28 movers (27 INTENDED
+     was-left→centered + 1 известное расхождение titleTv→(C1)).**
 
 ## Рабочие правила (жёсткие, из prompt.md — с 2026-10-16, до отмены.
 ## С 2026-10-19: применяются ретроспективно ко всему сделанному, а не только к

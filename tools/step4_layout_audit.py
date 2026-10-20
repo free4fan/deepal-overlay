@@ -2,35 +2,47 @@
 """Step-4 layout audit — offline, no device (pre-frame-(1) gate, brief
 §4.3: the offline run, the phone window becomes confirmation only).
 
-One mirror of computeLayout's single-line placement
-(InlineOverlayManager.java: nav-band block ~897, gates (A)/(B)/(C1/C2)/(D)/(E)
-~940–1026, (F) ~1039–1097, shape classes ~565–591) produces:
+ONE mirror, `resolve_ddx()`, of computeLayout's full single-line HORIZONTAL
+decision (InlineOverlayManager.java: nav-band block ~897, gates
+(A)/(B)/(C1/C2)/(D)/(E) ~931–1027, (F) ~1039–1097, shape classes
+~565–591, constants as in the Java). It takes a pill + the screen's pill
+list (pills.json IS the spec list: every CJK node gets a pill) and returns
+the ddx the tree picks plus the path name that decided it.
 
- 1. FRAME-1 PROJECTION — which pills the new PROFILE_CENTER branch moves,
-    per pill: was -> now, the px place it came from, and a draft verdict.
-    The "before" side is the OBSERVED pre_step4 baseline pills (the
-    current runtime is the px truth — not re-simulated).
-    Contract (DESIGN.md «Шаг 4»): the profile branch is entered from the
-    single-line block with guards `est > 0 && width > est`, targets
-    center-on-node with the SAME clamps the (A)-(E) branches use, and
-    does not re-center a pill the nav-band block already centered
-    (ddx != 0 guard). Everything else takes the px path unchanged.
+  profile=False  -> the CURRENT runtime (baseline behavior)
+  profile=True   -> the FRAME-(1) wiring: the PROFILE_CENTER branch is
+                    inserted BEFORE the nav-band block; ids it claims get
+                    center-on-node (same clamps) and every later block
+                    (band/(A)-(E)/(F)) backs off via its `ddx == 0`
+                    precondition (the band block gains that guard in the
+                    same commit). No shape class guards the profile branch:
+                    the id flag IS the stronger claim (a grid label that is
+                    g:center in every layout centers even if looseRow — the
+                    shape classes are heuristic guesses the profile
+                    replaces; that is the step-4 mechanism).
+                    PROFILE_START keeps the ddx-0 path (what isStartLocked
+                    already does); PROFILE_BTN is claimed by (F)'s own
+                    block, not by the centering branch (btn semantics
+                    differ: full-button width, est font, stadium);
+                    MIXED/NONE take the exact px tree.
 
- 2. GATE COVERAGE for frames 2/3/4 — every baseline pill attributed to
-    its px place (band/(A)/(B)/(C1)/(C2)/(D)/(E)/(F)/left/wrap) with its
-    AlignSource verdict; per gate: the distinct ids it places and how
-    many of its pills agree with the profile center target (gate
-    redundant for that id) vs disagree (that id blocks deletion until
-    decompile resolves the clash).
+Outputs:
+  * baseline attribution: the path that decided each observed pill's ddx —
+    a MIRROR SELF-TEST: every non-claimer single-line pill must match the
+    observed ddx within PILL-CHG tolerance or it is reported (never a
+    silent guess).
+  * frame-(1) projection: per pill, ddx profile=True vs observed; movers
+    (|delta| > 2px) with a draft verdict. Per the review's lock 2.1 this is
+    the discrepancy list that must close before frame (2).
+  * gate coverage: per gate (A)/(B)/(D), the distinct ids the baseline
+    placed through it (empty = the frame's deletion is provable by an
+    empty diff on the canonical set).
 
-The px mirror is used only to EXPLAIN the observed baseline ddx
-(±2px = PILL-CHG tolerance); unexplained pills are reported, never
-guessed. `left` is the residual (no branch fired, ddx stayed 0) —
-multiline pills land in `wrap` when their observed width equals their
-column limit (the multiline width path) — the horizontal decision is
-unobservable for them and they cannot be frame-1 movers (guard fails).
+Multiline pills are out of the tree (the profile branch sits inside the
+!multiline block; frame 1 changes horizontal ddx only, never the wrap),
+so they never move — flagged as `wrap` and checked as ddx==0.
 
-Run: python3 tools/step4_layout_audit.py [baseline_dir] [-v]
+Run: python3 tools/step4_layout_audit.py [baseline_dir]
 """
 import json
 import sys
@@ -43,9 +55,9 @@ ROW_NEIGHBOR_MAX = 600
 ROW_SAME_ROW_MAX_DY = 50
 SW, SH, DENSITY = 960, 2142, 2.25
 PAGE_HEADER_ID = "tvTopTitle"
-FRAME_OF = {"(A)": 2, "(B)": 3, "(D)": 4}
-GATE_ORDER = ["band", "(A)", "(B)", "(C1)", "(C2)", "(D)", "(E)", "(F)",
-              "left", "wrap"]
+FRAME_OF = {"A": 2, "B": 3, "D": 4}
+GATE_ORDER = ["profile(n/a)", "band", "A", "B", "C1", "C2", "D", "E", "F",
+              "none", "wrap"]
 
 
 def jdiv(a, b):
@@ -54,22 +66,21 @@ def jdiv(a, b):
     return q if (a < 0) == (b < 0) else -q
 
 
-def center_target(w, pw, x):
-    """ddx of every node-centering branch: center on the node, never cross
-    the screen edge, never exceed the column limit (same code shape as
-    the (A)-(E)/(F) ddx clamps and the frame-1 profile branch)."""
+def clamp_center(w, pw, x):
+    """Every node-centering ddx: center on node, keep on screen, keep in
+    the column (the identical clamp trio of (A)/(B)/(D)/(E)/(F) and the
+    frame-1 profile branch)."""
     ddx = jdiv(w - pw, 2)
     ddx = max(ddx, -x)
-    maxW = max(48, SW - x - EDGE_MARGIN)
-    if x + ddx + pw > x + maxW:
-        ddx = int(maxW - pw)
+    maxw = max(48, SW - x - EDGE_MARGIN)
+    if x + ddx + pw > x + maxw:
+        ddx = int(maxw - pw)
     return ddx
 
 
 def flags_of(profile, k):
     v = profile.get(k)
-    f = v[1] if isinstance(v, list) and len(v) > 1 and isinstance(v[1], dict) else {}
-    return f
+    return v[1] if isinstance(v, list) and len(v) > 1 and isinstance(v[1], dict) else {}
 
 
 def profile_verdict(f):
@@ -79,7 +90,7 @@ def profile_verdict(f):
     mx = f.get("mx", 0) == 1
     has_p = "p" in f
     if mx or (sl and g) or (g and has_p and not btn):
-        return "MIXED"
+        return "MIXED"          # clash (sl+g, g+p non-btn) or explicit mx
     if btn:
         return "PROFILE_BTN"
     if g:
@@ -91,7 +102,6 @@ def profile_verdict(f):
 
 def sibling_facts(pill, pills):
     x, y = pill["node"][0], pill["node"][1]
-    h = pill["node"][3] - pill["node"][1]
     close_row = False
     left_clear = x
     near = -1
@@ -110,12 +120,12 @@ def sibling_facts(pill, pills):
     maxw = max(48, SW - x - EDGE_MARGIN)
     if near > 48:
         maxw = min(maxw, near - ROW_GAP)
-    return close_row, left_clear, near, maxw, h
+    return close_row, left_clear, maxw
 
 
 def estimate_px(node_h):
-    """estimateTextSize (TranslationService:861) at the device density —
-    no profile involved, identical to the runtime for shape classes."""
+    """estimateTextSize (TranslationService:861) at device density —
+    profile-free, identical to the runtime for the shape classes."""
     sp = max(10.0, min(node_h / DENSITY * (2.0 / 3.0), 24.0))
     return sp * DENSITY
 
@@ -126,11 +136,127 @@ def shape_classes(est, w, h, est_px, close_row):
     tall_icon = (not close_row and not standalone and est > 0
                  and w <= est * 1.35 + 2
                  and est_px * 1.6 < h < est_px * 6)
+    # wide/loose are computed but only used via their absence; keep names
     wide = (not close_row and not standalone and not tall_icon
             and est > 0 and w > est * 2.5)
     loose = (not close_row and not standalone and not tall_icon and not wide
              and est > 0 and w > est * 1.7 and h > est_px * 1.8)
     return standalone, tall_icon, wide, loose
+
+
+def resolve_ddx(p, pills, v, profile):
+    """The full single-line horizontal ddx tree. Returns (ddx, path).
+    path: 'profile' | 'band' | 'A' | 'B' | 'C1' | 'C2' | 'D' | 'E' | 'F'
+    | 'none' (no branch fired, ddx stayed 0)."""
+    node = p["node"]
+    x, y = node[0], node[1]
+    w, h = node[2] - node[0], node[3] - node[1]
+    pw = p["pill"][2]
+    est = p.get("est", 0) or 0
+    est_px = estimate_px(h)
+    close_row, left_clear, maxw = sibling_facts(p, pills)
+    standalone, tall_icon, _wide, loose = shape_classes(
+        est, w, h, est_px, close_row)
+    start_locked = v == "PROFILE_START"
+
+    ddx = 0
+    # frame-1 wiring: the profile branch, BEFORE the nav-band block.
+    if profile:
+        if v == "PROFILE_CENTER" and est > 0 and pw > est:
+            return clamp_center(w, pw, x), "profile"
+        # PROFILE_START/MIXED/NONE/PROFILE_BTN: fall through to the px tree
+        # exactly as before (startLocked is isStartLocked's meaning).
+    # nav-band block (frame-1: gains a `ddx == 0` guard — here ddx is 0 by
+    # construction: the profile branch already returned if it claimed).
+    if y > SH - 130 and est > 0 and pw > est and not standalone \
+            and not tall_icon:
+        overhang = jdiv(pw - est, 2)
+        if overhang <= left_clear:
+            d = jdiv(est - pw, 2)
+            d = max(d, -x)
+            if x + d + pw > x + maxw:
+                d = int(maxw - pw)
+            return d, "band"
+    # (A)-(E) chain
+    if est > 0 and not close_row and not tall_icon and not loose and pw > est:
+        a = (not standalone and y < 320 and 40 < x < SW * 0.6
+             and w > est * 4.5 and h < 74 and not start_locked)
+        b = (not start_locked and x <= 60 and w >= SW * 0.83
+             and 96 <= h < 120 and w > est * 2.5)
+        header_full = (standalone and x <= 30 and w >= SW * 0.95 and pw < w)
+        c1 = header_full and p.get("id") == PAGE_HEADER_ID
+        c2 = header_full and y < 340 and p.get("id") != PAGE_HEADER_ID
+        d_ = header_full and y > 340 and p.get("id") != PAGE_HEADER_ID
+        right_clear = SW - x - w - EDGE_MARGIN
+        screen_mid = abs(x + w / 2.0 - SW / 2.0) <= 24
+        balanced = (left_clear > 0 and right_clear > 0
+                    and min(left_clear, right_clear)
+                    >= 0.7 * max(left_clear, right_clear))
+        e = (not standalone and w <= est * 1.35 + 2 and pw >= est
+             and screen_mid and balanced)
+        # (E)'s !wideRow: redundant — wideRow needs w > est*2.5,
+        # (E) needs w <= est*1.35+2 (impossible for est>4).
+        if a or b or d_:
+            return clamp_center(w, pw, x), ("A" if a else ("B" if b else "D"))
+        if c1 or c2:
+            d = max(54, -x)  # (int)(24 * 2.25)
+            if x + d + pw > x + maxw:
+                d = int(maxw - pw)
+            return d, ("C1" if c1 else "C2")
+        if e:
+            return clamp_center(w, pw, x), "E"
+    # (F) button block: ddx = (w - width)/2; the inner no-standalone
+    # re-derivation sets width = w -> ddx 0; the outer conditions only
+    # matter as an attribution tag (the ddx is 0 either way when the pill
+    # hugs, and the (F)-shape pill on the canonical set always hugs).
+    if est > 0 and pw > est and not start_locked and x > 30 \
+            and SW * 0.28 < w < SW * 0.65 and 96 <= h <= 130 \
+            and w > est * 2.0:
+        return 0, "F"
+    return 0, "none"
+
+
+def line_class(p, est, fs, shp):
+    """Recover the pill's LINE CLASS from the rendered geometry the app
+    itself dumps (node dims + shape class + rendered font fsPx). Offline
+    stand-in for the runtime `multiline` flag.
+
+    Java height (computeLayout ~818-852):
+      single-line: h = (standalone?fs*1.35 : tallIcon?fs*1.4 :
+                        loose?fs*1.35 : node_h) + 2*padV,  clamped >= minH
+      wrapped:     h = lines*fs*1.25 + 2*padV  (lines 1..8, then maxPillH)
+    A 2-line CJK node (node_h ~ 2 lines) with a short single-line translation
+    makes the single model (hugs node_h) ~= the 2-line wrap model, so the
+    observed height genuinely cannot separate them offline. Rule:
+      * argmin over all candidate height models (single + 2..8 line);
+      * the two nearest models within 4px of each other -> 'ambig';
+      * else the argmin's class wins ('single' / 'multi').
+    If fsPx is absent, short single-liners: 'single' (the mirror
+    self-test validates their ddx). Returns 'single'|'multi'|'ambig'."""
+    node_h = p["node"][3] - p["node"][1]
+    if fs <= 0:
+        return "single"
+    padv = max(2, int(fs * 0.3))
+    min_h = max(int(fs) + 2 * padv, 20)
+    if shp == "standalone":
+        single = int(fs * 1.35) + 2 * padv
+    elif shp == "tallIcon":
+        single = int(fs * 1.4) + 2 * padv
+    elif shp == "loose":
+        single = int(fs * 1.35) + 2 * padv
+    else:
+        single = node_h + 2 * padv
+    single = max(single, min_h)
+    obs = p["pill"][3]
+    models = [(abs(single - obs), "single", single)]
+    for L in range(2, 9):
+        m = int(L * fs * 1.25) + 2 * padv
+        models.append((abs(m - obs), "%dL" % L, m))
+    models.sort(key=lambda t: (t[0], t[2]))
+    top, runner = models[0], models[1]
+    if top[0] <= 4 and runner[0] <= 4 and abs(top[2] - runner[2]) <= 6:
+        return "ambig"
+    return "single" if top[1] == "single" else "multi"
 
 
 def audit(baseline_dir, repo):
@@ -140,175 +266,161 @@ def audit(baseline_dir, repo):
     runs = sorted(d.name for d in base.iterdir()
                   if d.is_dir() and (d / "pills.json").exists())
 
-    total = moved = unexplained = 0
+    total = 0
+    moved = 0
+    unexplained = 0
     verdict_hist = {}
     gate_pills = {g: 0 for g in GATE_ORDER}
     gate_ids = {g: set() for g in GATE_ORDER}
     movers = []
-    bad_attr = []
+    mirror_bad = []
+    ambig = []
 
     for run in runs:
         pills = json.loads((base / run / "pills.json").read_text())
         for p in pills:
-            node = p["node"]
-            pw, ph = p["pill"][2], p["pill"][3]
-            x, y = node[0], node[1]
-            w, h = node[2] - node[0], node[3] - node[1]
-            est = p.get("est", 0) or 0
-            rel_L = p["pill"][0] - x
             total += 1
+            x, y = p["node"][0], p["node"][1]
+            rel_L = p["pill"][0] - x
             vid = p.get("id") or ""
-            f = flags_of(profile, vid)
-            v = profile_verdict(f)
+            v = profile_verdict(flags_of(profile, vid))
             verdict_hist[v] = verdict_hist.get(v, 0) + 1
-            est_px = estimate_px(h)
-            close_row, left_clear, near, maxw, _ = sibling_facts(p, pills)
-            standalone, tall_icon, _, loose = shape_classes(
-                est, w, h, est_px, close_row)
+            node_w = p["node"][2] - p["node"][0]
+            node_h = p["node"][3] - p["node"][1]
+            est = p.get("est", 0) or 0
+            fs = float(p.get("fsPx") or 0)
+            close_row, _lc, _mw = sibling_facts(p, pills)
+            est_px = estimate_px(node_h)
+            st, ti, wd, lo = shape_classes(est, node_w, node_h, est_px, close_row)
+            shp = ("standalone" if st else
+                   "tallIcon" if ti else
+                   "loose" if lo else "normal")
 
-            # ---- baseline attribution (explain the observed ddx) ----
-            attr = None
-            if y > SH - 130 and est > 0 and pw > est and not standalone \
-                    and not tall_icon:
-                overhang = jdiv(pw - est, 2)
-                if overhang <= left_clear:
-                    d = jdiv(est - pw, 2)
-                    d = max(d, -x)
-                    if x + d + pw > x + maxw:
-                        d = int(maxw - pw)
-                    if abs(rel_L - d) <= TOL:
-                        attr = "band"
-            # The (A)-(E) chain — the Java if/else-if structure, in order:
-            # (toolbar || button || empty) -> center on node;
-            # else headerContentLeft -> 24dp inset (54px @2.25);
-            # else centeredLabel -> center on node.
-            # (E)'s !wideRow is implied: wideRow needs w > est*2.5, (E) needs
-            # w <= est*1.35+2 — mutually exclusive.
-            if attr is None and est > 0 and not close_row and not tall_icon \
-                    and not loose and pw > est:
-                a = (not standalone and y < 320 and 40 < x < SW * 0.6
-                     and w > est * 4.5 and h < 74 and v != "PROFILE_START")
-                b = (x <= 60 and w >= SW * 0.83 and 96 <= h < 120
-                     and w > est * 2.5 and v != "PROFILE_START")
-                header_full = (standalone and x <= 30
-                               and w >= SW * 0.95 and pw < w)
-                c1 = header_full and vid == PAGE_HEADER_ID
-                c2 = header_full and y < 340 and vid != PAGE_HEADER_ID
-                d_ = header_full and y > 340 and vid != PAGE_HEADER_ID
-                right_clear = SW - x - w - EDGE_MARGIN
-                screen_mid = abs(x + w / 2.0 - SW / 2.0) <= 24
-                balanced = (left_clear > 0 and right_clear > 0
-                            and min(left_clear, right_clear)
-                            >= 0.7 * max(left_clear, right_clear))
-                e = (not standalone and w <= est * 1.35 + 2 and pw >= est
-                     and screen_mid and balanced)
-                cand_name = None
-                cand_d = None
-                if a or b or d_:
-                    # the Java OR-branch: one shared action (center on node);
-                    # attribute to the highest-priority predicate that fired
-                    cand_name = "(A)" if a else ("(B)" if b else "(D)")
-                    cand_d = center_target(w, pw, x)
-                elif c1 or c2:
-                    cand_name = "(C1)" if c1 else "(C2)"
-                    cand_d = max(54, -x)  # (int)(24 * 2.25)
-                    if x + cand_d + pw > x + maxw:
-                        cand_d = int(maxw - pw)
-                elif e:
-                    cand_name = "(E)"
-                    cand_d = center_target(w, pw, x)
-                if cand_name is not None and abs(rel_L - cand_d) <= TOL:
-                    attr = cand_name
-            # (F) — a separate `if (ddx == 0 && ...)`, fires only when the
-            # chain above left ddx at 0: the pill HUGS the node (pw == w).
-            if attr is None and est > 0 and pw > est and x > 30 \
-                    and SW * 0.28 < w < SW * 0.65 and 96 <= h <= 130 \
-                    and w > est * 2.0 and abs(pw - w) <= TOL \
-                    and not tall_icon:
-                attr = "(F)"
-            if attr is None:
-                if pw >= maxw - 1 and ph > h * 1.3:
-                    attr = "wrap"
-                elif abs(rel_L) <= TOL:
-                    attr = "left"
-                else:
-                    attr = "unexplained"
-                    bad_attr.append(
-                        "[{}] {} id={} ddx={} (not explained by the mirror)"
-                        .format(run, p.get("key"), vid, rel_L))
-                    unexplained += 1
-
-            if attr in gate_pills:
-                gate_pills[attr] += 1
+            lc = line_class(p, est, fs, shp)
+            if lc == "ambig":
+                # Cannot decide single vs wrapped offline. The ONLY case that
+                # matters is PROFILE_CENTER (the sole mover-eligible
+                # verdict): such a pill MIGHT be a frame-1 mover, so it stays
+                # in the ambiguity set for the phone diff to reconcile.
+                # Safe direction: it is NOT predicted as a mover here.
+                if v == "PROFILE_CENTER":
+                    pw = p["pill"][2]
+                    can_move = est > 0 and pw > est  # profile width>est guard
+                    ambig.append("[{}] {} id={} est={} fs={} node=({},{},{},{}) "
+                                 "ph={} pillW={} — single-vs-wrapped unresolved "
+                                 "offline; {} phone diff settles it"
+                                 .format(run, p.get("key"), vid, est,
+                                         round(fs, 1), x, y, node_w, node_h,
+                                         p["pill"][3], pw,
+                                         "POSSIBLE mover —" if can_move
+                                         else "cannot move (width<=est) —"))
+                gate_pills["none"] += 1
                 if vid:
-                    gate_ids[attr].add(vid)
+                    gate_ids["none"].add(vid)
+                continue
+            if lc == "multi":
+                # Out of the horizontal tree (frame 1 does not change wrap):
+                # ddx stays 0 in both baseline and frame 1. Verify that.
+                if abs(rel_L) > TOL:
+                    unexplained += 1
+                    mirror_bad.append(
+                        "[{}] {} id={} wrap pill with ddx={} (expected 0)"
+                        .format(run, p.get("key"), vid, rel_L))
+                gate_pills["wrap"] += 1
+                if vid:
+                    gate_ids["wrap"].add(vid)
+                continue
 
-            # ---- frame-1 projection (PROFILE_CENTER only) ----
-            if v == "PROFILE_CENTER" and est > 0 and pw > est \
-                    and attr not in ("band", "(F)"):
-                ft = center_target(w, pw, x)
-                d = ft - rel_L
-                if abs(d) > TOL:
-                    moved += 1
-                    # (A)/(B)/(D)/(E) and band pills have observed position ==
-                    # the profile target by attribution construction, so the
-                    # ONLY gated attributes a mover can come from are the
-                    # header insets (C1)/(C2): the 24dp inset, not the node
-                    # center. That is the documented frame-1 discrepancy:
-                    # decompile says the header centers, the app keeps the
-                    # left inset; the (C1) release resolves the id.
-                    if attr in ("(C1)", "(C2)"):
-                        verdict = ("KNOWN MISMATCH: app keeps the header "
-                                   "left-inset ({}), profile says center -> "
-                                   "stays put until the (C1) release; "
-                                   "documented, does not block frames 2-4"
-                                   ).format(attr)
-                    elif attr in ("(A)", "(B)", "(D)", "(E)", "band"):
-                        verdict = "BUG: gated pill projected as a mover — " \
-                            "re-examine the mirror"
-                    elif attr in ("left", "wrap"):
-                        verdict = "INTENDED frame-1 move (px left it, profile centers)"
-                    else:
-                        verdict = "moved from {}: document".format(attr or "?")
-                    movers.append("[{}] {} id={} est={} node=({},{},{},{}) "
-                                  "pillW={} ddx {} -> {} ({:+d}) :: {}".format(
-                                      run, p.get("key"), vid, est, x, y, w, h,
-                                      pw, rel_L, ft, d, verdict))
+            ddx0, path0 = resolve_ddx(p, pills, v, profile=False)
+            if abs(ddx0 - rel_L) > TOL:
+                # Mirror self-test failure: the tree does not reproduce the
+                # observed baseline. Report loudly — the projection below
+                # is only as good as this.
+                unexplained += 1
+                mirror_bad.append(
+                    "[{}] {} id={} node=({},{},{},{}) path={} ddx tree={} "
+                    "observed={} (MIRROR MISMATCH)".format(
+                        run, p.get("key"), vid, p["node"], path0, ddx0, rel_L))
+                gate_pills["none"] += 1
+            else:
+                gate_pills[path0] += 1
+                if vid:
+                    gate_ids[path0].add(vid)
+
+            ddx1, path1 = resolve_ddx(p, pills, v, profile=True)
+            if abs(ddx1 - rel_L) > TOL:
+                moved += 1
+                w, h = p["node"][2] - p["node"][0], p["node"][3] - p["node"][1]
+                if path1 == "profile" and path0 in ("A", "B", "D", "E", "band"):
+                    verdict = ("BUG: a pill the px gate CENTERED is not at "
+                               "the profile target — re-examine"
+                               )
+                elif path1 == "profile" and path0 in ("C1", "C2"):
+                    verdict = ("KNOWN MISMATCH: app keeps the header "
+                               "left-inset ({}), profile says center -> "
+                               "stays put until the (C1) release; "
+                               "documented, does not block frames 2-4"
+                               ).format(path0)
+                elif path1 == "profile" and path0 in ("none",):
+                    verdict = ("INTENDED frame-1 move (px left it, profile "
+                               "centers; the profile replaces the px guess"
+                               )
+                elif path1 == "profile":
+                    verdict = "moved from {}: document".format(path0 or "?")
+                else:
+                    verdict = "UNREACHABLE: non-profile path as a mover"
+                movers.append("[{}] {} id={} path {} -> {} node=({},{},{},{}) "
+                              "dw={} est={} pillW={} ddx {} -> {} ({:+d}) :: {}"
+                              .format(run, p.get("key"), vid, path0, path1,
+                                      x, y, w, h, p["node"][2] - p["node"][0],
+                                      p.get("est", 0), p["pill"][2],
+                                      rel_L, ddx1, ddx1 - rel_L, verdict))
 
     print("== step-4 layout audit (baseline {}) ==".format(baseline_dir))
     print("pills={} | verdicts: {}".format(total, verdict_hist))
-    print("baseline attribution (the px runtime's decision, explained):")
+    print("baseline attribution (which px place decided the observed ddx):")
     for g in GATE_ORDER:
         if gate_pills[g]:
             print("   {:<14} {:>3} pills  {:>3} ids".format(
                 g + ":", gate_pills[g], len(gate_ids[g])))
-    if bad_attr:
-        print("   unexplained: {}".format(len(bad_attr)))
-        for u in bad_attr:
-            print("     " + u)
+    if mirror_bad:
+        print("   mirror mismatches: {} (the tree does not reproduce the "
+              "observed baseline — fix the tree before trusting the "
+              "projection)".format(len(mirror_bad)))
+        for m in mirror_bad:
+            print("     " + m)
+    else:
+        print("   mirror self-test: ALL single-line pills reproduced "
+              "(tree == observed px runtime)")
+    if ambig:
+        print("   AMBIGUOUS LINE CLASS (offline, must settle on the phone "
+              "diff; NOT predicted as movers): {}".format(len(ambig)))
+        for m in ambig:
+            print("     " + m)
 
     print()
-    print("frame-1 movers: {} (projected)".format(moved))
+    print("frame-1 movers: {} (projected; phone diff must list exactly "
+          "these{}".format(moved,
+          "+ the ambiguous set if any line-class misfired)"))
     for m in movers:
         print("   " + m)
 
     print()
-    print("gate coverage -> frames 2/3/4:")
-    for g in ("(A)", "(B)", "(D)"):
+    print("gate coverage -> frames 2/3/4 (a frame deletes its gate when the")
+    print("frame-1 diff is closed; coverage shows whose behavior the gate")
+    print("still carries on the canonical set):")
+    for g in ("A", "B", "D"):
         ids = gate_ids[g]
         covered = {i for i in ids
                    if profile_verdict(flags_of(profile, i)) == "PROFILE_CENTER"}
-        print("   gate {} -> frame {}: ids={} | PROFILE_CENTER ids={} "
-              "| non-covered ids={}".format(
-                  g, FRAME_OF[g], sorted(ids) if len(ids) <= 12 else
-                  "%d total" % len(ids),
-                  sorted(covered) if len(covered) <= 12 else
-                  "%d total" % len(covered),
-                  sorted(i for i in ids if i not in covered) or "none"))
-    if unexplained == 0 and not movers:
-        print("NOTE: zero movers AND zero unexplained — frame 1 would be a "
-              "no-op; per the brief that proves nothing. Re-examine the "
-              "profile-center set.")
+        blocking = sorted(i for i in ids if i not in covered)
+        print("   gate {} -> frame {}: {} ids | PROFILE_CENTER: {} | "
+              "NOT profile-covered: {}".format(
+                  g, FRAME_OF[g],
+                  sorted(ids) if len(ids) <= 12 else "%d total" % len(ids),
+                  len(covered),
+                  blocking if blocking else "none (vacuum: the gate places "
+                  "nothing here — deletion provable by empty diff)"))
 
 
 if __name__ == "__main__":
