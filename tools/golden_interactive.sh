@@ -185,7 +185,11 @@ cmd_grab() {
   rej=$(ls "$R/$s"/a11y.rejected.* 2>/dev/null | wc -l)
   [ "$rej" -gt 0 ] && tag="$tag a11y-rejected:$rej"
   echo "  [$s] pills=$n a11y=$a shot=$SH$tag"
-  [ "$SH" = "BLACK" ] && echo "  !! screenshot is BLACK — display was off/dim; re-run grab for this screen with the backlit-on."
+  if [ "$SH" = "BLACK" ]; then
+    echo "  !! screenshot is BLACK — display was off/dim; re-run grab for this screen with the backlit-on."
+    return 1
+  fi
+  return 0
 }
 
 cmd_finish() {
