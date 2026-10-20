@@ -243,6 +243,12 @@ ensure_main() {
     in_deepal_main && return 0
     local f; f=$(focus_line)
     case "$f" in
+      *SplashActivity*)
+        # transition in flight (the driver just launched it via Splash):
+        # BACK would CANCEL the transition and force a relaunch loop (this is
+        # exactly what the W4-C boot did — 5 [focus] relaunch lines before
+        # converging). Wait for MainActivity instead.
+        sleep 3;;
       *deepal.com.cn.app*)
         timeout 12 adb -s "$A" shell input keyevent KEYCODE_BACK; sleep 1.5;;
       *)
@@ -323,7 +329,13 @@ grab() {
 # ============ install + boot ============
 echo "== install $APK (expect $VER) on $A"
 timeout 90 adb -s "$A" install -r -d -t "$APK" | tail -1
+PREV_OFF_TIMEOUT=$(timeout 8 adb -s "$A" shell settings get system screen_off_timeout 2>/dev/null | tr -d '[:space:]')
 timeout 12 adb -s "$A" shell settings put system screen_off_timeout 1800000 >/dev/null 2>&1
+# restore the user's screen-off timeout on ANY exit, including the FATAL
+# paths that return before the final disarm section (the W4-C exit-2 run
+# left the device at 1800000 because it died before the explicit delete).
+restore_timeout() { timeout 12 adb -s "$A" shell settings delete system screen_off_timeout >/dev/null 2>&1; }
+trap restore_timeout EXIT
 adb -s "$A" shell am force-stop com.simplemobiletools.gallery.pro >/dev/null 2>&1
 wake
 timeout 25 adb -s "$A" shell am start -n deepal.com.cn.app/.SplashActivity >/dev/null 2>&1
