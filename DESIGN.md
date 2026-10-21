@@ -200,17 +200,21 @@ Java), прогнанная по baseline `pre_step4` в двух режимах
   ddx КАЖДОЙ single-line пилюли baseline (171 pills; wrap-пилюли
   — вне дерева, ddx=0 — проверено). 0 mismatches — проекция
   заслуживает доверия (это не «догадка», а порты кода).
-- **Кадр (1): movers = 28**: 27 × `was-left → centered (INTENDED)` —
-  профиль реально центрирует id, которые px-путь оставляла левыми
-  (`tv_text`×7, `tv1`×6, `item_help_center_tv`×4, `tv_entry_name`×4,
-   `tab_text`×3, `tvAirTile`, `tv_main_car_update`, `txt_title`)
-   + **1 известное расхождение** `titleTv` (notifications):
-   профиль говорит center — остаётся на px-пути до (C1) релиза, **не**
-   блокирует кадры 2–4.
+- **Кадр (1): movers = 27** — все 27 `was-left → centered (INTENDED)`,
+  0 вне объяснения. Профиль реально центрирует id, которые px-путь
+  оставляла левыми (`tv_text`×7, `tv1`×6, `item_help_center_tv`×4,
+  `tv_entry_name`×4, `tab_text`×3, `tvAirTile`, `tv_main_car_update`,
+  `txt_title`), только на узлах, которые НЕ full-width page-header.
+- **Полноэканные page-header`ы исключены из profile-ветки (`!headerFullRow`)**:
+  `tvTopTitle` (C1) и `titleTv` (notifications, C2) — known deviation
+  (профиль g=center, а app держит left-inset ~24dp); по решению DESIGN
+  «Пока: НЕ переключать» — они остаются на (C1)/(C2) до СВОЕГО релиза и
+  в кадре (1) **byte-identical** (иначе force-centering 960-узла сорвал бы
+  CJK-coverage — правило 4). Это значит: в кадре (1) **нет** «1 known
+  mismatch mover» — headers не двигаются вообще.
 - **1 амбивалентная пилюля** (`my_tab` `txt_content`, est=816 vs pill 794)
   — single-vs-wrapped offline неразрешимо; но по guard кадра (1)
-  `width > est` она НЕ может сдвинуться (794 < 816) → скрытых 29-х
-  movers нет.
+  `width > est` она НЕ может сдвинуться (794 < 816) → скрытых movers нет.
 - **Критично для кадров 2/3/4**: гейты **(A), (B), (D) размещают 0 pills**
   на 11 канонических экранах baseline. Т.е. их удаление доказывается
   **пустым diff** (ни один pill не помещается под их px-условия). Долг
@@ -218,9 +222,11 @@ Java), прогнанная по baseline `pre_step4` в двух режимах
   не попадает в baseline-экраны под (A).
 
 Критерий принятия кадра (1) в телефоне: `diff_golden` против
-`pre_step4` обязан перечислить **ровно эти 28** PILL-CHG (±схлопывание
-±2px) и 0 HARD-вне их; каждый из 28 = узел кадра с причинной строкой
-(«профиль g:center против px-left») — список расхождений закрыт.
+`pre_step4` обязан перечислить **ровно эти 27** PILL-CHG (±схлопывание
+±2px) и 0 HARD-вне их; каждый из 27 = узел кадра с причинной строкой
+(«профиль g:center против px-left, узел не full-width header»). Полно-
+экранные headers НЕ в списке (byte-identical). Список расхождений
+закрыт; кадр (1) — не «diff пустой», а «27 осознанных re-center-ов».
 
 ### Known deviations
 

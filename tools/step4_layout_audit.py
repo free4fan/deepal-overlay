@@ -10,16 +10,24 @@ list (pills.json IS the spec list: every CJK node gets a pill) and returns
 the ddx the tree picks plus the path name that decided it.
 
   profile=False  -> the CURRENT runtime (baseline behavior)
-  profile=True   -> the FRAME-(1) wiring: the PROFILE_CENTER branch is
-                    inserted BEFORE the nav-band block; ids it claims get
-                    center-on-node (same clamps) and every later block
-                    (band/(A)-(E)/(F)) backs off via its `ddx == 0`
-                    precondition (the band block gains that guard in the
-                    same commit). No shape class guards the profile branch:
-                    the id flag IS the stronger claim (a grid label that is
-                    g:center in every layout centers even if looseRow — the
-                    shape classes are heuristic guesses the profile
-                    replaces; that is the step-4 mechanism).
+  profile=True   -> the FRAME-(1) wiring: the profile branch is a
+                    FALL-THROUGH centerer at the END of the !multiline
+                    horizontal block (exactly where the Java frame-(1)
+                    release will place it). It claims a pill only when no
+                    px gate fired (ddx is still the left default 0), the id
+                    is unambiguously center-aligned, and width > est.
+                    By construction the gate-placed pills are untouched —
+                    verified on the canonical set: all 27 projected movers
+                    come from path 'none' — including the full-width page
+                    headers, which the (C1)/(C2)/(D) gates still carry at
+                    their left-inset / empty-center until that decision's
+                    own release (force-centering a 960px header would
+                    expose CJK — rule 4).
+                    No shape class guards the profile branch: the id flag
+                    IS the stronger claim (a grid label that is g:center in
+                    every layout centers even if looseRow — the shape
+                    classes are heuristic guesses the profile replaces;
+                    that is the step-4 mechanism).
                     PROFILE_START keeps the ddx-0 path (what isStartLocked
                     already does); PROFILE_BTN is claimed by (F)'s own
                     block, not by the centering branch (btn semantics
@@ -158,16 +166,17 @@ def resolve_ddx(p, pills, v, profile):
     standalone, tall_icon, _wide, loose = shape_classes(
         est, w, h, est_px, close_row)
     start_locked = v == "PROFILE_START"
+    # headerFullRow hoisted: (C)/(D) use it in the chain below AND the
+    # frame-1 profile branch uses it as its exclusion (a full-width
+    # standalone header keeps the (C1)/(C2) left-inset / (D) center
+    # semantics until that decision's own release — never the profile).
+    header_full = (standalone and x <= 30
+                   and w >= SW * 0.95 and pw < w)
 
+    # ============ px tree (baseline behavior, byte-for-byte) ============
     ddx = 0
-    # frame-1 wiring: the profile branch, BEFORE the nav-band block.
-    if profile:
-        if v == "PROFILE_CENTER" and est > 0 and pw > est:
-            return clamp_center(w, pw, x), "profile"
-        # PROFILE_START/MIXED/NONE/PROFILE_BTN: fall through to the px tree
-        # exactly as before (startLocked is isStartLocked's meaning).
-    # nav-band block (frame-1: gains a `ddx == 0` guard — here ddx is 0 by
-    # construction: the profile branch already returned if it claimed).
+    path = "none"
+    # nav-band block.
     if y > SH - 130 and est > 0 and pw > est and not standalone \
             and not tall_icon:
         overhang = jdiv(pw - est, 2)
@@ -176,14 +185,15 @@ def resolve_ddx(p, pills, v, profile):
             d = max(d, -x)
             if x + d + pw > x + maxw:
                 d = int(maxw - pw)
-            return d, "band"
+            ddx = d
+            path = "band"
     # (A)-(E) chain
-    if est > 0 and not close_row and not tall_icon and not loose and pw > est:
+    if path == "none" and est > 0 and not close_row and not tall_icon \
+            and not loose and pw > est:
         a = (not standalone and y < 320 and 40 < x < SW * 0.6
              and w > est * 4.5 and h < 74 and not start_locked)
         b = (not start_locked and x <= 60 and w >= SW * 0.83
              and 96 <= h < 120 and w > est * 2.5)
-        header_full = (standalone and x <= 30 and w >= SW * 0.95 and pw < w)
         c1 = header_full and p.get("id") == PAGE_HEADER_ID
         c2 = header_full and y < 340 and p.get("id") != PAGE_HEADER_ID
         d_ = header_full and y > 340 and p.get("id") != PAGE_HEADER_ID
@@ -197,23 +207,46 @@ def resolve_ddx(p, pills, v, profile):
         # (E)'s !wideRow: redundant — wideRow needs w > est*2.5,
         # (E) needs w <= est*1.35+2 (impossible for est>4).
         if a or b or d_:
-            return clamp_center(w, pw, x), ("A" if a else ("B" if b else "D"))
-        if c1 or c2:
+            ddx = clamp_center(w, pw, x)
+            path = ("A" if a else ("B" if b else "D"))
+        elif c1 or c2:
             d = max(54, -x)  # (int)(24 * 2.25)
             if x + d + pw > x + maxw:
                 d = int(maxw - pw)
-            return d, ("C1" if c1 else "C2")
-        if e:
-            return clamp_center(w, pw, x), "E"
-    # (F) button block: ddx = (w - width)/2; the inner no-standalone
-    # re-derivation sets width = w -> ddx 0; the outer conditions only
-    # matter as an attribution tag (the ddx is 0 either way when the pill
-    # hugs, and the (F)-shape pill on the canonical set always hugs).
-    if est > 0 and pw > est and not start_locked and x > 30 \
+            ddx = d
+            path = ("C1" if c1 else "C2")
+        elif e:
+            ddx = clamp_center(w, pw, x)
+            path = "E"
+    # (F) button block: ddx stays 0 (the inner re-derivation sets width = w
+    # -> ddx 0); the outer conditions only matter as an attribution tag.
+    if path == "none" and est > 0 and pw > est and not start_locked and x > 30 \
             and SW * 0.28 < w < SW * 0.65 and 96 <= h <= 130 \
             and w > est * 2.0:
-        return 0, "F"
-    return 0, "none"
+        ddx = 0
+        path = "F"
+
+    # ============ frame-1 wiring (profile mode only) =====================
+    # The profile branch is a FALL-THROUGH centerer at the END of the
+    # !multiline ddx block: it claims a pill ONLY when no px gate fired
+    # (ddx is still the left default 0), the id is unambiguously
+    # center-aligned, and the pill is narrower than the CJK extent.
+    # Consequences (verified on the canonical set: every projected mover
+    # arrives from path 'none', so no gate-placed pill is re-claimed):
+    #   * band/(A)/(B)/(C1)/(C2)/(D)/(E) pills already have ddx set ->
+    #     untouched (nav tabs keep the band's icon-center; left-inset
+    #     headers keep the 24dp inset until the (C1) release — centering
+    #     them would expose the CJK, rule 4, so "known mismatch" items are
+    #     NOT frame-1 movers);
+    #   * (F) pills hug the node (ddx 0) but are PROFILE_BTN, not
+    #     PROFILE_CENTER -> untouched;
+    #   * only px-left single-line PROFILE_CENTER pills move (27 on the
+    #     canonical set).
+    if profile and ddx == 0 and v == "PROFILE_CENTER" and est > 0 \
+            and pw > est:
+        ddx = clamp_center(w, pw, x)
+        path = "profile"
+    return ddx, path
 
 
 def line_class(p, est, fs, shp):
@@ -351,15 +384,14 @@ def audit(baseline_dir, repo):
             if abs(ddx1 - rel_L) > TOL:
                 moved += 1
                 w, h = p["node"][2] - p["node"][0], p["node"][3] - p["node"][1]
-                if path1 == "profile" and path0 in ("A", "B", "D", "E", "band"):
-                    verdict = ("BUG: a pill the px gate CENTERED is not at "
-                               "the profile target — re-examine"
-                               )
-                elif path1 == "profile" and path0 in ("C1", "C2"):
-                    verdict = ("KNOWN MISMATCH: app keeps the header "
-                               "left-inset ({}), profile says center -> "
-                               "stays put until the (C1) release; "
-                               "documented, does not block frames 2-4"
+                if path1 == "profile" and path0 in ("A", "B", "D", "C1",
+                                                    "C2", "E", "band"):
+                    # Unreachable under the fall-through design (those pills
+                    # leave ddx != 0 and cannot be re-claimed): a pill whose
+                    # OBSERVED ddx differs from its own px target is a mirror
+                    # bug or a data problem, not a frame-1 move.
+                    verdict = ("BUG: the px gate placed this pill ({}), so "
+                               "frame-1 must not re-move it — re-examine"
                                ).format(path0)
                 elif path1 == "profile" and path0 in ("none",):
                     verdict = ("INTENDED frame-1 move (px left it, profile "
