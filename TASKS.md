@@ -173,14 +173,38 @@ dark_overlay=off).
      явный AlignSource + alignFor (ProfileAlign, поведение не изменено —
      классификация только); оффлайн-проекция кадра (1)
      (step4_layout_audit.py, зеркало computeLayout по baseline): 171/171
-     pills атрибутированы (0 unexplained), movers=44 (43 INTENDED
-     was-left→centered + 1 известное расхождение titleTv → (C1)-релиз);
-     гейты (A)/(B)/(D) размещают 0 pills на 11 канонических экранах →
-     кадры 2/3/4 доказываются пустым diff'ом. **Осталось: окно с телефоном
-     (длинный прогон, анонсировать) — debug v97 + гибридный after-снимок,
-     diff против pre_step4 обязан показать ровно 27 movers (все INTENDED
-     was-left→centered на non-header узлах; full-width headers —
-     byte-identical до (C1)-релиза).**
+     pills атрибутированы (0 unexplained); movers = ровно 27 INTENDED
+     was-left→centered на non-header узлах (все с path 'none', 0 re-claim),
+     titleTv НЕ двигается (headers byte-identical до (C1)/(C2)-релиза —
+     см. усиление кадра (0) ниже); гейты (A)/(B)/(D) размещают 0 pills на
+     11 канонических экранах → кадры 2/3/4 доказываются пустым diff'ом.
+     **Кадр (0) усилен (10-21, 3192528)**: зеркало-порт сверено по
+     множеству проекций — ВСЕ movers приходят с path 'none' (0 re-claim)
+     → профиль-ветка в Java = FALL-THROUGH в КОНЦЕ !multiline-блока;
+     headers (C1/C2/D) структурно не дотягиваются до неё → в кадре (1)
+     нет «known mismatch mover» (titleTv тоже не двигается), и скрытых
+     re-claim нет: в проекции ВСЕ 27 movers — path0='none' (банд-табы
+     и (A)/(B)/(D)/(E)-пилюли несут ddx≠0 и профиль-ветку структурно
+     не видят; амбивалентная my_tab/txt_content не двигается — 794≤est 816).
+     **КАДР (1) РЕАЛИЗОВАН в Java, ждёт телефон
+     (10-21)**: `computeLayout` — fall-through `alignFor(viewId)==
+     PROFILE_CENTER` (ddx==0 && est>0 && width>est, клампы как у (A)–(E))
+     ПОСЛЕ всех px-блоков; `TranslationService` передаёт alignClassifier
+     в 4-арг ctor; профиль-ветка НЕ добавляет условия px — мораторий
+     соблюдён; version 97/2.10.45, debug-APK собран и верифицирован
+     (aapt: versionCode 97 / versionName 2.10.45). Оффлайн-гейты: mirror
+     self-test 171/171 (0 mismatches — проекция = порт кода),
+     `test_profile_align.sh` PASS (7281/7281 против TSV аудита),
+     амбивалентная my_tab/txt_content не двигается (794≤est 816).
+     **Осталось: окно с телефоном (длинный прогон, АНОНСИРОВАТЬ)** —
+     `adb connect` (порт сменился: в `adb devices` сейчас 0 устройств)
+     → install debug v97 → `golden_interactive.sh` (пункт 7: после
+     реконнекта молчащий a11y лечит ПЕРЕУСТАНОВКА, не force-stop) →
+     гибридный after-снимок 11 экранов → `diff_golden` против
+     `pre_step4_96_7282` обязан перечислить ровно 27 PILL-CHG (±2px),
+     0 HARD-вне них, headers вне списка. Кадр (2) (удаление (A)) —
+     только после закрытия этого списка. После кадра release (сейчас
+     ship96) возвращается на устройство.**
 
 ## Рабочие правила (жёсткие, из prompt.md — с 2026-10-16, до отмены.
 ## С 2026-10-19: применяются ретроспективно ко всему сделанному, а не только к

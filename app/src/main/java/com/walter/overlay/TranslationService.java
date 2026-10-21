@@ -150,9 +150,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         setServiceInfo(config);
 
         // Load the id map before the manager is built: the left-anchor lock
-        // set and the per-id real font (decoupled sizing) are layout inputs.
+        // set, the per-id real font (decoupled sizing) and the step-4
+        // alignment classifier are layout inputs.
         loadViewProfiles();
-        inlineManager = new InlineOverlayManager(this, startLockedIds, viewProfiles);
+        inlineManager = new InlineOverlayManager(this, startLockedIds,
+            viewProfiles, alignClassifier);
 
         // Read saved translation state
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);

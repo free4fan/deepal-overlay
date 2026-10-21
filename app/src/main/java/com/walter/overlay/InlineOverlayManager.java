@@ -1123,6 +1123,38 @@ public class InlineOverlayManager {
                 ddx = Math.max(ddx, -x); // never cross the screen edge
                 if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
             }
+            // FRAME 1 (step 4, layoutFromProfile): the profile's definite
+            // center verdict is a FALL-THROUGH centerer — it claims the pill
+            // only when NO px gate above fired (ddx is still the left
+            // default 0), the id is g:"center" in every layout, and the
+            // pill is wider than the CJK extent (the same width>est coverage
+            // precondition as (A)-(E): a narrower pill already covers the
+            // text at the node's left edge — nothing to fix). It is a
+            // FALL-THROUGH, so a px gate that already moved the pill is
+            // never re-claimed differently: every centering gate that
+            // fires leaves ddx != 0 (band -> icon-center, (A)/(B)/(D)/(E)
+            // -> node-center, (C1)/(C2) -> the 24dp inset), so the ddx==0
+            // wait excludes them; (F) DOES leave ddx 0 (the hug), but its
+            // canonical ids are btn:1 -> PROFILE_BTN, and even a
+            // hypothetical (F)-shaped PROFILE_CENTER pill is byte-
+            // identical here: with width==spec.width the recomputed
+            // ddx is (w-w)/2 = 0, the same hug position. Full-width
+            // page headers are carried by (C1)/(C2)/(D) (a headerFullRow
+            // with width>est always matches one before the fall-through),
+            // so tvTopTitle keeps its 24dp inset until the dedicated (C1)
+            // release and titleTv keeps (C2): in frame 1 the headers are
+            // byte-identical (forcing a 960px header to node-center would
+            // expose the CJK — golden rule 4). Verified offline by
+            // tools/step4_layout_audit.py: on the canonical 11-screen
+            // baseline all 27 projected frame-1 movers come from ddx-0
+            // px misses (0 re-claims), 0 unexplained.
+            if (ddx == 0 && est > 0 && width > est
+                    && alignFor(spec.viewId)
+                        == ProfileAlign.AlignSource.PROFILE_CENTER) {
+                ddx = (spec.width - width) / 2;
+                ddx = Math.max(ddx, -x); // never cross the screen edge
+                if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
+            }
         }
 
         // A "wrapped" label that resolved back to ONE line takes the
