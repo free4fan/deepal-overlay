@@ -246,7 +246,10 @@ def main():
     def screen_list(d):
         man = d / "manifest.txt"
         if man.exists():
-            return [l.split("=", 1)[1].strip()
+            # manifest format is single-line per screen:
+            #   screen=<name> pills=N a11y=N shot=N  (golden_interactive.sh)
+            # or multi-token — take ONLY the first token after screen=.
+            return [l.split("=", 1)[1].split()[0]
                     for l in man.read_text().splitlines()
                     if l.startswith("screen=")]
         return sorted(p.name for p in d.iterdir() if p.is_dir())
