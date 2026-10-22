@@ -57,6 +57,8 @@ ROW_GAP_DP  = jf(2.6667)
 NEIGHBOR_MAX_DP = jf(266.6667)
 SAME_ROW_DY_DP = jf(22.2222)
 BAND_BOTTOM_DP = jf(57.7778)   # band real_h - 130px (T-35 #2)
+GATE_E_SCREEN_MID_DP = jf(10.6667)   # gate E screen-mid +-24px (T-35 #3)
+GATE_E_EDGE_DP = jf(3.5556)          # gate E rightClear edge 8px (T-35 #3)
 PADH_FLOOR_DP = jf(4.0 / 2.25)   # Java: 4 / 2.25f
 PADV_FLOOR_DP = jf(2.0 / 2.25)
 MIN_PILL_DP = jf(32.0)
@@ -546,8 +548,10 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
             c1 = header_full and page_header
             c2 = header_full and (not page_header) and y0 < 340
             d_g = header_full and (not page_header) and y0 > 340
-            right_clear = sw - x - s.w - 8
-            screen_mid = abs(x + s.w / 2.0 - sw / 2.0) <= 24
+            edge_e = rp(GATE_E_EDGE_DP, d)
+            screen_mid_px = rp(GATE_E_SCREEN_MID_DP, d)
+            right_clear = sw - x - s.w - edge_e
+            screen_mid = abs(x + s.w / 2.0 - sw / 2.0) <= screen_mid_px
             balanced = (left_clear > 0 and right_clear > 0
                         and min(left_clear, right_clear)
                         >= jf(0.7 * max(left_clear, right_clear)))

@@ -33,11 +33,6 @@ public class InlineOverlayManager {
     private static final int MAX_TEXT_SP = 24;
     private static final int WRAP_MAX_LINES = 8;
     private static final int CORNER_RADIUS_DP = 6;
-    // still-px constant used ONLY in gate (E)'s rightClear measurement;
-    // the measurement foundation (maxW/row pass/floors) moved to the *_DP
-    // values below, T-35 #0. It keeps its px value until its own class PR
-    // so #0 changes nothing but the foundation.
-    private static final int SCREEN_EDGE_MARGIN = 8;
 
     private static final int BG_DARK_SETTING = 0xDD1A1A1A; // manual "Dark overlay" mode
     private static final int BG_DARK_ZONE = 0xFF202020;    // toolbar/header: opaque dark, blends into the bar
@@ -73,6 +68,15 @@ public class InlineOverlayManager {
     // the bottom strip whose CJK the app centers over an icon: a node whose
     // top is within this many px of the screen bottom. 130px = 57.78dp (T-35 #2)
     private static final float BAND_BOTTOM_DP = 57.7778f;
+    // gate (E): a label counts as screen-centered within this band around
+    // the midpoint, and its clearance must clear this edge inset. 24px of
+    // each = 10.67dp (T-35 #3).
+    private static final float GATE_E_SCREEN_MID_DP = 10.6667f;
+    private static final float GATE_E_EDGE_DP = 3.5556f;
+    // gate (F): a dialog ACTION BUTTON is button-shaped (this tall, px
+    // window T-35 #4), x-inset (past this), medium width (0.28..0.65 of the
+    // screen = dimensionless, already px-free). 96px/130px = 42.67/57.78dp,
+    // x>30px = 13.33dp.
     // Font may shrink to this (sp) so the text fits the column instead of ellipsizing
     private static final float FIT_MIN_SP = 9;
     // A pill narrower than this whose text still overflows is a meaningless
@@ -1059,9 +1063,11 @@ public class InlineOverlayManager {
                 //     the on-screen node position is the source of truth per
                 //     screen. An off-screen-center label (icon card
                 //     tvManagerHint center 452) keeps its left anchor either way.
-                int rightClear = screenWidth - x - spec.width - SCREEN_EDGE_MARGIN;
+                int edgeE = Math.round(GATE_E_EDGE_DP * dm.density);
+                int screenMidPx = Math.round(GATE_E_SCREEN_MID_DP * dm.density);
+                int rightClear = screenWidth - x - spec.width - edgeE;
                 boolean screenMid =
-                    Math.abs(x + spec.width / 2f - screenWidth / 2f) <= 24;
+                    Math.abs(x + spec.width / 2f - screenWidth / 2f) <= screenMidPx;
                 boolean centeredLabel =
                     !standaloneRow && !wideRow
                     && spec.width <= est * 1.35f + 2
@@ -1096,7 +1102,7 @@ public class InlineOverlayManager {
             //     (B) and NOT a full-screen header row), x-inset (headers
             //     start at x 0/30), short CJK far narrower than the button →
             //     center the pill on the button center.
-            if (ddx == 0 && est > 0 && width > est
+if (ddx == 0 && est > 0 && width > est
                     && !startLocked && x > 30
                     && spec.width > screenWidth * 0.28f
                     && spec.width < screenWidth * 0.65f

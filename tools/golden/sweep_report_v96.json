@@ -18,13 +18,13 @@
  "totals": {
   "nodes": 171,
   "verified": 146,
-  "clean": 134,
-  "defects": 12,
-  "flip_defects": 7,
+  "clean": 135,
+  "defects": 11,
+  "flip_defects": 6,
   "dx_defects": 5,
   "mirror": 25,
   "port_defects": 0,
-  "noise_only": 143
+  "noise_only": 144
  },
  "screens": {
   "dialog_keyless": [
@@ -2669,14 +2669,14 @@
       "fs": 15.703703138563368
      },
      "1.0": {
-      "ddx": -8.0,
+      "ddx": 0.0,
       "ddy": -4.0,
       "w": 80.0,
       "h": 31.0,
       "fs": 15.703702926635742
      },
      "1.5": {
-      "ddx": -8.0,
+      "ddx": 0.0,
       "ddy": -4.666666666666667,
       "w": 80.66666666666667,
       "h": 32.666666666666664,
@@ -2720,46 +2720,25 @@
     },
     "paths": {
      "2.25": "none",
-     "1.0": "E",
-     "1.5": "E",
+     "1.0": "none",
+     "1.5": "none",
      "2.0": "none",
      "2.75": "none",
      "3.0": "none",
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "gateE",
-      [
-       false
-      ],
-      [
-       true
-      ]
-     ],
-     [
-      1.5,
-      "gateE",
-      [
-       false
-      ],
-      [
-       true
-      ]
-     ]
-    ],
-    "max_d": 8.0,
+    "flips": [],
+    "max_d": 1.4444444444444429,
     "worst": [
      1.0,
-     "ddx",
-     8.0
+     "h",
+     1.4444444444444429
     ],
     "port_defect": false,
     "over_spec": true,
-    "noise": false,
-    "fails": true
+    "noise": true,
+    "fails": false
    },
    {
     "id": "tvReportTitle",
