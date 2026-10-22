@@ -70,6 +70,9 @@ public class InlineOverlayManager {
     // adjacent row as a row neighbor and clamped this pill to their gap — a 60px
     // "Це…" instead of "Центр сообщений".
     private static final float ROW_SAME_ROW_MAX_DY_DP = 22.2222f;
+    // the bottom strip whose CJK the app centers over an icon: a node whose
+    // top is within this many px of the screen bottom. 130px = 57.78dp (T-35 #2)
+    private static final float BAND_BOTTOM_DP = 57.7778f;
     // Font may shrink to this (sp) so the text fits the column instead of ellipsizing
     private static final float FIT_MIN_SP = 9;
     // A pill narrower than this whose text still overflows is a meaningless
@@ -950,7 +953,8 @@ public class InlineOverlayManager {
         int ddx = 0, ddy = 0;
         if (!multiline) {
             ddy = (spec.height - height) / 2;
-            if (parseY(spec.key) > realDisplayHeight() - 130
+            int bandTop = realDisplayHeight() - Math.round(BAND_BOTTOM_DP * dm.density);
+            if (parseY(spec.key) > bandTop
                     && est > 0 && width > est
                     && !standaloneRow && !tallIconBox) {
                 int overhang = (width - est) / 2;

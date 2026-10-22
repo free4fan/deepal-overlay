@@ -18,13 +18,13 @@
  "totals": {
   "nodes": 171,
   "verified": 146,
-  "clean": 132,
-  "defects": 14,
-  "flip_defects": 9,
+  "clean": 134,
+  "defects": 12,
+  "flip_defects": 7,
   "dx_defects": 5,
   "mirror": 25,
   "port_defects": 0,
-  "noise_only": 141
+  "noise_only": 143
  },
  "screens": {
   "dialog_keyless": [
@@ -15866,14 +15866,14 @@
       "fs": 12.740740458170572
      },
      "1.0": {
-      "ddx": -13.0,
+      "ddx": 0.0,
       "ddy": -3.0,
       "w": 79.0,
       "h": 25.0,
       "fs": 12.740740776062012
      },
      "1.5": {
-      "ddx": -12.0,
+      "ddx": 0.0,
       "ddy": -3.3333333333333335,
       "w": 78.66666666666667,
       "h": 26.0,
@@ -15917,46 +15917,25 @@
     },
     "paths": {
      "2.25": "none",
-     "1.0": "band",
-     "1.5": "band",
+     "1.0": "none",
+     "1.5": "none",
      "2.0": "none",
      "2.75": "none",
      "3.0": "none",
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "band",
-      [
-       false
-      ],
-      [
-       true
-      ]
-     ],
-     [
-      1.5,
-      "band",
-      [
-       false
-      ],
-      [
-       true
-      ]
-     ]
-    ],
-    "max_d": 13.0,
+    "flips": [],
+    "max_d": 1.2222222222222214,
     "worst": [
      1.0,
-     "ddx",
-     13.0
+     "h",
+     1.2222222222222214
     ],
     "port_defect": false,
     "over_spec": true,
-    "noise": false,
-    "fails": true
+    "noise": true,
+    "fails": false
    },
    {
     "id": "",
@@ -15979,14 +15958,14 @@
       "fs": 9.0
      },
      "1.0": {
-      "ddx": -17.0,
+      "ddx": 0.0,
       "ddy": -2.0,
       "w": 60.0,
       "h": 23.0,
       "fs": 9.0
      },
      "1.5": {
-      "ddx": -17.333333333333332,
+      "ddx": 0.0,
       "ddy": -2.6666666666666665,
       "w": 60.666666666666664,
       "h": 24.666666666666668,
@@ -16030,46 +16009,25 @@
     },
     "paths": {
      "2.25": "none",
-     "1.0": "band",
-     "1.5": "band",
+     "1.0": "none",
+     "1.5": "none",
      "2.0": "none",
      "2.75": "none",
      "3.0": "none",
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "band",
-      [
-       false
-      ],
-      [
-       true
-      ]
-     ],
-     [
-      1.5,
-      "band",
-      [
-       false
-      ],
-      [
-       true
-      ]
-     ]
-    ],
-    "max_d": 17.333333333333332,
+    "flips": [],
+    "max_d": 1.4444444444444429,
     "worst": [
-     1.5,
-     "ddx",
-     17.333333333333332
+     1.0,
+     "h",
+     1.4444444444444429
     ],
     "port_defect": false,
     "over_spec": true,
-    "noise": false,
-    "fails": true
+    "noise": true,
+    "fails": false
    },
    {
     "id": "",

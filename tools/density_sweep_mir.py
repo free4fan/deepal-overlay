@@ -56,6 +56,7 @@ NEAR_ROW_DP = jf(21.3333)
 ROW_GAP_DP  = jf(2.6667)
 NEIGHBOR_MAX_DP = jf(266.6667)
 SAME_ROW_DY_DP = jf(22.2222)
+BAND_BOTTOM_DP = jf(57.7778)   # band real_h - 130px (T-35 #2)
 PADH_FLOOR_DP = jf(4.0 / 2.25)   # Java: 4 / 2.25f
 PADV_FLOOR_DP = jf(2.0 / 2.25)
 MIN_PILL_DP = jf(32.0)
@@ -512,7 +513,8 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
         ddy = jdiv(s.h - height, 2)
         y0 = s.y
 
-        band_pred = (y0 > ctx.real_h - 130)        # 130px px-constant
+        band_top = ctx.real_h - rp(BAND_BOTTOM_DP, d)   # band: real_h - dp
+        band_pred = (y0 > band_top)
         if band_pred and est > 0 and width > est and not stand and not tall:
             overhang = jdiv(width - est, 2)
             if overhang <= left_clear:
@@ -522,13 +524,12 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
                     ddx = ic(maxw - width)
                 path = "band"
             log("band", (path == "band",),
-                130 - (ctx.real_h - y0) if band_pred else (y0 - (ctx.real_h - 130)),
+                y0 - band_top,
                 "y0=%d thr=%d overhang=%d lc=%d"
-                % (y0, ctx.real_h - 130,
-                   jdiv(width - est, 2), left_clear))
+                % (y0, band_top, jdiv(width - est, 2), left_clear))
         else:
-            log("band", (False,), (ctx.real_h - 130) - y0,
-                "y0=%d thr=%d" % (y0, ctx.real_h - 130))
+            log("band", (False,), band_top - y0,
+                "y0=%d thr=%d" % (y0, band_top))
 
         start_locked = bool(s.vid and s.vid in ctx.start_locked)
         header_full = (stand and x <= 30 and s.w >= jf(sw * 0.95)
