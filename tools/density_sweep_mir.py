@@ -59,6 +59,9 @@ SAME_ROW_DY_DP = jf(22.2222)
 BAND_BOTTOM_DP = jf(57.7778)   # band real_h - 130px (T-35 #2)
 GATE_E_SCREEN_MID_DP = jf(10.6667)   # gate E screen-mid +-24px (T-35 #3)
 GATE_E_EDGE_DP = jf(3.5556)          # gate E rightClear edge 8px (T-35 #3)
+GATE_F_H_MIN_DP = jf(42.6667)        # gate F 96<=h (T-35 #4)
+GATE_F_H_MAX_DP = jf(57.7778)        # gate F h<=130 (T-35 #4)
+GATE_F_X_INSET_DP = jf(13.3333)      # gate F x>30 (T-35 #4)
 PADH_FLOOR_DP = jf(4.0 / 2.25)   # Java: 4 / 2.25f
 PADV_FLOOR_DP = jf(2.0 / 2.25)
 MIN_PILL_DP = jf(32.0)
@@ -587,10 +590,13 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
                 ddx = _cl_center(s.w, width, x, maxw)
                 path = "E"
 
+        f_x = rp(GATE_F_X_INSET_DP, d)
+        f_hmin = rp(GATE_F_H_MIN_DP, d)
+        f_hmax = rp(GATE_F_H_MAX_DP, d)
         f_pred = (path == "none" and est > 0 and width > est
-                  and not start_locked and x > 30
+                  and not start_locked and x > f_x
                   and s.w > jf(sw * 0.28) and s.w < jf(sw * 0.65)
-                  and 96 <= s.h <= 130 and s.w > jf(est * 2.0))
+                  and f_hmin <= s.h <= f_hmax and s.w > jf(est * 2.0))
         if f_pred:
             if not (tall or loose):
                 text_px = max(text_px, base_px)

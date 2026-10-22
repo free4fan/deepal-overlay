@@ -73,6 +73,12 @@ public class InlineOverlayManager {
     // each = 10.67dp (T-35 #3).
     private static final float GATE_E_SCREEN_MID_DP = 10.6667f;
     private static final float GATE_E_EDGE_DP = 3.5556f;
+    // gate (F): a dialog ACTION BUTTON is button-shaped (this tall), x-inset
+    // (past this), medium width (0.28..0.65 of the screen = dimensionless).
+    // 96/130px = 42.67/57.78dp, x>30px = 13.33dp (T-35 #4).
+    private static final float GATE_F_H_MIN_DP = 42.6667f;
+    private static final float GATE_F_H_MAX_DP = 57.7778f;
+    private static final float GATE_F_X_INSET_DP = 13.3333f;
     // gate (F): a dialog ACTION BUTTON is button-shaped (this tall, px
     // window T-35 #4), x-inset (past this), medium width (0.28..0.65 of the
     // screen = dimensionless, already px-free). 96px/130px = 42.67/57.78dp,
@@ -1091,6 +1097,9 @@ public class InlineOverlayManager {
                     if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
                 }
             }
+            int fXInset = Math.round(GATE_F_X_INSET_DP * dm.density);
+            int fHMin = Math.round(GATE_F_H_MIN_DP * dm.density);
+            int fHMax = Math.round(GATE_F_H_MAX_DP * dm.density);
             // (F) A DIALOG ACTION BUTTON (取消/确定 — the two buttons of the
             //     keyless-driving dialog, ~368x102, x-inset): the app CENTERS
             //     the short CJK inside the button, but a same-row button PAIR
@@ -1103,10 +1112,10 @@ public class InlineOverlayManager {
             //     start at x 0/30), short CJK far narrower than the button →
             //     center the pill on the button center.
 if (ddx == 0 && est > 0 && width > est
-                    && !startLocked && x > 30
+                    && !startLocked && x > fXInset
                     && spec.width > screenWidth * 0.28f
                     && spec.width < screenWidth * 0.65f
-                    && spec.height >= 96 && spec.height <= 130
+                    && spec.height >= fHMin && spec.height <= fHMax
                     && spec.width > est * 2f) {
                 // The node IS the button (both halves of the dialog-action
                 // pair): the a11y box is the drawn stadium button. Cover it
