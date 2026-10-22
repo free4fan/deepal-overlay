@@ -30,6 +30,13 @@ def run_all():
     for scr in sorted(d.name for d in BASE.iterdir() if d.is_dir()):
         pills = ds.load_screen(BASE / scr)
         M.set_text_slopes(ds.build_slopes(pills)[0])
+        # T-36a iter 1: the per-node device wrap facts must be loaded for
+        # BOTH snapshots (before/after), otherwise the "before" snapshot
+        # (taken before the extension existed) diffs the extension itself
+        # instead of the edit it guards.  DESIGN: «ИНВАРИАНТ self-diff для
+        # Т-36a» — 141 clean + 5 known-bounded byte-identical, 25 boundary
+        # may move.
+        M.set_wrapped_lines(ds.build_lpin(pills))
         bag = ds._DenseBag(ds.BASE_D, align, start_locked, font_sp)
         specs = ds.scale(pills, ds.BASE_D)
         runs = ds.run_screen(specs, bag, False, frame1=False)

@@ -107,11 +107,26 @@ dark_overlay=off).
     slope глобален по тексту на экран → 13 clean-узлов сдвинуло через
     18 новых L-2 пинов (explore tv_title, mashina_scroll/top
     tv_main_menu_*, my_tab tvMemberTaskDesc/txt_time/tv_text,
-    notifications content×2, trip_info). Записано в DESIGN «Итерация
-    Т-36a №0». Следующая: line-count ИНОЙ формой — прямое пино́вание L по
-    высоте пилюли (без re-вывода width-интервала; per-node scope),
-    W-класс (8–10 узла) через S-пин-условия/двойные пины; каждый вариант
-    = свой PR + sweep перед правкой.
+    notifications content×2, trip_info). Вывод №0: **расширение
+    per-NODE, не per-text.** Итерация №1 (per-node L-факт: `build_lpin`,
+    `Spec.key0`, инжект в `compute_layout` ПОСЛЕ font-fit-стадии, class
+    `model-boundary-wrap`, isolation по экрану через `run_screen(lpin=)`)
+    **АППРУВИРОВАНА (10-22)**: дельта 25→14 / **141→152** (+11 boundary→
+    clean) / 5→5 known-bounded (dp-байт-идентичны) / unknown 0 / port? 0 /
+    flips 0 / **VERDICT PASS, exit=0**; self-diff по инварианту №1 (141+5
+    байт-идентичны, 25 могут меняться): 160/171, diff = ровно 11
+    перешедших (mashina_scroll help-center×2, my_tab tv_text×4 + tv_sign,
+    service_deepal_grid×2, settings_car (92,1646), trip_info (508,954)).
+    11 стали CLEAN, а не known-bounded (поправка формы: font = s.real_fs
+    ground truth из дампа, высота точна, «4px fit-резидент» не возник;
+    known-bounded-ветка `wrap` реализована для узлов с расходящимися
+    fs). Остаток 14: W-класс ×~8 (tv_sign «Вошёл в систему» dev w −7 —
+    сюда), EDGE×2, W+MIX×2, ddy-anchor×2 (my_tab txt_time «6 часов назад»,
+    service_acc «Зарядка» — не L-пиннабельны: h = node-height, механизм
+    = ddy-якорь следующей итерации). Дальше: **итерация №2 (W-класс)** —
+    отдельный контракт-блок + baseline + PR (S-пин-условия / двойные пины
+    по тексту с self-consistency); **итерация №3 (ddy-anchor×2)** —
+    ещё одна форма. Записи: DESIGN.md «КОНТРАКТ итерации №1» + «ИТОГ №1».
   - **Т-36b. Семантические tie-break (гистерезис fit-теста, min(h,maxPillH)-
     нормализация).** Кандидаты: пара h@1.5 «Быстрый холод»/«Моб. интернет»
     (бритвенный fit-test) и h@2.75 «Фестиваль». **ЗАБЛОКИРОВАНО НА ТЕЛЕФОНЕ:

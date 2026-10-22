@@ -108,10 +108,26 @@ _TEXT_SLOPES = None
 _LINE_FACTOR = 1.25        # lh = (int)(fs·1.25) — Java convention; the dump
                            # confirms 2 lines at fs 30.67px → h 94 = 2·ic(1.25fs)+2padV
 
-
 def set_text_slopes(m):
     global _TEXT_SLOPES
     _TEXT_SLOPES = m or {}
+
+
+# T-36a iter 1 (10-22, DESIGN «КОНТРАКТ итерации Т-36a №1»): per-node
+# device wrap facts. key (BASE-density node "x,y" = Spec.key0) -> L, the
+# line count the DEVICE wrapped to on the int grid (pill h == L*lh +
+# 2*padv, L >= 2). PER-NODE by construction — no per-text slope, zero
+# cross-node propagation (the lesson of iter 0: a per-text slope moved 13
+# clean nodes). The fact is APPLIED in compute_layout only when the model
+# says single-line; the capture in build_lpin yields facts only for pills
+# the device shows wrapped (L >= 2), and 0 of the baseline's verified
+# clean nodes carry one, so every other node is byte-invariant.
+_WRAPPED_LINES = {}
+
+
+def set_wrapped_lines(m):
+    global _WRAPPED_LINES
+    _WRAPPED_LINES = m or {}
 
 
 def _units(ch):
@@ -236,11 +252,18 @@ def text_lines_capped(text, avail, fs, max_lines):
     return lines, True
 # ------------------------------ spec / context ============================
 class Spec:
-    __slots__ = ("x", "y", "w", "h", "text", "est", "sp", "vid", "real_fs")
+    __slots__ = ("x", "y", "w", "h", "text", "est", "sp", "vid", "real_fs",
+                 "key0")
 
-    def __init__(self, x, y, w, h, text, est, sp, vid, real_fs=0.0):
+    def __init__(self, x, y, w, h, text, est, sp, vid, real_fs=0.0,
+                 key0=None):
         (self.x, self.y, self.w, self.h) = (x, y, w, h)
         (self.text, self.est, self.sp, self.vid) = (text, est, sp, vid)
+        # the BASE-density node key ("x,y" from the dump) — survives the
+        # per-density rescaling, where `key` (x',y' at the current density)
+        # does not. The T-36a per-node L facts (WRAPPED_LINES) are keyed by
+        # the device (base) coordinates, so they must survive too.
+        self.key0 = key0 if key0 is not None else self.key
         # the DEVICE-RENDERED text font in px for this node (the dump's
         # fsPx), scaled to the current density like any sp·d value — the
         # app's real font size (TranslationService) is float px, unclamped
@@ -460,6 +483,33 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
             padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
             padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
             text_w = measure(s.text, text_px)
+    # T-36a iter 1 (DESIGN «КОНТРАКТ итерации Т-36a №1»): the DEVICE wrap
+    # fact (per node, key0 -> L) — applied AFTER the whole font-fitting
+    # stage (wrap loop / preview / clamped-fit) is done, so `not multiline`
+    # here means the model truly stayed single-line (a word_wrap-off node
+    # that the internal wrap loop already made multiline is NOT retouched
+    # — the known-bounded explore «Фестиваль» node would have moved).
+    # Data, not a gate: only the line count is adopted; text_px becomes the
+    # device font that actually produced the wrap (real_fs — ground truth
+    # from the dump). Every downstream branch is STOCK: width stays fit_w,
+    # height = L*lh + 2*padv, ddy runs the existing wrap-1 fine-tune /
+    # deep-pass centering, hidden off. Zero propagation: other nodes don't
+    # see this (no slopes touched, per-node scope).
+    lfact = 0
+    if (not multiline and _WRAPPED_LINES
+            and s.key0 in _WRAPPED_LINES and _WRAPPED_LINES.get(s.key0)):
+        lfact = _WRAPPED_LINES[s.key0]
+    if lfact:
+        if s.real_fs and s.real_fs > 0:
+            text_px = jf(s.real_fs)
+            padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+            padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
+            text_w = measure(s.text, text_px)
+        multiline = True
+        wrap_lines = lfact
+        preview = None
+        log("lpin", (lfact,), 0, "key0=%s L=%d fs=%.2f"
+            % (s.key0, lfact, text_px))
     log("fontFit", (multiline, wrap_lines, ic(text_px)), 0,
         "fitW=%d textW=%.2f preview=%s" % (fit_w, text_w, preview is not None))
 

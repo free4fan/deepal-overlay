@@ -152,7 +152,11 @@ def scale(pills, d):
                           p.get("text", ""), est1,
                           sp1 if est else sp0,
                           p.get("id") or None,
-                          real_fs=real_fs))
+                          real_fs=real_fs,
+                          # base-density key: the per-node L facts are keyed
+                          # by the DEVICE (dump) coordinates and must survive
+                          # the per-density rescaling (Spec.key does not)
+                          key0="%d,%d" % (n[0], n[1])))
     return out
 
 
@@ -165,10 +169,19 @@ def scale_screen(d):
 
 
 # ------------------------------ one run -----------------------------------
-def run_screen(specs, ctx_bag, word_wrap, frame1):
+def run_screen(specs, ctx_bag, word_wrap, frame1, lpin=None):
     d = ctx_bag.d
     sw, sh = scale_screen(d)
     real_h = screen_real_h(specs)
+    # T-36a iter 1: the per-NODE wrap facts are a per-SCREEN global in the
+    # mirror (a node key0 "x,y" can collide ACROSS screens with different
+    # device line counts — explore and dialog_keyless both have a (106,946)
+    # node). Every density run of a screen loads THAT screen's map, so the
+    # mirror never sees a foreign screen's fact. An explicit lpin from the
+    # caller (built from the same screen's pills) always wins; None keeps
+    # the caller-managed global (the snapshot harness sets it per screen).
+    if lpin is not None:
+        M.set_wrapped_lines(lpin)
     ctx = M.Ctx(d, sw, real_h, ctx_bag.align, ctx_bag.start_locked,
                 ctx_bag.font_sp)
     runs = {}
@@ -208,7 +221,7 @@ def dp_of(out, d):
 
 
 # --------------------------- self-check @ D0 -------------------------------
-def _dev_class(dev, out, p, pin):
+def _dev_class(dev, out, p, pin, wrap_l=None):
     """why the self-check deviated (documented, keeps the sweep honest).
     pin = 's' (an exact single-line W₁ pin), 'l' (an L-line interval pin),
     or None (the char-class model — the documented approximation):
@@ -217,6 +230,11 @@ def _dev_class(dev, out, p, pin):
       still an INTERVAL; a borderline text sits on its edge; the char
       class has no width equation at all). Excluded from the findings,
       listed, not silent;
+    wrap_l — T-36a iter 1: the node carries a per-NODE device wrap fact
+      (L lines on the device int grid, the model applied it: multiline,
+      L-line height, device font). The line count IS exact; the residual
+      is the fontFit razor edge (fit font vs device fs), bounded with
+      the same order as any pinned class;
     port? — otherwise: a real defect of the port for that node."""
     fs = p.get("fsPx") or 0
     dh, dw, dx = dev.get("h", 0), dev.get("w", 0), dev.get("x", 0)
@@ -251,6 +269,12 @@ def _dev_class(dev, out, p, pin):
     else:
         ok_x = abs(dx) <= 2
     ok_h = abs(dh) <= line + 2 * padv + 2     # ±1 line of render state
+    if wrap_l is not None and out and out.get("multiline"):
+        # T-36a iter 1: the per-node device wrap fact was applied (the
+        # line count is exact, the font is the device's; the residual is
+        # the fit-font razor edge — bounded, NOT a port problem).
+        ok_w = abs(dw) <= line + 2 * padv
+        return "model-boundary-wrap" if (ok_x and ok_h and ok_w) else "port?"
     if pin is None:
         ok_w = True                           # char class: width unconstrained
     elif pin == "s":
@@ -270,16 +294,21 @@ def self_check(pills, ctx_bag, word_wrap, frame1=False):
     Observed: pill[x,y,w,h]; expected: node + (ddx, ddy), width, height.
     Tolerance ±2px. Deviations over tol are CLASSIFIED: model-boundary*
     are the documented text-model limits (those pills are EXCLUDED from
-    the findings, but listed, not silent); port? marks a real port
+    the findings, but listed, not silent); -wrap marks a node whose
+    per-NODE device wrap fact (T-36a iter 1) was applied (line count
+    pinned, residual = the fontFit razor edge); port? marks a real port
     defect (the mirror would then be what is measured)."""
     _slopes, kinds = build_slopes(pills)
+    lpin = build_lpin(pills)
+    M.set_wrapped_lines(lpin)
     bag0 = _bag_at(ctx_bag, BASE_D)
-    runs = run_screen(scale(pills, BASE_D), bag0, word_wrap, frame1=frame1)
+    runs = run_screen(scale(pills, BASE_D), bag0, word_wrap, frame1=frame1,
+                      lpin=lpin)
     problems = {}
     for p in pills:
         k = (p["node"][0], p["node"][1])
         obs = p["pill"]
-        out, _trail = runs.get(k, (None, None))
+        out, trail = runs.get(k, (None, None))
         if out is None:
             problems[k] = {"cls": "port?", "dev": "missing run"}
             continue
@@ -287,9 +316,15 @@ def self_check(pills, ctx_bag, word_wrap, frame1=False):
               out["width"], out["height"]]
         dev = {s: e - o for s, e, o in zip("xywh", ex, obs)}
         if any(abs(v) > 2 for v in dev.values()):
-            problems[k] = {"cls": _dev_class(dev, out, p,
-                                             kinds.get(p.get("text") or "")),
-                           "dev": dev}
+            # the fact was APPLIED only when the mirror logged an lpin
+            # entry (model said single-line and the fact set multiline L)
+            wrap_l = None
+            if trail and any(e.get("cond") == "lpin" for e in trail):
+                wrap_l = lpin.get("%d,%d" % (k[0], k[1]))
+            problems[k] = {"cls": _dev_class(
+                dev, out, p, kinds.get(p.get("text") or ""),
+                wrap_l=wrap_l),
+                "dev": dev}
     return problems, runs
 
 
@@ -400,6 +435,43 @@ def build_slopes(pills):
     return slopes, kinds
 
 
+def build_lpin(pills):
+    """T-36a iter 1 (DESIGN «КОНТРАКТ итерации Т-36a №1»): per-NODE
+    device wrap facts — data extraction from the dump ONLY (no gate):
+
+    key0 (base-coordinate "x,y") -> L, the line count the DEVICE wrapped
+    to, read off the pill height on the device's int grid:
+      pill_h == L*lh + 2*padv,  lh = ic(fsPx*1.25), padv = ic(fsPx*0.3),
+      L = FLOOR((pill_h - 2*padv) / lh) in 2..3, integer-exact or a
+      residual <= 2px (a device int-bound is honest within that).
+
+    PER NODE, never per text (iter 0's per-text slope spread moved 13
+    clean nodes — the rejection numbers are in DESIGN «Итерация Т-36a
+    №0»): the mirror applies the fact only when s.key0 is in the map and
+    its own model says single-line — zero cross-node propagation. The
+    map is EMPTY for every node the baseline already reproduces, so the
+    141 clean / 5 known-bounded are byte-invariant by construction and
+    the 2.25 self-diff invariant (DESIGN «ИНВАРИАНТ self-diff для
+    Т-36a») re-proves it on each run: diff set must be a subset of the
+    25 model-boundary, otherwise the extension form reverts."""
+    lpin = {}
+    for p in pills:
+        fs = p.get("fsPx") or 0
+        if not fs or not p.get("text") or p["pill"][2] <= 0:
+            continue
+        padv = max(2, M.ic(M.jf(fs * 0.3)))
+        lh = M.ic(M.jf(fs * 1.25))
+        if lh <= 0:
+            continue
+        L = (p["pill"][3] - 2 * padv) // lh
+        if L < 2:
+            continue
+        if (p["pill"][3] - 2 * padv) % lh > 2:
+            continue             # not on the device int grid: no reliable L
+        lpin["%d,%d" % (p["node"][0], p["node"][1])] = min(L, 3)
+    return lpin
+
+
 def _l_pin(text, avail, fs, L):
     """Midpoint of the sub-range of the device's W₁ interval
     ((L-1)·A, L·A] where THIS mirror's greedy layout needs exactly L
@@ -428,13 +500,14 @@ def _l_pin(text, avail, fs, L):
 
 def sweep(pills, ctx_bag, word_wrap, tol, frame1=True):
     M.set_text_slopes(build_slopes(pills)[0])
+    lpin = build_lpin(pills)
     problems, runs0 = self_check(pills, ctx_bag, word_wrap, frame1=frame1)
     all_runs = {BASE_D: runs0}
     for d in DENSITIES:
         if d == BASE_D:
             continue
         all_runs[d] = run_screen(scale(pills, d), _bag_at(ctx_bag, d),
-                                 word_wrap, frame1)
+                                 word_wrap, frame1, lpin=lpin)
 
     def scaled_k(p, d):
         return (round(p["node"][0] * d / BASE_D),
