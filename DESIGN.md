@@ -517,6 +517,67 @@ port? > 0 ИЛИ self-diff-инвариант №1 нарушен (сдвиг н
 включая 5 known-bounded) → `git checkout`, числом в отчёт, форма №2
 отклонена (новый контракт-блок).
 
+### ИТОГ итерации Т-36a №2 — W-класс, **PASS с частичным покрытием** (10-23)
+
+Форма, реализованная: **relax S-критерия pass 1** (не «double-pin из
+другого экрана» — baseline-проб показал: у 5 W-текстов нет независимого
+witness-экрана, а self-consistency достигается проще — через est-кап
+width-уравнения). Механизм №2 численно: pass 1 `continue`'ил
+`wide/loose` и проверял S на `node_area` **без est-капа**; но у
+`wide`/`loose` в width-уравнении `node_area` **сужен est-капом**
+(`min(…, ic(est·2.2))` / `min(…, ic(est·1.35)+padh)`). Узел, у которого
+область текста выигрывает у **суженного est-капом** node_area, оставался
+непinned: char-class W₁ (e.g. 604 < 691) недооценивал, а S-пин не
+извлекался. Правка (единообразная с mirror): pass 1 применяет тот самый
+est-кап к `node_area` на `wide`/`loose` (stand/tall — нет: их кап стоит
+на **обеих** area-ветках, там уклон не проходит).
+
+Baseline-проб (`_probe_iter2_baseline.py`, read-only) + precheck
+(`_probe_iter2_precheck.py`, read-only, ДО правки) — isolation proof:
+relax даёт **ровно 3 S-пина по тексту** (notifications «Обновление…» ×2
+узла, «Новая версия…» ×2, settings «Управление ключами» ×1) и **никакой
+RISK** (нет clean-узла, несущего новый pinned-текст — урок №0 исчерпан).
+
+Дельта (измерена; «частично» — по контракту, не «почему не 8»):
+- **5/8 W-узлов → clean**: notifications [92,578]+[92,1559] «Обновление…»
+  dev_w −87→0, [92,1253]+[92,1865] «Новая версия…» −6→0,
+  settings [92,1360] «Управление ключами» −58→0. Все 5 `mirror=ok`,
+  width в точности к observed (723/478/442).
+- **mirror 14 → 9**, **clean 152 → 157**, unknown **0→0**, port? **0→0**,
+  known-bounded **5 → 5** (dp-идентичны, self-diff без них), flips **0→0**,
+  **VERDICT PASS, exit=0**. Self-diff vs `snap_iter1_225.json`: **166/171**
+  инвариантны, ровно 5 diff = 5 W-узлов (⊆ 14 boundary; 152+5 не тронуты).
+
+**3 W-узла НЕ закрываются этой формой (две разные границы, не port):**
+- notifications [0,297] titleTv «Автомобиль» + settings [0,266]
+  tvTopTitle «настройки…» (**stand** ×2): stand-головной `text_cap`
+  (`ic(est·1.4)+2padh` / heading-варианта — исход **CJK-`est`**) стоит
+  **ниже** реальной RU-ширины и режет **обе** area-ветки width-уравнения
+  → S-пин даёт overshoot (dev_w −31→**+14**, self-consistency FAIL).
+  Данные демпа несут RU-ширину (inner = pw−2padh: 226 / 353) — но применить
+  её нужно в **источнике `text_cap`** = семантика shape-капа
+  computeLayout → «нужен гейт» = эскалация в DESIGN (форма №3:
+  per-node stand-cap data), НЕ в №2-скопе.
+- settings [388,153] tv_title «настройки…» (**tall**): dev
+  (0,10,−143,−19) = два складывающихся механизма. (1) char-class W₁ (411)
+  < device W₁ (457) — **пиннабель по существу**: S-slope 10.881 при
+  real-fs=42 даёт width = min(564, max(184, 457+32)) = **489 = observed
+  точно** (device h=82 = ic(42·1.4)+2·ic(42·0.3) = 58+24 — device рендерит
+  не-уменьшенный font 42). (2) fit-stage MIRROR'а сам уменьшает
+  fs 42→32.67 (false-positive fit-теста; trail `fontFit (False,0,32)`),
+  поэтому один пин даёт 381≠489 (dev −108, FAIL). Правильное лечение =
+  pin + real-fs = **T-36b territory** (гистерезис fit-теста — контракт
+  уже записан, после ship); данные пина готовы (slope 10.881, узел
+  (настройки автомобиля, settings_car, 388,153)) — внести в T-36b контракт.
+
+Это 3 узла = **W-обобщённый** (stand×2 → №3 per-node stand-cap data;
+tall×1 → T-36b fit-hysteresis + pin), не «дожимаются» в #2 (мешать формы нельзя).
+Остаток 9: **W-общий×3** (stand×2 + tall×1) + **ddy×3** (explore
+tv_title, my_tab txt_time, service_acc «Зарядка») + **EDGE×2**
+(dialog_keyless tv_content, shop tvNotShowTipDes) + **W+MIX×1**
+(service_acc «Частые услуги») — механизмы записаны в
+`tools/golden/sweep_report_v96.json` (mirror_cls) как данные для №3+/T-36b.
+
 Откат (без «дожмём»): clean < 141 ИЛИ unknown > 0 ИЛИ port? > 0
 ИЛИ 13 узлов НЕ стали verified known-bounded (остались boundary
 без новой атрибуции) → `git checkout`, числом в отчёт, форма №1

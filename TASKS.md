@@ -120,13 +120,34 @@ dark_overlay=off).
     11 стали CLEAN, а не known-bounded (поправка формы: font = s.real_fs
     ground truth из дампа, высота точна, «4px fit-резидент» не возник;
     known-bounded-ветка `wrap` реализована для узлов с расходящимися
-    fs). Остаток 14: W-класс ×~8 (tv_sign «Вошёл в систему» dev w −7 —
-    сюда), EDGE×2, W+MIX×2, ddy-anchor×2 (my_tab txt_time «6 часов назад»,
-    service_acc «Зарядка» — не L-пиннабельны: h = node-height, механизм
-    = ddy-якорь следующей итерации). Дальше: **итерация №2 (W-класс)** —
-    отдельный контракт-блок + baseline + PR (S-пин-условия / двойные пины
-    по тексту с self-consistency); **итерация №3 (ddy-anchor×2)** —
-    ещё одна форма. Записи: DESIGN.md «КОНТРАКТ итерации №1» + «ИТОГ №1».
+    fs). Остаток 14 после №1: W-класс ×8, EDGE×2, W+MIX×1,
+    ddy-anchor×3. **Итерация №2 (W-класс) — PASS с частичным
+    покрытием (10-23)** (контракт-блок ДО правок, `654d7ce`; форма
+    уточнена baseline-пробом — DESIGN «ИТОГ №2»): relax S-критерия
+    pass 1 на `wide`/`loose` (est-кап node_area, единообразно с
+    width-уравнением mirror — до того узлы, где текст выигрывал у
+    СУЖЕННОГО капа, не были S-пиннабельны); precheck ДО правки:
+    ровно 3 S-пина по тексту, RISK=NONE (нет clean-узлов с этим
+    текстом). Дельта: **14→9 mirror, 152→157 clean** (+5:
+    notifications «Обновление…»×2, «Новая версия…»×2, settings
+    «Управление ключами») / 5→5 known-bounded dp-идентичны / 0
+    unknown / 0 port? / 0 flips / **VERDICT PASS exit=0**; self-diff
+    vs `snap_iter1_225.json` 166/171, diff = ровно 5 целевых.
+    Критерий «частично» (записан ДО старта) сработал: stand×2
+    (notifications titleTv «Автомобиль», settings tvTopTitle —
+    stand-кап `text_cap` из CJK-est ниже RU-ширины, S-пин
+    overshoot +14) и tall×1 (settings tv_title «настройки
+    автомобиля»: pin-пригодный — S-slope 10.881 даёт 489=obs при
+    real-fs 42, но fit-stage mirror ужимает 42→32.67 —
+    false-positive fit-теста) НЕ закрыты. Остаток 9: stand×2 +
+    tall×1 (W-cap/T-36b) + ddy×3 (explore tv_title, my_tab
+    txt_time, service_acc «Зарядка») + EDGE×2 + W+MIX×1 (service_acc
+    «Частые услуги»). Дальше: **№3 (ddy-anchor×3 + stand×2)** —
+    якорь ddy и/или per-node stand-cap data; **№4 (EDGE×2)** — своя
+    форма; tall×1 + данные пина (slope 10.881, settings_car
+    (388,153)) — в контракт **T-36b**. Записи: DESIGN.md
+    «КОНТРАКТ итерации №1» + «ИТОГ №1» + «КОНТРАКТ итерации Т-36a
+    №2» + «ИТОГ №2».
   - **Т-36b. Семантические tie-break (гистерезис fit-теста, min(h,maxPillH)-
     нормализация).** Кандидаты: пара h@1.5 «Быстрый холод»/«Моб. интернет»
     (бритвенный fit-test) и h@2.75 «Фестиваль». **ЗАБЛОКИРОВАНО НА ТЕЛЕФОНЕ:

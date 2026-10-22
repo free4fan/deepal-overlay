@@ -385,12 +385,26 @@ def build_slopes(pills):
         close, _lc, maxw = s4.sibling_facts(p, pills)
         stand, tall, wide, loose = s4.shape_classes(
             est, node_w, node_h, est_px, close)
-        if stand or tall or wide or loose:
+        if stand or tall:
             continue                       # est-capped width: no clean W₁
         node_area = min(node_w, maxw - 2 * padh)
+        if wide:
+            # T-36a iter 2: apply the SAME est-caps the mirror's width
+            # equation applies (compute_layout: node_area = min(node_area,
+            # ic(est*2.2)) for wide, ic(est*1.35)+padh for loose). Without
+            # them the S test sees only the plain node area and a
+            # text-winning wide/loose row (inner > the CAPPED node area)
+            # is invisible: no W₁ even though the equation ran with the
+            # text area winning. stand/tall stay excluded: their caps sit
+            # on BOTH areas (the stand heading text_cap / the tall
+            # equation), so a text slope can never win there — those are
+            # the documented T-35-era model limit.
+            node_area = min(node_area, M.ic(M.jf(est * 2.2)))
+        elif loose:
+            node_area = min(node_area, M.ic(M.jf(est * 1.35)) + padh)
         if ph < 2 * M.ic(M.jf(fs * 1.25)) + 2 * padv:
-            # one line tall; the plain equation's text area won when it
-            # exceeds the (possibly capped) node area — a strict measure
+            # one line tall; the equation's text area won when it exceeds
+            # the (possibly est-capped) node area — a strict measure
             inner = pw - 2 * padh
             if inner > node_area:
                 slopes[t] = inner / fs

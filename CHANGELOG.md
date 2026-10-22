@@ -99,9 +99,23 @@ sweep + self-diff, Java `computeLayout` при этом НЕ трогается)
   None — инжект до font-fit попал под `not multiline`); форма
   перенесена после font-fit — самопойманное на старте, ДО sweep
   (DESIGN «§Инжект», «Принцип: self-diff ДО sweep»). Состояние после
-  №1: 152 clean / 0 unknown / 5 known-bounded / 14 mirror. Дальше:
-  №2 W-класс (8 узлов, double-pin self-consistent, PASS-с-частичным-
-  покрытием допустим), №3 ddy-anchor×3, №4 EDGE×2.
+  №1: 152 clean / 0 unknown / 5 known-bounded / 14 mirror.
+- **Итерация №2 — W-класс (10-23, PASS с частичным покрытием):**
+  форма baseline-пробом уточнена (DESIGN «ИТОГ №2», контракт-блок был
+  ДО правок — форма «с est-капом width-уравнения», не «double-pin из
+  другого экрана»): pass 1 S-критерия применяется к `wide/loose`
+  с тем же est-капом node_area, что width-уравнение mirror (до —
+  `continue` без капа: text-winning узел оставался без W₁).
+  Дельта: **mirror 14→9, clean 152→157 (+5: notifications ×4 +
+  settings «Управление ключами»), 5 known-bounded dp-идентичны,
+  0 unknown, 0 port?, 0 flips; VERDICT PASS exit=0**. Self-diff
+  vs `snap_iter1_225.json`: 166/171, diff = ровно 5 узлов (⊆ 14).
+  Критерий «частично» (записан ДО старта) сработал как задуман:
+  3/8 W-узла — stand×2 (stand-кап `text_cap` из CJK-est ниже RU-
+  ширины — перестраивать source капа = гейт, №3 per-node stand-cap data)
+  + tall×1 (pin-пригодный, но fit-stage mirror уменьшает fs 42→32.67 — T-36b).
+  Состояние после №2: 157 clean / 0 unknown / 5 known-bounded / 9
+  mirror. Дальше: №3 ddy-anchor×3 + stand×2, №4 EDGE×2, tall×1 → T-36b.
 
 ## Инфраструктура (2026-10-22) — density sweep + план dp-рефакторинга
 поведение приложения **не изменено** (инфраструктура + документы).
