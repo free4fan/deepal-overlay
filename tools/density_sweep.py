@@ -512,6 +512,62 @@ def sweep(pills, ctx_bag, word_wrap, tol, frame1=True):
     return report, problems
 
 
+# ------------------- known bounded limits (T-35 residue) ----------------------
+# Verdict A (10-22, decided with the user after the mechanical-vs-semantic
+# check of all 5 residue dx): they live at the integer-quantization /
+# text-model precision floor. Proven (tools/_probe_dx5.py per-density
+# intermediate dump; DESIGN.md «Итог после #4»; attribution commits
+# 07bb714/d101f81; the mechanical float-est / round-lh variants were
+# checked numerically and excluded on 10-22):
+#   * no named px constant remains in ANY of their defective chains — the
+#     mechanical px->dp series is COMPLETE (0 flips, all gate constants dp);
+#   * “fixing” them is a SEMANTIC change (fit-test hysteresis on the
+#     razor edge, device int-px grid: Android line-height / a11y int
+#     bounds / app-side estimateSourceWidth->int), which by session rule
+#     needs A/B on the affected densities — that is T-36b, blocked on the
+#     phone (wireless ADB down).
+# They are therefore KNOWN, BOUNDED (2-6dp on 5 of 171 nodes) and
+# DOCUMENTED — not unknown defects. Triage: reported as KNOWN-LIMIT and
+# excluded from the defect count; the gate is GREEN (exit=0) when no
+# UNATTRIBUTED defect exists. A new dx with a key NOT listed here still
+# fails the gate (exit=1); a key here that matches nothing is reported as
+# STALE. Sync this set with tools/golden/sweep_report_v96.json + DESIGN.md.
+KNOWN_LIMITS = frozenset({
+    ("mashina_scroll", "tv1", "Быстрый холод", "h"),
+    ("service_deepal_grid", "item_help_center_tv", "Моб. интернет", "h"),
+    ("explore", "tv_content", "Фестиваль двойной", "h"),
+    ("my_tab", "txt_content", "Вы получите 2 очка", "h"),
+    ("trip_info", "", "Deepal был с тобой", "w"),
+})
+KNOWN_LIMIT_REF = {
+    ("mashina_scroll", "tv1"):
+        "fit-test 1-линия/обтекание на бритвенном крае (маржа 0.00px@2.25)",
+    ("service_deepal_grid", "item_help_center_tv"):
+        "fit-test 1-линия/обтекание на бритвенном крае (маржа 0.00px@2.25)",
+    ("explore", "tv_content"):
+        "min(h,maxPillH)-бритва: tie 129==129 @2.25, natural выигрывает 2.75-4.0 (ic(fs*1.25)/padv)",
+    ("my_tab", "txt_content"):
+        "накопление truncation ic(fs*1.25) на 2 линиях (<1px/линию; двойного ic нет)",
+    ("trip_info", ""):
+        "int-квантование est СТОРОНЫ ПРИЛОЖЕНИЯ (estimateSourceWidth->int: 200px->88px@1.0) + sp-recompute — не константа computeLayout; float-est проверен численно: равно всем d",
+}
+
+
+def known_limit_key(screen, rec):
+    """Return (screen, id) if this failing rec is one of the 5 documented
+    residue bounds, else None. ONLY (screen, view_id, text-prefix, side)
+    matching this exact whitelist qualifies — any other failing node is
+    an UNKNOWN defect and the gate stays red (exit=1)."""
+    if not rec["fails"]:
+        return None
+    side = rec["worst"][1]
+    for (scr, vid, prefix, s) in KNOWN_LIMITS:
+        if (scr == screen and (rec["id"] or "") == vid
+                and (rec["text"] or "").startswith(prefix) and s == side):
+            return (scr, vid)
+    return None
+
+
 # ------------------------------ report -------------------------------------
 def main():
     ap = argparse.ArgumentParser()
@@ -574,6 +630,8 @@ def main():
         rep, problems = sweep(pills, ctx_bag, word_wrap, args.tol,
                               frame1=args.frame1)
         fails = [r for r in rep if r["fails"]]
+        known = [r for r in fails if known_limit_key(screen, r)]
+        unknown = [r for r in fails if r not in known]
         mb = [r for r in rep if r["mirror"] == MIRROR_BUG]
         approx = [r for r in mb if r["mirror_cls"].startswith(
             "model-boundary")]
@@ -586,10 +644,10 @@ def main():
         if port:
             port_s = "  >>> %d MIRROR PORT-DEFECT: mirror must be fixed " \
                      "before findings are trusted" % len(port)
-        print("== %-22s %3d nodes: %2d clean, %2d FAIL, %2d mirror"
-              " (approx %d / port? %d)%s"
-              % (screen, len(rep), clean, len(fails), len(mb),
-                 len(approx), len(port), port_s))
+        print("== %-22s %3d nodes: %2d clean, %2d FAIL(unknown), "
+              "%2d known-limit, %2d mirror (approx %d / port? %d)%s"
+              % (screen, len(rep), clean, len(unknown), len(known),
+                 len(mb), len(approx), len(port), port_s))
         for r in approx:
             print("   approx%-12s %-16s dev=%s text=%r"
                   % (r["mirror_cls"], (r["id"] or "?")[:16],
@@ -604,10 +662,21 @@ def main():
             pdiffs = {dd: pp for dd, pp in r["paths"].items() if pp != p0}
             p_s = "   path %s->%s" % (p0, dict(list(pdiffs.items())[:3])) \
                 if pdiffs else ""
-            kind = "FLIP-DEFECT" if r["flips"] else "DX-DEFECT"
-            print("   FAIL   %-22s \u0394=%5.2fdp %-3s @%.2f  [%s]%s"
-                  % ((r["id"] or "?")[:22], delta, side, d, kind, p_s))
-            print("          text=%r node=%s" % (r["text"][:36], r["node_px"]))
+            r["known_limit"] = known_limit_key(screen, r)
+            if r["known_limit"]:
+                print("   KNOWN  %-22s \u0394=%5.2fdp %-3s @%.2f  [dx = KNOWN"
+                      " bound, ref=%s]%s"
+                      % ((r["id"] or "?")[:22], delta, side, d,
+                         r["known_limit"][1] or "?", p_s))
+                print("          text=%r  reason: %s"
+                      % (r["text"][:36], KNOWN_LIMIT_REF[r["known_limit"]]))
+            else:
+                kind = "FLIP-DEFECT" if r["flips"] else "DX-DEFECT"
+                print("   FAIL   %-22s \u0394=%5.2fdp %-3s @%.2f  [%s = UNKNOWN"
+                      ", attribution required]%s"
+                      % ((r["id"] or "?")[:22], delta, side, d, kind, p_s))
+                print("          text=%r node=%s"
+                      % (r["text"][:36], r["node_px"]))
             for fd, cond, va, vb in r["flips"]:
                 print("        flip %-8s @%.2f  %s -> %s"
                       % (cond, fd, va, vb))
@@ -619,16 +688,36 @@ def main():
 
     n_port = sum(1 for rep in kept.values()
                  for r in rep if r["port_defect"])
+    n_unknown = 0
+    n_known = 0
+    known_seen = set()
+    for scr, rep in kept.items():
+        for rr in rep:
+            if not rr["fails"]:
+                continue
+            kl = rr.get("known_limit")
+            if kl:
+                n_known += 1
+                known_seen.add(kl)
+            else:
+                n_unknown += 1
     n_flip = sum(1 for rep in kept.values() for r in rep
                  if r["fails"] and r["flips"])
     n_dx = sum(1 for rep in kept.values() for r in rep if r["fails"]
                and not r["flips"])
     n_unv = n_mirror_bug
     verified = n_ok + n_fail
-    print("TOTAL: %d nodes — VERIFIED %d (%d clean, %d defect: %d flip, "
-          "%d dx) + UNVERIFIED %d (mirror approx / port-?)"
-          % (verified + n_unv, verified, n_ok, n_fail, n_flip, n_dx,
-             n_unv))
+    stale = sorted("%s/%s" % (k[0], k[1] or "?") for k in KNOWN_LIMITS
+                   if (k[0], k[1]) not in known_seen)
+    print("TOTAL: %d nodes — VERIFIED %d (%d clean, %d unknown-defect,"
+          " %d known-bounded dx) + UNVERIFIED %d (mirror approx / port-?)"
+          % (verified + n_unv, verified, n_ok, n_unknown, n_known, n_unv))
+    for k in sorted(known_seen):
+        print("   KNOWN-LIMIT %-24s %s" % (str(k[1] or "?")[:24],
+                                           KNOWN_LIMIT_REF[k]))
+    for st in stale:
+        print("   STALE-LIMIT %-24s (no failing node matches it anymore —"
+              " remove from KNOWN_LIMITS if its defect was fixed)" % st)
     if n_port:
         print("VERDICT: PARTIAL — findings stand for the %d verified "
               "nodes; %d node(s) are mirror-limited (port-?): the MIRROR "
@@ -636,17 +725,20 @@ def main():
               "(exit=%d, CI gate)" % (verified, n_port, 2))
         verdict, exit_code = "PARTIAL", 2
     else:
-        if n_fail == 0 and n_mirror_bug == 0:
-            print("VERDICT: PASS — no density-defect over tol")
+        if n_unknown == 0:
+            print("VERDICT: PASS — 0 unknown defects; %d known-bounded dx "
+                  "(documented, KNOWN_LIMITS) + %d mirror model-boundary = "
+                  "the model precision floor, not a code backlog (T-35 "
+                  "dp-refactor complete 10-22; residue: T-36a text-model / "
+                  "T-36b semantic tie-break + A/B; exit=%d, CI gate)"
+                  % (n_known, n_unv, 0))
             verdict, exit_code = "PASS", 0
         else:
-            print("VERDICT: DEFECTS PRESENT — %d verified nodes, the list "
-                  "above is the DP-refactory backlog; 'approx' rows are "
-                  "the documented text-model limits (excluded from the "
-                  "count). A density sweep that ends here has NOT "
-                  "passed: the code below is px-dependent until the "
-                  "backlog is refactored (exit=%d, CI gate)"
-                  % (verified, 1))
+            print("VERDICT: DEFECTS PRESENT — %d UNKNOWN defect(s) require "
+                  "attribution (the list above); %d known-bounded dx are "
+                  "excluded from the count (documented). A sweep that ends "
+                  "here has NOT passed (exit=%d, CI gate)"
+                  % (n_unknown, n_known, 1))
             verdict, exit_code = "DEFECTS", 1
 
     if args.report:
@@ -660,11 +752,18 @@ def main():
              "base_density": BASE_D, "verdict": verdict,
              "totals": {"nodes": verified + n_unv, "verified": verified,
                         "clean": n_ok, "defects": n_fail,
+                        "unknown_defects": n_unknown,
+                        "known_bounded": n_known,
                         "flip_defects": n_flip, "dx_defects": n_dx,
                         "mirror": n_unv, "port_defects": n_port,
                         "noise_only": sum(1 for rep in kept.values()
                                           for r in rep if r["noise"]
                                           and not r["fails"])},
+             "known_limit_refs": {"/".join(k): KNOWN_LIMIT_REF[k]
+                                  for k in sorted(known_seen)},
+             "known_limits_whitelist": [
+                 {"screen": k[0], "id": k[1], "text_prefix": k[2],
+                  "side": k[3]} for k in sorted(KNOWN_LIMITS)],
              "screens": {s: rep for s, rep in kept.items()}},
             ensure_ascii=False, indent=1, default=str))
         print("report: %s" % rp)

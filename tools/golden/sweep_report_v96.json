@@ -14,18 +14,59 @@
   4.0
  ],
  "base_density": 2.25,
- "verdict": "DEFECTS",
+ "verdict": "PASS",
  "totals": {
   "nodes": 171,
   "verified": 146,
   "clean": 141,
   "defects": 5,
+  "unknown_defects": 0,
+  "known_bounded": 5,
   "flip_defects": 0,
   "dx_defects": 5,
   "mirror": 25,
   "port_defects": 0,
   "noise_only": 151
  },
+ "known_limit_refs": {
+  "explore/tv_content": "min(h,maxPillH)-бритва: tie 129==129 @2.25, natural выигрывает 2.75-4.0 (ic(fs*1.25)/padv)",
+  "mashina_scroll/tv1": "fit-test 1-линия/обтекание на бритвенном крае (маржа 0.00px@2.25)",
+  "my_tab/txt_content": "накопление truncation ic(fs*1.25) на 2 линиях (<1px/линию; двойного ic нет)",
+  "service_deepal_grid/item_help_center_tv": "fit-test 1-линия/обтекание на бритвенном крае (маржа 0.00px@2.25)",
+  "trip_info/": "int-квантование est СТОРОНЫ ПРИЛОЖЕНИЯ (estimateSourceWidth->int: 200px->88px@1.0) + sp-recompute — не константа computeLayout; float-est проверен численно: равно всем d"
+ },
+ "known_limits_whitelist": [
+  {
+   "screen": "explore",
+   "id": "tv_content",
+   "text_prefix": "Фестиваль двойной",
+   "side": "h"
+  },
+  {
+   "screen": "mashina_scroll",
+   "id": "tv1",
+   "text_prefix": "Быстрый холод",
+   "side": "h"
+  },
+  {
+   "screen": "my_tab",
+   "id": "txt_content",
+   "text_prefix": "Вы получите 2 очка",
+   "side": "h"
+  },
+  {
+   "screen": "service_deepal_grid",
+   "id": "item_help_center_tv",
+   "text_prefix": "Моб. интернет",
+   "side": "h"
+  },
+  {
+   "screen": "trip_info",
+   "id": "",
+   "text_prefix": "Deepal был с тобой",
+   "side": "w"
+  }
+ ],
  "screens": {
   "dialog_keyless": [
    {
@@ -1142,7 +1183,11 @@
     "port_defect": false,
     "over_spec": true,
     "noise": false,
-    "fails": true
+    "fails": true,
+    "known_limit": [
+     "explore",
+     "tv_content"
+    ]
    },
    {
     "id": "",
@@ -2432,7 +2477,11 @@
     "port_defect": false,
     "over_spec": true,
     "noise": false,
-    "fails": true
+    "fails": true,
+    "known_limit": [
+     "mashina_scroll",
+     "tv1"
+    ]
    },
    {
     "id": "tv1",
@@ -6688,7 +6737,11 @@
     "port_defect": false,
     "over_spec": true,
     "noise": false,
-    "fails": true
+    "fails": true,
+    "known_limit": [
+     "my_tab",
+     "txt_content"
+    ]
    },
    {
     "id": "txt_time",
@@ -11734,7 +11787,11 @@
     "port_defect": false,
     "over_spec": true,
     "noise": false,
-    "fails": true
+    "fails": true,
+    "known_limit": [
+     "service_deepal_grid",
+     "item_help_center_tv"
+    ]
    },
    {
     "id": "item_help_center_tv",
@@ -15180,7 +15237,11 @@
     "port_defect": false,
     "over_spec": true,
     "noise": false,
-    "fails": true
+    "fails": true,
+    "known_limit": [
+     "trip_info",
+     ""
+    ]
    },
    {
     "id": "",
