@@ -51,14 +51,34 @@
 - h@4.0 «Вы получите…» = накопление int-обрезания `ic(fs·1.25)` на
   2 линиях (lh 28→51px), чистое truncation, не константа.
 - w@1.0 «Deepal был с тобой» = режим стабилен (широкий est-узел),
-  дельта = int-квантование `est·2.2` (193.6 vs 195.6dp) + padh
-  (10 vs 11.6dp), амплифицировано только при d=1.0 сверх tolerance
-  3.5dp. Не перекрёст (старое «max()-перекрёст» не подтвердилось).
+  дельта = потеря 0.89dp в est (88.89→88.0dp; float-est == int-est в
+  точности — потеря в пересчёте sp из заквантованной h-ноды +
+  `estimateSourceWidth→int` самим приложением) ×2.2 (193 vs 195.6dp)
+  + padh (10 vs 11.6dp), амплифицировано только при d=1.0 сверх
+  tolerance 3.5dp. Не перекрёст (старое «max()-перекрёст» не
+  подтвердилось); не механика computeLayout (проверено 10-22).
 
 Инструменты: `tools/density_sweep.py` (flip-набор += `hidden`),
 `tools/_snapshot_225.py` (self-diff-харнес, обязательный gate каждого PR),
-JSON: `tools/golden/sweep_report_v96.json` (перегенерирован). Exit=1, пока
-остаются 5 dx.
+JSON: `tools/golden/sweep_report_v96.json` (перегенерирован).
+
+**ЗАКРЫТИЕ (10-22, вердикт A + триаж гейта).** Оговорка «2 из 5 могут быть
+механическими» проверена численно — **оба НЕ механика**: w@1.0 «Deepal»
+float-est == int-est в точности при всех d (потеря — пересчёт sp из
+заквантованной h-ноды 88.89→88.0dp + `estimateSourceWidth→int` самим
+приложением, mirror честен); h@4.0 «Вы получите» — `ic` ровно один раз на
+линию, `round` ломает self-diff 2.25 (lh 28→29, h 68→70px) = смена
+семантики → A/B. Триаже гейта (`6a3a231`): `density_sweep.py` делит
+unknown / known-bounded — `exit=1` только при unattributed дефектах,
+`exit=0` при unknown=0 (5 dx = KNOWN_BOUNDED whitelist с механизмом +
+stale-детектор; 25 model-boundary = unverified; контроли: сбитый ключ →
+exit=1 ✓, stale → warning при exit=0 ✓). **Состояние: 141 clean / 0
+unknown / 5 known-bounded / 25 mirror → VERDICT: PASS, exit=0.**
+Milestone T-35 dp-рефакторинг **завершён** (остаток 5 dx =
+задокументированный known-bounded предел, не «осталось 5 dx»); следующий
+arc = T-36 (a: text-модель → 25 model-boundary; b: semantic tie-break,
+заблокирован на телефоне). Exit=1 остаётся честным гейтом для ЛЮБОГО нового
+defect вне whitelist.
 
 ## Инфраструктура (2026-10-22) — density sweep + план dp-рефакторинга
 поведение приложения **не изменено** (инфраструктура + документы).
