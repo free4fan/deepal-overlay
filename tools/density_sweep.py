@@ -198,7 +198,7 @@ def trail_index(trail):
 # OUTPUTS, not conditions: their variation between densities is already
 # scored as Δddx/Δddy — counting a flag on them is double-charging.
 FLIP_CONDS = ("band", "gateA", "gateB", "gateHC", "gateD", "gateE",
-              "gateF", "frame1", "shape")
+              "gateF", "frame1", "shape", "hidden")
 
 
 def dp_of(out, d):
@@ -534,7 +534,7 @@ def main():
                          "the user flag.")
     ap.add_argument("--tol", type=float, default=TOL_DP)
     ap.add_argument("--frame1", action="store_true", default=False,
-                    help="mirror the SHIPPED v2.10.45 build (frame-1 "
+                    help="mirror the SHIPPED v2.10.45+ build (frame-1 "
                          "profile fall-through) on all densities. "
                          "Default (the self-check build the baseline "
                          "dump came from): frame1=False everywhere — "

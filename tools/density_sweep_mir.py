@@ -35,7 +35,6 @@ import struct
 
 JMAX = 1 << 30  # stand-in for Integer.MAX_VALUE (only inside a +2f compare)
 
-
 def jf(x):
     """Round to IEEE-754 single precision (Java float arithmetic)."""
     return struct.unpack("<f", struct.pack("<f", float(x)))[0]
@@ -45,6 +44,26 @@ def jfd(a, b):
     """Java float division: exact quotient rounded to float32."""
     return jf(a / b) if b != 0 else 0.0
 
+
+
+# T-35 #0: the measurement foundation lives in dp — the app's old 225dpi px
+# constants divided by 2.25. float32 dp values + Java's Math.round rule
+# (rpx) => byte-exact at d=2.25, physically the same length everywhere.
+# Mirrors InlineOverlayManager's *_DP constants 1:1.
+EDGE_MARGIN_DP = jf(3.5556)
+MIN_LINE_H_DP = jf(8.8889)
+NEAR_ROW_DP = jf(21.3333)
+ROW_GAP_DP  = jf(2.6667)
+NEIGHBOR_MAX_DP = jf(266.6667)
+SAME_ROW_DY_DP = jf(22.2222)
+PADH_FLOOR_DP = jf(4.0 / 2.25)   # Java: 4 / 2.25f
+PADV_FLOOR_DP = jf(2.0 / 2.25)
+MIN_PILL_DP = jf(32.0)
+
+
+def rp(dp, d):
+    """dp->px with the app's Math.round rule: float32 product, floor(x+0.5)."""
+    return math.floor(jf(jf(dp) * d) + 0.5)
 
 def jdiv(a, b):
     """Java int division: truncation toward zero (Python // floors)."""
@@ -170,11 +189,11 @@ def text_lines(text, avail, fs):
     return lines, True
 
 
-def _budget_wrap(text, box_w, fs, max_lines, max_hpx):
+def _budget_wrap(text, box_w, fs, max_lines, max_hpx, d):
     """Java wrapLineCount, budgeted: 0 when infeasible for the max_lines
     budget or the height cap."""
-    padh = max(4, ic(jf(fs * 0.4)))
-    padv = max(2, ic(jf(fs * 0.3)))
+    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(fs * 0.4)))
+    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(fs * 0.3)))
     avail = jf(jf(box_w) - 2.0 * padh)
     if avail < fs:
         return 0
@@ -258,7 +277,12 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
                           "margin": margin, "detail": detail})
 
     # ---------------- column limit / siblings ----------------------------
-    maxw = max(48, sw - x - 8)                    # SCREEN_EDGE_MARGIN px
+    edge_px = rp(EDGE_MARGIN_DP, d)                # SCREEN_EDGE_MARGIN dp
+    near_thr = rp(NEAR_ROW_DP, d)                  # NEAR_ROW_THRESHOLD dp
+    maxw = max(near_thr, sw - x - edge_px)
+    nb_px = rp(NEIGHBOR_MAX_DP, d)                 # ROW_NEIGHBOR_MAX dp
+    same_row_dy = rp(SAME_ROW_DY_DP, d)            # ROW_SAME_ROW_MAX_DY dp
+    row_gap_px = rp(ROW_GAP_DP, d)                 # ROW_GAP dp
     close_row = False
     gap_below = -1
     left_clear = x
@@ -268,20 +292,20 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
             if t is s:
                 continue
             dx = t.x - x
-            same_row = abs(t.y - s.y) <= 50       # ROW_SAME_ROW_MAX_DY px
-            if 0 < dx < 600 and same_row:         # ROW_NEIGHBOR_MAX px
+            same_row = abs(t.y - s.y) <= same_row_dy
+            if 0 < dx < nb_px and same_row:
                 close_row = True
                 if near < 0 or dx < near:
                     near = dx
-            elif -600 < dx < 0 and same_row:
+            elif -nb_px < dx < 0 and same_row:
                 left_clear = max(0, min(left_clear, x - (t.x + t.w)))
             dyb = t.y - s.y
-            if 0 < dyb < 600 and t.x < x + maxw and t.x + t.w > x:
+            if 0 < dyb < nb_px and t.x < x + maxw and t.x + t.w > x:
                 g = t.y - (s.y + s.h)
                 if gap_below < 0 or g < gap_below:
                     gap_below = g
-        if near > 48:
-            maxw = min(maxw, near - 6)            # ROW_GAP 6 px
+        if near > near_thr:
+            maxw = min(maxw, near - row_gap_px)
     if gap_below >= 0:
         max_pill_h = s.h + ic(jf(max(0, gap_below) * 0.75))
     else:
@@ -306,8 +330,8 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
                       min(jf(float(font_sp) * d), jf(24.0 * d)))
     base_px = text_px
 
-    padh = max(4, ic(jf(text_px * 0.4)))
-    padv = max(2, ic(jf(text_px * 0.3)))
+    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
     est = s.est
 
     # ---------------- shape classes ----------------------------------------
@@ -345,8 +369,8 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
         fs_tib = jfd(jf(base_px * (s.w - 16.0)), est)
         if fs_tib < text_px and fs_tib >= jf(9.0 * d):
             text_px = fs_tib
-            padh = max(4, ic(jf(text_px * 0.4)))
-            padv = max(2, ic(jf(text_px * 0.3)))
+            padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+            padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
 
     text_w = measure(s.text, text_px)
 
@@ -369,24 +393,24 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
             while fs >= jf(9.0 * d):              # WRAP_FLOOR_SP px
                 wl = _budget_wrap(s.text, wrap_w, fs,
                                   8 if complete else
-                                  (min(2, line_budget(max_pill_h, fs))
+                                  (min(2, line_budget(max_pill_h, fs, d))
                                    if single_node
-                                   else line_budget(max_pill_h, fs)),
-                                  max_pill_h)
+                                   else line_budget(max_pill_h, fs, d)),
+                                  max_pill_h, d)
                 if wl != 0:
                     break
                 fs = jf(fs - 1.0)
             wrap_lines = wl
             if wrap_lines > 0:
                 text_px = fs
-                padh = max(4, ic(jf(text_px * 0.4)))
-                padv = max(2, ic(jf(text_px * 0.3)))
+                padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+                padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
                 text_w = measure(s.text, text_px)
                 multiline = True
             elif fs1 >= jf(9.0 * d):
                 text_px = fs1
-                padh = max(4, ic(jf(text_px * 0.4)))
-                padv = max(2, ic(jf(text_px * 0.3)))
+                padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+                padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
                 if stand and not heading_cap:
                     text_cap = ic(jf(est * 1.4)) + padh * 2
                 text_w = measure(s.text, text_px)
@@ -395,40 +419,40 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
                 pl = 0
                 while pfs >= jf(9.0 * d) and preview is None:
                     preview, pl = truncate_to_lines(s.text, fit_w, pfs,
-                                                    min(3, line_budget(max_pill_h, pfs)),
-                                                    max_pill_h)
+                                                    min(3, line_budget(max_pill_h, pfs, d)),
+                                                    max_pill_h, d)
                     if preview is None:
                         pfs = jf(pfs - 1.0)
                 if preview is not None:
                     text_px = pfs
-                    padh = max(4, ic(jf(text_px * 0.4)))
-                    padv = max(2, ic(jf(text_px * 0.3)))
+                    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+                    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
                     text_w = measure(preview, text_px)
                     multiline = True
                     wrap_lines = pl
                 else:
                     scale = jfd(fit_w - padh * 2, text_w) if text_w > 0 else 1.0
                     text_px = max(jf(9.0 * d), jf(text_px * scale))
-                    padh = max(4, ic(jf(text_px * 0.4)))
-                    padv = max(2, ic(jf(text_px * 0.3)))
+                    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+                    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
                     if stand and not heading_cap:
                         text_cap = ic(jf(est * 1.4)) + padh * 2
                     text_w = measure(s.text, text_px)
         else:
             text_px = fs1
-            padh = max(4, ic(jf(text_px * 0.4)))
-            padv = max(2, ic(jf(text_px * 0.3)))
+            padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+            padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
             if stand and not heading_cap:
                 text_cap = ic(jf(est * 1.4)) + padh * 2
             text_w = measure(s.text, text_px)
 
-    if not multiline and text_w > jf(fit_w - padh * 2.0) and fit_w >= 48:
+    if not multiline and text_w > jf(fit_w - padh * 2.0) and fit_w >= near_thr:
         clamped = (jfd(jf(text_px * jf(fit_w - padh * 2.0 - 1.0)), text_w)
                    if text_w > 0 else text_px)
         if clamped >= jf(9.0 * d):
             text_px = clamped
-            padh = max(4, ic(jf(text_px * 0.4)))
-            padv = max(2, ic(jf(text_px * 0.3)))
+            padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+            padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
             text_w = measure(s.text, text_px)
     log("fontFit", (multiline, wrap_lines, ic(text_px)), 0,
         "fitW=%d textW=%.2f preview=%s" % (fit_w, text_w, preview is not None))
@@ -467,7 +491,7 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
             height = max(height, s.h)
         height = min(height, max_pill_h)
     else:
-        min_h = max(ic(jf(text_px) + padv * 2), 20)  # MIN_SINGLE_LINE_HEIGHT
+        min_h = max(ic(jf(text_px) + padv * 2), rp(MIN_LINE_H_DP, d))  # MIN_SINGLE_LINE_HEIGHT_DP
         if stand:
             h = ic(jf(text_px * 1.35)) + padv * 2
         elif tall:
@@ -565,18 +589,18 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
         if f_pred:
             if not (tall or loose):
                 text_px = max(text_px, base_px)
-                padh = max(4, ic(jf(text_px * 0.4)))
-                padv = max(2, ic(jf(text_px * 0.3)))
+                padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+                padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
                 text_w = measure(s.text, text_px)
                 target = jf(jf(s.w - padh * 2.0) - 1.0)
                 if text_w > target:
                     text_px = max(jf(10.0 * d),
                                   jfd(jf(text_px * target), text_w))
-                    padh = max(4, ic(jf(text_px * 0.4)))
-                    padv = max(2, ic(jf(text_px * 0.3)))
+                    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+                    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
                     text_w = measure(s.text, text_px)
                 width = s.w
-                min_h = max(ic(jf(text_px) + padv * 2), 20)
+                min_h = max(ic(jf(text_px) + padv * 2), rp(MIN_LINE_H_DP, d))  # MIN_SINGLE_LINE_HEIGHT_DP
                 if min_h <= s.h:
                     height = min(s.h, max_pill_h)
                     ddy = jdiv(s.h - height, 2)
@@ -606,14 +630,14 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
         ddy = jdiv(s.h - height, 2)
     if multiline and ddy == 0 and siblings is not None and allow_deep:
         y_top = s.y
-        row_sibling = any(abs(t.y - y_top) <= 50
+        row_sibling = any(abs(t.y - y_top) <= rp(SAME_ROW_DY_DP, d)
                           for t in siblings if t is not s)
         gap_above = JMAX
         for t in siblings:
             if t is s:
                 continue
             t_bottom = t.y + t.h
-            if t_bottom > y_top or t.y <= y_top - 600:
+            if t_bottom > y_top or t.y <= y_top - nb_px:
                 continue
             if t.x > x + width or t.x + t.w < x:
                 continue
@@ -640,8 +664,10 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
     log("ddy", (ddy,), 0, "h=%d node_h=%d ml=%s wrap=%d"
         % (height, s.h, multiline, wrap_lines))
 
-    hidden = (not multiline and width > 0 and width < 72
-              and text_w + padh * 2 > width)     # MIN_MEANINGFUL_PILL px
+    hidden = (not multiline and width > 0 and width < rp(MIN_PILL_DP, d)
+              and text_w + padh * 2 > width)     # MIN_MEANINGFUL_PILL_DP px
+    log("hidden", (hidden,), 0, "w=%d threshold=%d"
+        % (width, rp(MIN_PILL_DP, d)))
 
     return dict(width=width, height=height, fs_px=text_px, padh=padh,
                 padv=padv, multiline=multiline, ddx=ddx, ddy=ddy,
@@ -659,10 +685,10 @@ def _cl_center(w, pw, x, maxw):
 
 
 # ------------------------------ wrap helpers ===============================
-def line_budget(box_h, fs):
+def line_budget(box_h, fs, d):
     """Java lineBudget: (boxH - 2*padV)/lh + 1, clamped [2,3]; a JMAX box
     (no node below) yields a huge n -> 3."""
-    padv = max(2, ic(jf(fs * 0.3)))
+    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(fs * 0.3)))
     lh = ic(jf(fs * 1.25))
     if lh <= 0:
         return 2
@@ -692,9 +718,9 @@ def _words(text):
     return out
 
 
-def wrap_line_count(text, box_w, fs, max_lines, max_hpx):
-    padh = max(4, ic(jf(fs * 0.4)))
-    padv = max(2, ic(jf(fs * 0.3)))
+def wrap_line_count(text, box_w, fs, max_lines, max_hpx, d):
+    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(fs * 0.4)))
+    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(fs * 0.3)))
     avail = jf(jf(box_w) - 2.0 * padh)
     if avail < fs:
         return 0
@@ -719,13 +745,13 @@ def wrap_line_count(text, box_w, fs, max_lines, max_hpx):
     return lines
 
 
-def truncate_to_lines(text, box_w, fs, max_lines, max_hpx):
+def truncate_to_lines(text, box_w, fs, max_lines, max_hpx, d):
     """Java truncateToLines: the 2-3 line ellipsized preview. The ellipsis
     is reserved on every line (it lands on the last one), a segment wider
     than the reserved line is infeasible at this size, and the height cap
     is checked on the resulting block."""
-    padh = max(4, ic(jf(fs * 0.4)))
-    padv = max(2, ic(jf(fs * 0.3)))
+    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(fs * 0.4)))
+    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(fs * 0.3)))
     avail = jf(jf(box_w) - 2.0 * padh)
     if avail < fs:
         return None, 0

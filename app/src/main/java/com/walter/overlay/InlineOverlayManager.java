@@ -31,29 +31,50 @@ public class InlineOverlayManager {
 
     private static final int MIN_TEXT_SP = 10;
     private static final int MAX_TEXT_SP = 24;
-    private static final int SCREEN_EDGE_MARGIN = 8;
     private static final int WRAP_MAX_LINES = 8;
     private static final int CORNER_RADIUS_DP = 6;
-    private static final int MIN_SINGLE_LINE_HEIGHT = 20;
+    // still-px constant used ONLY in gate (E)'s rightClear measurement;
+    // the measurement foundation (maxW/row pass/floors) moved to the *_DP
+    // values below, T-35 #0. It keeps its px value until its own class PR
+    // so #0 changes nothing but the foundation.
+    private static final int SCREEN_EDGE_MARGIN = 8;
 
     private static final int BG_DARK_SETTING = 0xDD1A1A1A; // manual "Dark overlay" mode
     private static final int BG_DARK_ZONE = 0xFF202020;    // toolbar/header: opaque dark, blends into the bar
     private static final int BG_SCRIM = 0xFF1A1A1A;        // content: opaque dark — original CJK must never show through
+    // T-35 #0 (density sweep): the measurement foundation is measured in dp,
+    // not in the calibration device's px. Values are the old 225dpi px constants
+    // divided by 2.25 (24px==10.67dp etc.), held as float dp so the rounded
+    // px is exact at 2.25 (byte-invariant on the calibration device) and
+    // physically the same length at every density (Math.round(dp*d)):
+    //   8px edge margin = 3.56dp, 600px neighbor window = 266.67dp,
+    //   50px same-row band = 22.22dp, 48px row-gap threshold = 21.33dp,
+    //   6px row gap = 2.67dp, 20px min line height = 8.89dp,
+    //   4px/2px pad floors = 1.78dp/0.89dp, 72px min pill = 32dp.
+    private static final float SCREEN_EDGE_MARGIN_DP = 3.5556f;
+    private static final float MIN_SINGLE_LINE_HEIGHT_DP = 8.8889f;
+    private static final int PAD_H_FLOOR_PIXELS = 4;
+    private static final int PAD_V_FLOOR_PIXELS = 2;
+    private static final float PAD_H_FLOOR_DP = PAD_H_FLOOR_PIXELS / 2.25f;
+    private static final float PAD_V_FLOOR_DP = PAD_V_FLOOR_PIXELS / 2.25f;
     // A pill may not cross this absolute-x boundary (nearest right neighbor's left edge minus this gap)
-    private static final int ROW_GAP = 6;
+    private static final float ROW_GAP_DP = 2.6667f;
+    // a row neighbor closer than this holds the pill to its gap; the same
+    // threshold opens the one-line clamp branch (a fitW narrower than a gap is hopeless)
+    private static final float NEAR_ROW_THRESHOLD_DP = 21.3333f;
     // Siblings farther apart than this are unrelated, not a row neighbor
-    private static final int ROW_NEIGHBOR_MAX = 600;
+    private static final float ROW_NEIGHBOR_MAX_DP = 266.6667f;
     // Vertical offset that still counts as "same row". Real rows align within a
     // few px (top/bottom-aligned or centered of similar heights); dense lists put
     // the next row 55px+ further down. The old 140 band treated a node from the
     // adjacent row as a row neighbor and clamped this pill to their gap — a 60px
     // "Це…" instead of "Центр сообщений".
-    private static final int ROW_SAME_ROW_MAX_DY = 50;
+    private static final float ROW_SAME_ROW_MAX_DY_DP = 22.2222f;
     // Font may shrink to this (sp) so the text fits the column instead of ellipsizing
     private static final float FIT_MIN_SP = 9;
     // A pill narrower than this whose text still overflows is a meaningless
     // one-letter "А…" sliver — hide it (width 0) instead of drawing it
-    private static final int MIN_MEANINGFUL_PILL = 72;
+    private static final float MIN_MEANINGFUL_PILL_DP = 32f;
     // Wrapped captions below this font are no better than the proportional
     // one-line shrink — stop stepping the wrap size down here.
     private static final float WRAP_FLOOR_SP = FIT_MIN_SP;
@@ -514,7 +535,9 @@ public class InlineOverlayManager {
 
         // Column limit: a pill must not cover a row neighbor's column (a 4-icon grid
         // leaves ~column width of room, not the whole screen to the right)
-        int maxW = Math.max(48, screenWidth - x - SCREEN_EDGE_MARGIN);
+        int edgePx = Math.round(SCREEN_EDGE_MARGIN_DP * dm.density);
+        int nearThreshPx = Math.round(NEAR_ROW_THRESHOLD_DP * dm.density);
+        int maxW = Math.max(nearThreshPx, screenWidth - x - edgePx);
         boolean closeRow = false;
         // Set by gate (F) when the pill hugs a button node exactly (the
         // app's dialog buttons are stadiums) → pill takes radius h/2.
@@ -526,27 +549,30 @@ public class InlineOverlayManager {
             int near = -1;
             int y = parseY(spec.key);
             int bottom = y + spec.height;
+            int nbPx = Math.round(ROW_NEIGHBOR_MAX_DP * dm.density);
+            int sameRowDyPx = Math.round(ROW_SAME_ROW_MAX_DY_DP * dm.density);
+            int gapPx = Math.round(ROW_GAP_DP * dm.density);
             for (OverlaySpec s : siblings) {
                 if (s == spec) continue;
                 int dx = parseX(s.key) - x;
-                if (dx > 0 && dx < ROW_NEIGHBOR_MAX
-                        && Math.abs(parseY(s.key) - y) <= ROW_SAME_ROW_MAX_DY) {
+                if (dx > 0 && dx < nbPx
+                        && Math.abs(parseY(s.key) - y) <= sameRowDyPx) {
                     closeRow = true;
                     if (near < 0 || dx < near) near = dx;
-                } else if (dx < 0 && dx > -ROW_NEIGHBOR_MAX
-                        && Math.abs(parseY(s.key) - y) <= ROW_SAME_ROW_MAX_DY) {
+                } else if (dx < 0 && dx > -nbPx
+                        && Math.abs(parseY(s.key) - y) <= sameRowDyPx) {
                     leftClear = Math.max(0, Math.min(leftClear, x - (parseX(s.key) + s.width)));
                 }
                 // The nearest node below that overlaps the pill column
                 // bounds how far a wrapped caption may stretch down.
                 int dy = parseY(s.key) - y;
-                if (dy > 0 && dy < 600 && parseX(s.key) < x + maxW
+                if (dy > 0 && dy < nbPx && parseX(s.key) < x + maxW
                         && parseX(s.key) + s.width > x) {
                     int g = parseY(s.key) - bottom;
                     if (gapBelow < 0 || g < gapBelow) gapBelow = g;
                 }
             }
-            if (near > 48) maxW = Math.min(maxW, near - ROW_GAP);
+            if (near > nearThreshPx) maxW = Math.min(maxW, near - gapPx);
         }
         // A caption may grow below the node into at most 75% of that gap;
         // with no node below (list bottom, nav band) it is unlimited.
@@ -581,8 +607,8 @@ public class InlineOverlayManager {
             Math.min(textSizePx, MAX_TEXT_SP * dm.density));
         float basePx = textSizePx;
 
-        int padH = Math.max(4, (int) (textSizePx * 0.4f));
-        int padV = Math.max(2, (int) (textSizePx * 0.3f));
+        int padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+        int padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
         int est = spec.estSourceWidthPx;
 
         // Three node shapes, all with the source text well smaller than the node:
@@ -657,8 +683,8 @@ public class InlineOverlayManager {
             float fsTib = basePx * (spec.width - 16f) / est;
             if (fsTib < textSizePx && fsTib >= FIT_MIN_SP * dm.density) {
                 textSizePx = fsTib;
-                padH = Math.max(4, (int) (textSizePx * 0.4f));
-                padV = Math.max(2, (int) (textSizePx * 0.3f));
+                padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
             }
         }
 
@@ -729,16 +755,16 @@ public class InlineOverlayManager {
                 float fs = textSizePx;
                 while (fs >= floorPx && (wrapLines = wrapLineCount(spec.text,
                         wrapW, fs, completeBlock ? WRAP_MAX_LINES
-                            : singleLineNode ? Math.min(2, lineBudget(maxPillH, fs))
-                                            : lineBudget(maxPillH, fs),
-                        maxPillH)) == 0) {
+                            : singleLineNode ? Math.min(2, lineBudget(maxPillH, fs, dm.density))
+                                            : lineBudget(maxPillH, fs, dm.density),
+                        maxPillH, dm.density)) == 0) {
                     fs -= 1f;
                 }
                 if (wrapLines > 0) {
                     // Readable wrap found at fs: apply it.
                     textSizePx = fs;
-                    padH = Math.max(4, (int) (textSizePx * 0.4f));
-                    padV = Math.max(2, (int) (textSizePx * 0.3f));
+                    padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                    padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
                     measurePaint.setTextSize(textSizePx);
                     textPxWidth = measurePaint.measureText(spec.text);
                     multiline = true;
@@ -746,8 +772,8 @@ public class InlineOverlayManager {
                     // No readable wrap (single unbreakable word / tight box):
                     // the largest readable one-line font.
                     textSizePx = fs1;
-                    padH = Math.max(4, (int) (textSizePx * 0.4f));
-                    padV = Math.max(2, (int) (textSizePx * 0.3f));
+                    padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                    padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
                     if (standaloneRow && !headingCap) textCap = (int) (est * 1.4f) + padH * 2;
                     measurePaint.setTextSize(textSizePx);
                     textPxWidth = measurePaint.measureText(spec.text);
@@ -765,13 +791,14 @@ public class InlineOverlayManager {
                     final int[] pLines = new int[1];
                     while (pFs >= floorPx && preview == null) {
                         preview = truncateToLines(spec.text, fitW, pFs,
-                            Math.min(3, lineBudget(maxPillH, pFs)), maxPillH, pLines);
+                            Math.min(3, lineBudget(maxPillH, pFs, dm.density)),
+                            maxPillH, pLines, dm.density);
                         if (preview == null) pFs -= 1f;
                     }
                     if (preview != null) {
                         textSizePx = pFs;
-                        padH = Math.max(4, (int) (textSizePx * 0.4f));
-                        padV = Math.max(2, (int) (textSizePx * 0.3f));
+                        padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                        padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
                         measurePaint.setTextSize(textSizePx);
                         textPxWidth = measurePaint.measureText(preview.toString());
                         multiline = true;
@@ -783,8 +810,8 @@ public class InlineOverlayManager {
                         // Shrink to FIT_MIN_SP; ellipsize remains the last resort.
                         float scale = (fitW - padH * 2) / textPxWidth;
                         textSizePx = Math.max(floorPx, textSizePx * scale);
-                        padH = Math.max(4, (int) (textSizePx * 0.4f));
-                        padV = Math.max(2, (int) (textSizePx * 0.3f));
+                        padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                        padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
                         if (standaloneRow && !headingCap) textCap = (int) (est * 1.4f) + padH * 2;
                         measurePaint.setTextSize(textSizePx);
                         textPxWidth = measurePaint.measureText(spec.text);
@@ -794,8 +821,8 @@ public class InlineOverlayManager {
                 // Mild overflow: keep one line, fit it in the field
                 // (a small shrink below the CJK font is acceptable).
                 textSizePx = fs1;
-                padH = Math.max(4, (int) (textSizePx * 0.4f));
-                padV = Math.max(2, (int) (textSizePx * 0.3f));
+                padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
                 if (standaloneRow && !headingCap) textCap = (int) (est * 1.4f) + padH * 2;
                 measurePaint.setTextSize(textSizePx);
                 textPxWidth = measurePaint.measureText(spec.text);
@@ -805,12 +832,12 @@ public class InlineOverlayManager {
         // the one-liner truly fits the pill interior (kills micro-ellipses).
         // Never below the wrap floor — a hopeless one-liner ellipsizes instead
         // of becoming an unreadable sliver.
-        if (!multiline && textPxWidth > fitW - padH * 2f && fitW >= 48) {
+        if (!multiline && textPxWidth > fitW - padH * 2f && fitW >= nearThreshPx) {
             float clamped = textSizePx * (fitW - padH * 2f - 1f) / textPxWidth;
             if (clamped >= WRAP_FLOOR_SP * dm.density) {
                 textSizePx = clamped;
-                padH = Math.max(4, (int) (textSizePx * 0.4f));
-                padV = Math.max(2, (int) (textSizePx * 0.3f));
+                padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
                 measurePaint.setTextSize(textSizePx);
                 textPxWidth = measurePaint.measureText(spec.text);
             }
@@ -859,7 +886,7 @@ public class InlineOverlayManager {
                 height = Math.min(height, maxPillH);
             }
         } else {
-            int minH = Math.max((int) (textSizePx + padV * 2), MIN_SINGLE_LINE_HEIGHT);
+            int minH = Math.max((int) (textSizePx + padV * 2), Math.round(MIN_SINGLE_LINE_HEIGHT_DP * dm.density));
             int h;
             if (standaloneRow) {
                 // The container is several lines tall, the text is one line.
@@ -902,7 +929,8 @@ public class InlineOverlayManager {
         // letter plus ellipsis fits ("А…"). Draw nothing while it stays in a
         // sliver — the text is unknown here — and restore the pill as soon as
         // the card settles (layout becomes wide enough again).
-        boolean hidden = !multiline && width > 0 && width < MIN_MEANINGFUL_PILL
+        boolean hidden = !multiline && width > 0
+                && width < Math.round(MIN_MEANINGFUL_PILL_DP * dm.density)
             && textPxWidth + padH * 2 > width;
 
         // Center the single-line window on the node (see Layout.dx/dy).
@@ -1092,16 +1120,16 @@ public class InlineOverlayManager {
                     // buttons same font), then shrink if the RU is wider than
                     // the button interior.
                     textSizePx = Math.max(textSizePx, estimatePx);
-                    padH = Math.max(4, (int) (textSizePx * 0.4f));
-                    padV = Math.max(2, (int) (textSizePx * 0.3f));
+                    padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                    padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
                     measurePaint.setTextSize(textSizePx);
                     textPxWidth = measurePaint.measureText(spec.text);
                     float target = spec.width - padH * 2f - 1f;
                     if (textPxWidth > target) {
                         textSizePx = Math.max(MIN_TEXT_SP * dm.density,
                             textSizePx * target / textPxWidth);
-                        padH = Math.max(4, (int) (textSizePx * 0.4f));
-                        padV = Math.max(2, (int) (textSizePx * 0.3f));
+                        padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                        padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
                         measurePaint.setTextSize(textSizePx);
                         textPxWidth = measurePaint.measureText(spec.text);
                     }
@@ -1110,8 +1138,7 @@ public class InlineOverlayManager {
                     // hug the node: height = node, ddy 0, stadium radius.
                     // If the (shrunk) text were still taller than the button,
                     // keep the old box rather than clip the glyphs.
-                    int minH = Math.max((int) (textSizePx + padV * 2),
-                        MIN_SINGLE_LINE_HEIGHT);
+                    int minH = Math.max((int) (textSizePx + padV * 2), Math.round(MIN_SINGLE_LINE_HEIGHT_DP * dm.density));
                     if (minH <= spec.height) {
                         height = Math.min(spec.height, maxPillH);
                         ddy = (spec.height - height) / 2; // 0 unless clipped
@@ -1187,10 +1214,11 @@ public class InlineOverlayManager {
         //     boxes, so it keeps the node-top anchor).
         if (multiline && ddy == 0 && siblings != null && allowDeep) {
             int yTop = parseY(spec.key);
+            int centerRowDyPx = Math.round(ROW_SAME_ROW_MAX_DY_DP * dm.density);
             boolean rowSibling = false;
             for (OverlaySpec s : siblings) {
                 if (s == spec) continue;
-                if (Math.abs(parseY(s.key) - yTop) <= ROW_SAME_ROW_MAX_DY) rowSibling = true;
+                if (Math.abs(parseY(s.key) - yTop) <= centerRowDyPx) rowSibling = true;
             }
             // Guard against stacking on the row above — but only for specs
             // whose actual DRAWN pill reaches into this column. A full-row
@@ -1206,7 +1234,7 @@ public class InlineOverlayManager {
                 if (s == spec) continue;
                 int sX = parseX(s.key), sY = parseY(s.key);
                 int sBottom = sY + s.height;
-                if (sBottom > yTop || sY <= yTop - 600) continue;
+                if (sBottom > yTop || sY <= yTop - Math.round(ROW_NEIGHBOR_MAX_DP * dm.density)) continue;
                 if (sX > x + width || sX + s.width < x) continue; // no node overlap
                 Layout up;
                 try {
@@ -1243,9 +1271,9 @@ public class InlineOverlayManager {
 
     // How many caption lines the box allows (pill may grow below the
     // node, so at least 2; capped at 3 — a 4+ line slab is never right).
-    private int lineBudget(int boxHeightPx, float textSizePx) {
+    private int lineBudget(int boxHeightPx, float textSizePx, float density) {
         if (boxHeightPx <= 0) return 2;
-        int padV = Math.max(2, (int) (textSizePx * 0.3f));
+        int padV = Math.max(Math.round(PAD_V_FLOOR_DP * density), (int) (textSizePx * 0.3f));
         int lh = (int) (textSizePx * 1.25f);
         if (lh <= 0) return 2;
         int n = (boxHeightPx - padV * 2) / lh + 1;
@@ -1260,10 +1288,11 @@ public class InlineOverlayManager {
     // ellipsis. outLines[0] carries the line count. Null: the text fits
     // without truncation, or even one line with break points does not fit.
     private CharSequence truncateToLines(String text, float boxWidthPx, float fsPx,
-                                         int maxLines, int maxHpx, int[] outLines) {
+                                         int maxLines, int maxHpx, int[] outLines,
+                                         float density) {
         measurePaint.setTextSize(fsPx);
-        int padH = Math.max(4, (int) (fsPx * 0.4f));
-        int padV = Math.max(2, (int) (fsPx * 0.3f));
+        int padH = Math.max(Math.round(PAD_H_FLOOR_DP * density), (int) (fsPx * 0.4f));
+        int padV = Math.max(Math.round(PAD_V_FLOOR_DP * density), (int) (fsPx * 0.3f));
         float avail = boxWidthPx - 2f * padH;
         if (avail < fsPx) return null;
         // Same break model as wrapLineCount: spaces + UAX#14 hyphen breaks.
@@ -1318,10 +1347,10 @@ public class InlineOverlayManager {
     // or 0 when the text cannot fit inside boxWidthPx at fsPx within the
     // line budget, or the resulting block taller than maxHpx.
     private int wrapLineCount(String text, float boxWidthPx, float fsPx,
-                              int maxLines, int maxHpx) {
+                              int maxLines, int maxHpx, float density) {
         measurePaint.setTextSize(fsPx);
-        int padH = Math.max(4, (int) (fsPx * 0.4f));
-        int padV = Math.max(2, (int) (fsPx * 0.3f));
+        int padH = Math.max(Math.round(PAD_H_FLOOR_DP * density), (int) (fsPx * 0.4f));
+        int padV = Math.max(Math.round(PAD_V_FLOOR_DP * density), (int) (fsPx * 0.3f));
         float avail = boxWidthPx - 2f * padH;
         if (avail < fsPx) return 0; // not even one glyph fits
         // Words break on spaces; an explicit hyphen is also a break point
@@ -1356,7 +1385,7 @@ public class InlineOverlayManager {
             }
             if (x > avail) return 0; // unbreakable word: this size is unusable
         }
-        float h = lines * fsPx * 1.25f + 2f * Math.max(2, (int) (fsPx * 0.3f));
+        float h = lines * fsPx * 1.25f + 2f * Math.max(Math.round(PAD_V_FLOOR_DP * density), (int) (fsPx * 0.3f));
         if (h > maxHpx + 2f) return 0; // would run into the node below
         return lines;
     }
