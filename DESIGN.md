@@ -295,6 +295,45 @@ v2.10.46 (versionCode 98) + возврат ship96 + frame(1); 5 dx ship не
    (инвариант + 0 flips на 2.25), отдельный PR, отдельный A/B;
    старт после ship и после T-36a.
 
+#### Итерация Т-36a №0 — L-пин line-count (10-22, ОТКЛОНЕНА свипом, откат)
+
+Гипотеза (из baseline-декомпозиции `tools/_probe_boundary25.py`):
+XY-класс (13 узлов: icon-row/label, пилюля-высота ровно
+2·lh+2·padv, top ВЫШЕ node) = pass 2 `build_slopes` пробует истинный
+2-линовой wrap с L=3 (off-by-one `(ph−2padv)//lh + 1`) → `_l_pin`
+None → unpinned → boundary. Два варианте правки line-count:
+v1 — floor на всех пилюлях; v2 — floor ТОЛЬКО в wrap-зоне
+(ph−2padv ≥ 2·lh), byte-схранение 1-линовой зоны (там старый `+1` —
+часть эмпирической калибровки T-35).
+
+Дельта свипа (у обоих вариантов — ОДИН и тот же сдвиг clean):
+25→**34** (boundary выросло), **141→131** clean (нарушен п.2
+контракта), +1 unknown-defect + 2 port? (trip_info «По сравнению с
+автомобилем…», dev x=−163) → VERDICT PARTIAL, exit=2. 13 clean →
+model-boundary: explore tv_title, mashina_scroll tv_main_menu_name,
+mashina_top tv_main_menu_des, my_tab tvMemberTaskDesc / txt_time /
+tv_text, notifications content×2, trip_info (1 узел).
+
+Механизм, числом (два слоя):
+1. Интервал L-пина строится из **наблюдаемой** ширины пилюли
+   (avail = pw−2·padh = 179), а mirror оценивает wrap по своей
+   ширине (201 → avail 177): midpoint интервала + fontFit-скейлинг
+   fs (29.42/30) садится ровно на wrap-порог — задокументированный
+   предел формы («pinned interval is still an INTERVAL; a borderline
+   text sits on its edge») сработал буквально: целевые узлы НЕ стали
+   clean (dev h −31→−29, узел в boundary).
+2. Slope глобален ПО ТЕКСТУ на экран: новые 18 L-2 пинов
+   распространились на все узлы этих текстов, включая 13 clean, где
+   char-class был в допуске → сдвиг на бритвенном крае.
+
+Вывод: L-2 line-count **отклонён как форма** (не как цель — цель
+«узнать L=device line count» верна). Следующая итерация должна принести
+line-count ИНОЙ формой: прямое пино́вание L по высоте пилюли
+(без re-вывода интервала и без влияния на width) +/− per-node (а не
+per-text) scope — с обязательным baseline-прогоном ДО и этим блоком
+как контрольной точкой. Ни один «нужен гейт» по этой итерации НЕ
+возник: отклонение — числом свипа.
+
 Отклонение от ТЗ (с обоснованием): ТЗ указыва́ло вход `uiautomator dump`
 (a11y XML). Он неполон для `computeLayout`: нет RU-перевода (текста
 пилюли), нет `est` (ширины CJK-box) и source-font модели — wrap и ширина
