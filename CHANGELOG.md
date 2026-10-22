@@ -1,5 +1,43 @@
 # Changelog
 
+## Инфраструктура (2026-10-22) — density sweep: первый честный список дефектов
+поведение приложения **не изменено** (инфраструктура + документы).
+- **`tools/density_sweep.py` + `tools/density_sweep_mir.py`** — инвариансный
+  тест плотности (инвариант 10-21): полный байт-порт `computeLayout`
+  (float32 через struct, порядок 1:1, весь horizontal-блок + single-line
+  ddy внутри `!multiline`), self-check @2.25 vs дамп (±2px, отклонения
+  классифицированы: `model-boundary[-approx]` — предел text-модели,
+  `port?` — дефект зеркала → PARTIAL/exit=2), sweep по 8 плотностям,
+  двойной порог (flip именованного px-условия = дефект даже при малом Δ;
+  Δ ≤ 0.5dp + 3px/d без flip = kвантование входа, отдельный счёт),
+  trail-атрибуция каждого flip, JSON-отчёт с data
+  (`--report`). exit: 0 PASS / 1 DEFECTS / 2 PARTIAL.
+- **Результат (baseline `pre_step4_96_7282`, 11 экранов, 171 узел):
+  104 clean / 42 defect (21 flip, 21 dx) / 25 model-boundary / 0 port?** —
+  `VERDICT: DEFECTS PRESENT`. Классы дефектов (список dp-рефакторинга,
+  Т-35): fontFit 1px-step `fs -= 1f` (8), gate F `96≤h≤130`/`0.28–0.65·sw`
+  (6), gate E `±24px`+balanced (2), band `real_h−130px` (2), shape
+  `w>2.5est/h>1.8est_px` (1), floors 20px/pad 4·2px/near 48 (остаток +
+  21 DX@1.0). Данные: `tools/golden/sweep_report_v96.json`.
+- **Text-модели (задокументированный предел, оффлоун без TTF/сети):**
+  точный TextView line-break (пробел налево, дефис UAX#14) + WRAP_CONTENT;
+  W(fs) = slope·fs — S-пин (text-dominated piлюля: inner/fsObs, точное
+  device-измерение) и L-пин (L строк в ширине W ⇒ W₁∈((L−1)A, L·A],
+  посредок строка-инвариантного поддиапазона); fallback char-class.
+  Self-check 146/171 точных, 25 = предел модели (в findings не входят,
+  в отчёте перечислены).
+- **word_wrap устройства = OFF** (доказано геометрией дампа: (F)
+  button-hug пилюли «Конечно» == узел 368×102 достижим только в ветке
+  `!multiline` (Java 1067–1121), baseline содержит). Сессионная пометка
+  «ON» (10-21) исправлена.
+- **fs-вход зеркал = реальное устройство-фонт** (dump-поле `fsPx`,
+  float px = sp·d, scale на d′ как любой sp) — estimate-шрифт даёт
+  ложные «port?» (case-диагностика 10-21: «Обновление системы…» fs 28.4
+  vs est 35.3).
+- TASKS: Т-26 (second phone) отменён → Т-35 (dp-рефакторинг по списку
+  sweep); DESIGN.md: двойной порог, noise-модель 0.5+3/d, результат
+  sweep.
+
 ## v2.10.45 (2026-10-21) — кадр (1) шага 4: `layoutFromProfile` (ожидает live-
 diff против `pre_step4_96_7282`)
 - **Смена горизонтали: профиль перестаёт быть данными и начинает управлять

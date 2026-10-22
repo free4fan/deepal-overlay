@@ -6,11 +6,32 @@
 dark_overlay=off).
 
 ## Активные
-- Т-26. Retune px-гейтов под вторую плотность (шаг 3). **Заблок на железе:**
-  нужен второй телефон (другая density) для пересъёмки гардов и пересчёта
-  px-сплитов `h<74` / `h 96-120` / `y<320`. Пока на текущем телефоне лок по id
-  (Т-24) уже даёт плотностную независимость левосторонней якорки, а shape-гейты
-  работают на оценке.
+- **Т-35. DP-рефакторинг `computeLayout` по списку дефектов sweep (10-22).**
+  Первый честный список — `tools/density_sweep.py` на baseline
+  `pre_step4_96_7282` (11 экранов, 171 узел): **104 clean / 42 defect
+  (21 flip + 21 dx) / 25 model-boundary / 0 port?** — вердикт
+  `DEFECTS PRESENT` (exit=1), JSON: `tools/golden/sweep_report_v96.json`.
+  Классы (атрибуция → px-константа → dp-инвариант, правило 1):
+  1. **fontFit 1px-step** `fs -= 1f` (8 flip: my_tab, mashina_scroll,
+     service_deepal_grid, trip_info…) — шаг font-цикла в px;
+  2. **gate F** `96≤h≤130` + `0.28·sw<w<0.65·sw` (6 flip: settings_car
+     @4.0, dialog-кнопки @1.0–3.5) — кнопка-hug по px-высоте;
+  3. **gate E** `±24px` screen-mid + balanced (2 flip: «Свернуть», shop) —
+     инсет 24px и balance-пороги;
+  4. **band** `real_h−130px` (2 flip: trip_info «Пробег (км)»/
+     «продолжительность») — порог банды;
+  5. **shape** `w>est·2.5 / h>est_px·1.8` (1 flip: «Воспроизведение
+     звука»/«Bluetooth не подключен» при фонт-кванте est);
+  6. **floors/min** `MIN_SINGLE_LINE_HEIGHT=20`, pad `max(4,)/max(2,)`,
+     `near>48/ROW_GAP 6` (~11 flip/ddy + 21 dx@1.0: общий счёт
+     max(node_area,text_area)+2padH).
+  Порядок правок = список выше; **каждая правка — со sweep-прогоном**
+  (правило 3); смена поведения на границах → свой релиз + A/B
+  (golden-инфраструктура есть). Целевой прогон после рефакторинга:
+  0 defects, 0 flips → только noise-only ≤ 0.5+3/d и model-boundary.
+- Т-26. Retune px-гейтов под вторую плотность (шаг 3). **ОТМЕНЁН (10-22):**
+  второй телефон не нужен — `tools/density_sweep.py` синтезирует 8 плотностей
+  из одного дампа (решение пользователя: расчёт, не снапшоты). Замена = Т-35.
 - Т-34. Золотой конвейер v2 + baseline v2.10.43. Состояние:
   - источник rects пилюль = **само приложение**: `writeGoldenDumpIfArmed()`
     в `reconcile` (флаг `files/golden_capture`, троттлинг 700мс) — overlay-
