@@ -181,14 +181,24 @@ def run_screen(specs, ctx_bag, word_wrap, frame1):
 
 
 def trail_index(trail):
-    idx = {}
-    for e in trail:
-        v = e["value"]
-        # log() stores the condition boolean as a 1-tuple in several
-        # branches — normalize to the first element
-        idx[e["cond"]] = dict(e, value=(v[0] if isinstance(v, (tuple, list))
-                                        and v else v))
-    return idx
+    """cond -> last logged entry. Values compare STRUCTURALLY (the mirror
+    logs shape as a 4-tuple, fontFit as a 3-tuple of states, gates as
+    1-tuples of the boolean) — comparison by `==` on the logged value is
+    the contract; no re-normalization, which would alias distinct states
+    (a 3-tuple (multiline, wrap, fs) cut to its first element IS the
+    multiline state — counting it as an independent "fontFit" flip is
+    double-charging one line-state change)."""
+    return {e["cond"]: e for e in trail}
+
+
+# Named DECISION conditions whose boolean must not flip between densities
+# (the invariant under test, DESIGN 10-21): the gates, the band, the
+# frame-1 fall-through, and the shape classes (stand/tall/wide/loose —
+# as one condition, all four states). The ddx/ddy trail entries are
+# OUTPUTS, not conditions: their variation between densities is already
+# scored as Δddx/Δddy — counting a flag on them is double-charging.
+FLIP_CONDS = ("band", "gateA", "gateB", "gateHC", "gateD", "gateE",
+              "gateF", "frame1", "shape")
 
 
 def dp_of(out, d):
@@ -472,11 +482,12 @@ def sweep(pills, ctx_bag, word_wrap, tol, frame1=True):
                     rec["worst"] = (d, side, delta)
             t1 = trail_index(trail)
             for cond, e0 in t0.items():
+                if cond not in FLIP_CONDS:
+                    continue           # outputs (ddx/ddy): scored as Δ only
                 e1 = t1.get(cond)
-                if e1 is not None and bool(e0["value"]) != bool(e1["value"]):
-                    rec["flips"].append([d, cond,
-                                         bool(e0["value"]),
-                                         bool(e1["value"])])
+                if e1 is not None and e0["value"] != e1["value"]:
+                    rec["flips"].append([d, cond, e0["value"],
+                                         e1["value"]])
         # approx-model pills (the device font's variance moves the wrap /
         # width model ~1 line or ~few px off) cannot anchor findings
         # honestly: reported, but excluded from the defect list; a port?

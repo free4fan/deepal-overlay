@@ -1,6 +1,6 @@
 # Changelog
 
-## Инфраструктура (2026-10-22) — density sweep: первый честный список дефектов
+## Инфраструктура (2026-10-22) — density sweep + план dp-рефакторинга
 поведение приложения **не изменено** (инфраструктура + документы).
 - **`tools/density_sweep.py` + `tools/density_sweep_mir.py`** — инвариансный
   тест плотности (инвариант 10-21): полный байт-порт `computeLayout`
@@ -9,34 +9,36 @@
   классифицированы: `model-boundary[-approx]` — предел text-модели,
   `port?` — дефект зеркала → PARTIAL/exit=2), sweep по 8 плотностям,
   двойной порог (flip именованного px-условия = дефект даже при малом Δ;
-  Δ ≤ 0.5dp + 3px/d без flip = kвантование входа, отдельный счёт),
-  trail-атрибуция каждого flip, JSON-отчёт с data
-  (`--report`). exit: 0 PASS / 1 DEFECTS / 2 PARTIAL.
-- **Результат (baseline `pre_step4_96_7282`, 11 экранов, 171 узел):
-  104 clean / 42 defect (21 flip, 21 dx) / 25 model-boundary / 0 port?** —
-  `VERDICT: DEFECTS PRESENT`. Классы дефектов (список dp-рефакторинга,
-  Т-35): fontFit 1px-step `fs -= 1f` (8), gate F `96≤h≤130`/`0.28–0.65·sw`
-  (6), gate E `±24px`+balanced (2), band `real_h−130px` (2), shape
-  `w>2.5est/h>1.8est_px` (1), floors 20px/pad 4·2px/near 48 (остаток +
-  21 DX@1.0). Данные: `tools/golden/sweep_report_v96.json`.
+  Δ ≤ 0.5dp + 3px/d без flip = квантование входа, отдельный счёт),
+  trail-атрибуция, JSON-отчёт с data (`--report`). exit: 0/1/2.
+- **Результат (baseline v96, 11 экранов, 171 узел; flip-детектор
+  исправлен 10-22 — сравниваются только условия-решения band/gates/
+  shape/frame1, `ddx/ddy` в треиле — выходы, считаются как Δ):
+  103 clean / 43 defect (13 flip + 30 dx) / 25 model-boundary / 0 port?**,
+  `VERDICT: DEFECTS PRESENT`. Раскладка: flip band 2, gateE 2, gateF 3,
+  gateF+shape 3, shape 3; dx w@1.0 21 (pad-флоры/минH-20), w@3.5/4.0 3
+  (ROW_SAME_ROW_MAX_DY=50px — квант. межнодового зазора >50px →
+  maxw неограничен), h@1.0 4, h@2.0 1, ddy@1.0 1. Данные:
+  `tools/golden/sweep_report_v96.json`.
+- **План dp-рефакторинга в DESIGN.md (артефакт, Т-35):** порядок по
+  зависимостям — #0 проход соседей (50/600/48/6px) + floors (20/4/2px)
+  → #1 shape (h>1.8est_px, w>1.7est) → #2 band (−130) → #3 gateE (±24)
+  → #4 gateF (96–130/0.28–0.65) → #5 fontFit 1px-step (отдельный
+  контракт: шаг = читаемость, dp не трогаем). Контракт на класс
+  измерим; правило d=2.25: механика px→dp → 0 flips на калибровочной
+  плотности, доказательство — дельты d≠2.25. Gate на старт #0: 25
+  model-boundary не блокируют (горячих узлов среди них нет:
+  dialog-кнопки и nav-табы — verified ✓; 25 = item_help_center/tv_text/
+  title — контент без pinnable equation).
 - **Text-модели (задокументированный предел, оффлоун без TTF/сети):**
-  точный TextView line-break (пробел налево, дефис UAX#14) + WRAP_CONTENT;
-  W(fs) = slope·fs — S-пин (text-dominated piлюля: inner/fsObs, точное
-  device-измерение) и L-пин (L строк в ширине W ⇒ W₁∈((L−1)A, L·A],
-  посредок строка-инвариантного поддиапазона); fallback char-class.
-  Self-check 146/171 точных, 25 = предел модели (в findings не входят,
-  в отчёте перечислены).
-- **word_wrap устройства = OFF** (доказано геометрией дампа: (F)
-  button-hug пилюли «Конечно» == узел 368×102 достижим только в ветке
-  `!multiline` (Java 1067–1121), baseline содержит). Сессионная пометка
-  «ON» (10-21) исправлена.
-- **fs-вход зеркал = реальное устройство-фонт** (dump-поле `fsPx`,
-  float px = sp·d, scale на d′ как любой sp) — estimate-шрифт даёт
-  ложные «port?» (case-диагностика 10-21: «Обновление системы…» fs 28.4
-  vs est 35.3).
-- TASKS: Т-26 (second phone) отменён → Т-35 (dp-рефакторинг по списку
-  sweep); DESIGN.md: двойной порог, noise-модель 0.5+3/d, результат
-  sweep.
+  точный TextView line-break + WRAP_CONTENT; W(fs)=slope·fs — S-пин
+  (exact single-line device-измерение) + L-пин (строка L ⇒
+  строка-инвариантный поддиапазон W₁-интервала) + char-class fallback.
+- **word_wrap = OFF** (доказано геометрией дампа — (F) button-hug
+  «Конечно» 368×102 достижим только в !multiline); **fs-вход зеркала =
+  реальное устройство-фонт** (fsPx·d'; estimate-шрифт давал ложные
+  «port?»).
+- TASKS: Т-26 (second phone) отменён → Т-35 (план в DESIGN.md).
 
 ## v2.10.45 (2026-10-21) — кадр (1) шага 4: `layoutFromProfile` (ожидает live-
 diff против `pre_step4_96_7282`)

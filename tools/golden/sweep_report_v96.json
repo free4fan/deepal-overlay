@@ -18,10 +18,10 @@
  "totals": {
   "nodes": 171,
   "verified": 146,
-  "clean": 104,
-  "defects": 42,
-  "flip_defects": 21,
-  "dx_defects": 21,
+  "clean": 103,
+  "defects": 43,
+  "flip_defects": 13,
+  "dx_defects": 30,
   "mirror": 25,
   "port_defects": 0,
   "noise_only": 113
@@ -301,86 +301,94 @@
      [
       1.0,
       "gateF",
-      true,
-      false
-     ],
-     [
-      1.0,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       1.5,
       "gateF",
-      true,
-      false
-     ],
-     [
-      1.5,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       2.0,
       "gateF",
-      true,
-      false
-     ],
-     [
-      2.0,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       3.0,
       "gateF",
-      true,
-      false
-     ],
-     [
-      3.0,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       3.5,
       "shape",
-      false,
-      true
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       true,
+       false,
+       false,
+       false
+      ]
      ],
      [
       3.5,
       "gateF",
-      true,
-      false
-     ],
-     [
-      3.5,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       4.0,
       "shape",
-      false,
-      true
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       true,
+       false,
+       false,
+       false
+      ]
      ],
      [
       4.0,
       "gateF",
-      true,
-      false
-     ],
-     [
-      4.0,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ]
     ],
     "max_d": 69.84126984126983,
@@ -478,74 +486,62 @@
      [
       1.0,
       "gateF",
-      true,
-      false
-     ],
-     [
-      1.0,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       1.5,
       "gateF",
-      true,
-      false
-     ],
-     [
-      1.5,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       2.0,
       "gateF",
-      true,
-      false
-     ],
-     [
-      2.0,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       3.0,
       "gateF",
-      true,
-      false
-     ],
-     [
-      3.0,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       3.5,
       "gateF",
-      true,
-      false
-     ],
-     [
-      3.5,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ],
      [
       4.0,
       "gateF",
-      true,
-      false
-     ],
-     [
-      4.0,
-      "ddy",
-      false,
-      true
+      [
+       true
+      ],
+      [
+       false
+      ]
      ]
     ],
     "max_d": 75.55555555555554,
@@ -1198,20 +1194,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "fontFit",
-      false,
-      true
-     ],
-     [
-      1.5,
-      "fontFit",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 13.888888888888886,
     "worst": [
      1.0,
@@ -1303,14 +1286,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "ddy",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 4.444444444444457,
     "worst": [
      1.0,
@@ -2508,32 +2484,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      2.75,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      3.0,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      3.5,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      4.0,
-      "fontFit",
-      true,
-      false
-     ]
-    ],
+    "flips": [],
     "max_d": 25.97222222222223,
     "worst": [
      4.0,
@@ -2625,38 +2576,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "fontFit",
-      false,
-      true
-     ],
-     [
-      1.0,
-      "ddy",
-      true,
-      false
-     ],
-     [
-      1.5,
-      "fontFit",
-      false,
-      true
-     ],
-     [
-      1.5,
-      "ddy",
-      true,
-      false
-     ],
-     [
-      2.0,
-      "fontFit",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 6.555555555555557,
     "worst": [
      1.0,
@@ -2748,20 +2668,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "fontFit",
-      false,
-      true
-     ],
-     [
-      1.0,
-      "ddy",
-      true,
-      false
-     ]
-    ],
+    "flips": [],
     "max_d": 6.555555555555557,
     "worst": [
      1.0,
@@ -2857,26 +2764,22 @@
      [
       1.0,
       "gateE",
-      false,
-      true
-     ],
-     [
-      1.0,
-      "ddx",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ],
      [
       1.5,
       "gateE",
-      false,
-      true
-     ],
-     [
-      1.5,
-      "ddx",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 8.0,
@@ -2974,14 +2877,34 @@
      [
       1.0,
       "shape",
-      true,
-      false
+      [
+       true,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false
+      ]
      ],
      [
       1.5,
       "shape",
-      true,
-      false
+      [
+       true,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false
+      ]
      ]
     ],
     "max_d": 151.7777777777778,
@@ -5111,56 +5034,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      2.75,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      2.75,
-      "ddy",
-      false,
-      true
-     ],
-     [
-      3.0,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      3.0,
-      "ddy",
-      false,
-      true
-     ],
-     [
-      3.5,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      3.5,
-      "ddy",
-      false,
-      true
-     ],
-     [
-      4.0,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      4.0,
-      "ddy",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 25.365079365079367,
     "worst": [
      3.5,
@@ -5990,26 +5864,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "fontFit",
-      false,
-      true
-     ],
-     [
-      1.5,
-      "fontFit",
-      false,
-      true
-     ],
-     [
-      2.0,
-      "fontFit",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 11.11111111111111,
     "worst": [
      2.0,
@@ -6101,14 +5956,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "fontFit",
-      true,
-      false
-     ]
-    ],
+    "flips": [],
     "max_d": 4.333333333333332,
     "worst": [
      1.0,
@@ -6297,14 +6145,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "fontFit",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 0.7777777777777715,
     "worst": [
      1.0,
@@ -6313,7 +6154,7 @@
     ],
     "port_defect": false,
     "over_spec": true,
-    "noise": false,
+    "noise": true,
     "fails": false
    },
    {
@@ -6488,44 +6329,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      1.0,
-      "ddy",
-      false,
-      true
-     ],
-     [
-      3.5,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      3.5,
-      "ddy",
-      false,
-      true
-     ],
-     [
-      4.0,
-      "fontFit",
-      true,
-      false
-     ],
-     [
-      4.0,
-      "ddy",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 94.30555555555554,
     "worst": [
      4.0,
@@ -6801,7 +6605,24 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [],
+    "flips": [
+     [
+      1.0,
+      "shape",
+      [
+       false,
+       false,
+       true,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false
+      ]
+     ]
+    ],
     "max_d": 179.88888888888889,
     "worst": [
      1.0,
@@ -8861,32 +8682,100 @@
      [
       2.0,
       "gateB",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
+     ],
+     [
+      2.75,
+      "gateHC",
+      [
+       false,
+       true
+      ],
+      [
+       false,
+       false
+      ]
      ],
      [
       2.75,
       "gateD",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
+     ],
+     [
+      3.0,
+      "gateHC",
+      [
+       false,
+       true
+      ],
+      [
+       false,
+       false
+      ]
      ],
      [
       3.0,
       "gateD",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
+     ],
+     [
+      3.5,
+      "gateHC",
+      [
+       false,
+       true
+      ],
+      [
+       false,
+       false
+      ]
      ],
      [
       3.5,
       "gateD",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
+     ],
+     [
+      4.0,
+      "gateHC",
+      [
+       false,
+       true
+      ],
+      [
+       false,
+       false
+      ]
      ],
      [
       4.0,
       "gateD",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 139.75,
@@ -12060,26 +11949,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "fontFit",
-      false,
-      true
-     ],
-     [
-      1.5,
-      "fontFit",
-      false,
-      true
-     ],
-     [
-      2.0,
-      "fontFit",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 8.88888888888889,
     "worst": [
      1.0,
@@ -12923,20 +12793,28 @@
      [
       1.0,
       "shape",
-      true,
-      false
-     ],
-     [
-      1.0,
-      "ddx",
-      true,
-      false
+      [
+       true,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       false,
+       false
+      ]
      ],
      [
       2.0,
       "gateB",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 101.0,
@@ -13032,10 +12910,78 @@
     },
     "flips": [
      [
+      2.75,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      3.0,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      3.5,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      4.0,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
       4.0,
       "gateF",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 75.01587301587304,
@@ -13223,10 +13169,78 @@
     },
     "flips": [
      [
+      2.75,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      3.0,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      3.5,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      4.0,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
       4.0,
       "gateF",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 132.0952380952381,
@@ -13508,14 +13522,12 @@
      [
       4.0,
       "gateF",
-      false,
-      true
-     ],
-     [
-      4.0,
-      "ddy",
-      true,
-      false
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 46.83333333333334,
@@ -13705,14 +13717,12 @@
      [
       4.0,
       "gateF",
-      false,
-      true
-     ],
-     [
-      4.0,
-      "ddy",
-      true,
-      false
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 15.396825396825392,
@@ -14094,16 +14104,78 @@
     },
     "flips": [
      [
-      4.0,
-      "gateF",
-      false,
-      true
+      2.75,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      3.0,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      3.5,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
      ],
      [
       4.0,
-      "ddy",
-      true,
-      false
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      4.0,
+      "gateF",
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 42.47619047619048,
@@ -14663,14 +14735,12 @@
      [
       1.0,
       "gateE",
-      true,
-      false
-     ],
-     [
-      1.0,
-      "ddx",
-      true,
-      false
+      [
+       true
+      ],
+      [
+       false
+      ]
      ]
     ],
     "max_d": 64.0,
@@ -15691,7 +15761,40 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [],
+    "flips": [
+     [
+      3.5,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ],
+     [
+      4.0,
+      "shape",
+      [
+       false,
+       false,
+       false,
+       false
+      ],
+      [
+       false,
+       false,
+       true,
+       false
+      ]
+     ]
+    ],
     "max_d": 1.1111111111111143,
     "worst": [
      1.5,
@@ -15700,8 +15803,8 @@
     ],
     "port_defect": false,
     "over_spec": true,
-    "noise": true,
-    "fails": false
+    "noise": false,
+    "fails": true
    },
    {
     "id": "",
@@ -15880,26 +15983,7 @@
      "3.5": "none",
      "4.0": "none"
     },
-    "flips": [
-     [
-      1.0,
-      "ddy",
-      false,
-      true
-     ],
-     [
-      1.5,
-      "ddy",
-      false,
-      true
-     ],
-     [
-      2.0,
-      "ddy",
-      false,
-      true
-     ]
-    ],
+    "flips": [],
     "max_d": 13.0,
     "worst": [
      1.0,
@@ -16179,26 +16263,22 @@
      [
       1.0,
       "band",
-      false,
-      true
-     ],
-     [
-      1.0,
-      "ddx",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ],
      [
       1.5,
       "band",
-      false,
-      true
-     ],
-     [
-      1.5,
-      "ddx",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 13.0,
@@ -16296,26 +16376,22 @@
      [
       1.0,
       "band",
-      false,
-      true
-     ],
-     [
-      1.0,
-      "ddx",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ],
      [
       1.5,
       "band",
-      false,
-      true
-     ],
-     [
-      1.5,
-      "ddx",
-      false,
-      true
+      [
+       false
+      ],
+      [
+       true
+      ]
      ]
     ],
     "max_d": 16.666666666666668,
