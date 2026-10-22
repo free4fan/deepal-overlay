@@ -80,6 +80,29 @@ arc = T-36 (a: text-модель → 25 model-boundary; b: semantic tie-break,
 заблокирован на телефоне). Exit=1 остаётся честным гейтом для ЛЮБОГО нового
 defect вне whitelist.
 
+**T-36a start (10-22, оффлоун — ship не блокирует модельное расширение;
+порядок: контракт в DESIGN ДО работы, один класс = один PR = один
+sweep + self-diff, Java `computeLayout` при этом НЕ трогается).**
+- **Итерация №0 — L-2 line-count pin (ОТКЛОНЕНА свипом, откатана,
+  commit-трасса в git log):** per-text scope формы №0 (S/L pin по тексту
+  на весь экран) сдвинул **13 clean** узлов (25→34, 141→131, +1 unknown
+  + 2 port?, exit=2) — нарушение изоляции, не razor-edge; откат по
+  контракту, не whitelist. Урок: **расширение per-NODE, не per-text**
+  (DESIGN «Итерация Т-36a №0»).
+- **Итерация №1 — per-node device wrap fact (APPROVED,
+  `e5a892d`):** L = device-линиевая высота пилюли, per-node scope,
+  font = device-fs из дампа (`real_fs`, ground truth). Дельта:
+  **25→14 mirror, 141→152 clean (+11 boundary→clean), 5 known-bounded
+  byte-identical, 0 unknown, 0 port?, 0 flips; VERDICT PASS, exit=0**.
+  Self-diff по инварианту (141+5 byte-identical, 25 mutable) поймал
+  нарушение инжекта на первой реализации (known-5 «Фестиваль» preview→
+  None — инжект до font-fit попал под `not multiline`); форма
+  перенесена после font-fit — самопойманное на старте, ДО sweep
+  (DESIGN «§Инжект», «Принцип: self-diff ДО sweep»). Состояние после
+  №1: 152 clean / 0 unknown / 5 known-bounded / 14 mirror. Дальше:
+  №2 W-класс (8 узлов, double-pin self-consistent, PASS-с-частичным-
+  покрытием допустим), №3 ddy-anchor×3, №4 EDGE×2.
+
 ## Инфраструктура (2026-10-22) — density sweep + план dp-рефакторинга
 поведение приложения **не изменено** (инфраструктура + документы).
 - **`tools/density_sweep.py` + `tools/density_sweep_mir.py`** — инвариансный
