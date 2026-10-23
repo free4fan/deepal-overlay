@@ -142,12 +142,42 @@ dark_overlay=off).
     false-positive fit-теста) НЕ закрыты. Остаток 9: stand×2 +
     tall×1 (W-cap/T-36b) + ddy×3 (explore tv_title, my_tab
     txt_time, service_acc «Зарядка») + EDGE×2 + W+MIX×1 (service_acc
-    «Частые услуги»). Дальше: **№3 (ddy-anchor×3 + stand×2)** —
-    якорь ddy и/или per-node stand-cap data; **№4 (EDGE×2)** — своя
+    «Частые услуги»). Дальше (нумерация 10-24): **№4 (ddy-anchor×3 + stand×2)** —
+    якорь ddy и/или per-node stand-cap data; **№5 (EDGE×2)** — своя
     форма; tall×1 + данные пина (slope 10.881, settings_car
-    (388,153)) — в контракт **T-36b**. Записи: DESIGN.md
-    «КОНТРАКТ итерации №1» + «ИТОГ №1» + «КОНТРАКТ итерации Т-36a
-    №2» + «ИТОГ №2».
+    (388,153)) — в контракт **T-36b**. Записи: DESIGN.md «КОНТРАКТ
+    итерации №1» + «ИТОГ №1» + «КОНТРАКТ итерации Т-36а №2» + «ИТОГ №2».
+    **Нумерация (10-24):** ddy/stand-итерация ниже переименована №3→**№4**
+    (№3 занят empty-id align-итерацией), tall×1 (W-cap) — **T-36b**.
+    **Итерация №3 (empty-id align, T-36a arc) — PASS оффлоун (10-23/24,**
+    **контракт записан ДО правок**, `fb7b100`; DESIGN «Граница id-профили»,
+    «КОНТРАКТ/ИТОГ Т-36a №3»). Форма = ДАННЫЕ + один helper, `computeLayout`
+    не тронут (контракт №3 выполнен дословно). Проб
+    `tools/_annotate_emptyid_align.py` (38 empty-id нод canonical baseline,
+    read-only) + layout-оракл (apktool `/tmp/deepal_res_dec`): 7
+    settings-меток БЕЗ горизонтальной gravity в source = приложение START;
+    render-CENTER в baseline = баг-центр overlay (его и чиним). Data
+    `app/src/main/assets/empty_id_align.json` = 7 нод (key
+    `CJK-текст|halfDpxhalfDp`; byte-match asset↔runtime **7/7**, f32-exact
+    `Math.round`): **4 FLIP center→start** — 爱车昵称 «Прозвище машины» и
+    车牌号 «Номерной знак» (находка пользователя; пиксели baseline 96/97 и
+    153/155 px по бокам) + 智能手表, 钥匙管理 (та же семья) — и **3 CONFIRM
+    start** (车架号, 车载娱乐流量, 3D车模, уже start в baseline — data фиксирует).
+    Runtime: `resolveCentered()` (2 call sites — scan + batch-completion;
+    id-несущие и не-помеченные узлы — по байту старая length-эвристика,
+    математически; EMPTY-ID-FALLBACK-лог 1× на сессию на ключ, не на скан).
+    Критерии: self-diff vs `snap_iter2_225.json` **171/171 инвариантны**
+    (gravity-only, ни один пилюль-прямоугольник не тронут); sweep
+    **157 clean / 0 unknown / 5 known-bounded / 9 mirror — PASS, exit=0**;
+    live-визуал 4 флипов — **PENDING (телефон оффлайн: No route to host,**
+    **10-24)**. **Ship-кандидат изменён → v2.10.47 (code 99, md5
+    `8bc5bd7f06c6a8d7efae97a31ff8dba4`)**: iter-3 = runtime-изменение (не
+    tools-only) → поведение HEAD уже не «89ce454»; 98/v2.10.46 снят с
+    кандидатуры (его PARTIAL-A/B ниже остаётся базой общей геометрии —
+    self-diff 171/171). Дальше: **№4 (ddy×3 + stand×2)** — после ship;
+    T-36c (runtime-пиксельный детектор для новых экранов без baseline) —
+    не раньше T-36b. Записи: DESIGN.md «Граница id-профили», «КОНТРАКТ
+    Т-36a итерации №3», «ИТОГ Т-36a итерации №3»; CHANGELOG v2.10.47.
     **Live A/B ship-кандидата v2.10.46 (code 98) — PARTIAL (10-23,
     DESIGN «Live A/B ship-кандидата»):** телефон online (Pixel 9 Pro,
     та же 960×2142@360dpi), md5 установленного = md5 кандидата, app

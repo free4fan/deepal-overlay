@@ -1,5 +1,56 @@
 # Changelog
 
+## v2.10.47 (10-24) — T-36a итерация №3: empty-id align из baseline (гравитация)
+Правка **гравитации текста внутри пилюли** для узлов, у которых
+`resource-id` пуст (id-профиль их не видит — граница записана в DESIGN
+«Граница id-профиля»). Форма = **данные + один helper**, `computeLayout`
+и ширина/высота/позиция пилюль НЕ тронуты: self-diff по `snap_iter2_225.json`
+**171/171 инвариантны** (ни один пилюль-прямоугольник не изменился),
+offline-sweep **157 clean / 0 unknown / 5 known-bounded / 9 mirror — PASS
+exit=0**.
+- **Проблема (найдено пользователем на live-телефоне):** на экране
+  «настройки автомобиля» подписи «Прозвище машины» и «Номерной знак»
+  стояли **по центру** внутри тёмной пилюли (96/97 и 153/155 px слева/
+  справа), тогда как все остальные строки — у левого края (+17 px).
+- **Корень:** для пустых id остался length-эвристика
+  `centered = len(RU)·fs·0.5 ≤ nodeW·0.85 && h<96dp` (TranslationService
+  :610/:950 → InlineOverlayManager :932/936). Эти две строки — узлы-метки
+  empty-id, **и у них в строке есть переведённый value-узел с id**
+  (`tv_nickname`, `tv_car_license_plate`) → `closeRow=true` → все
+  shape-классы off → `wideRow=false` → gravity = чистая length-эвристика
+  = CENTER. (У «Данные авто» value-узла нет → `wideRow=true` → эвристика
+  подавлена → START — отсюда «один и тот же флаг, разный исход».)
+  Layout-истина (apktool): обе метки — `TextView` **без горизонтальной
+  gravity** в `activity_my_new_car_setting.xml` = приложение START;
+  центрирование — добавка overlay.
+- **Data:** новое ассет `app/src/main/assets/empty_id_align.json` =
+  7 нод, key `CJK-текст|halfDpxhalfDp` → `start`. Runtime:
+  `resolveCentered()` в TranslationService (2 call sites — scan и
+  batch-completion): пустые id с data → align из data; остальные
+  (включая все узлы c id) — **по байту старая length-эвристика**
+  (математически идентична, `displayText` тот же, bounds те же).
+  `EMPTY-ID-FALLBACK: <key>` — один раз на сессию на ключ (сигнал
+  добавить экран в baseline).
+- **Дельта (измерена, 2.25):** **4 FLIP center→start** — 爱车昵称
+  «Прозвище машины», 车牌号 «Номерной знак» (обе из находки), 智能手表
+  «Умные часы», 钥匙管理 «Управление ключами» (та же семья; в baseline
+  уже render-start — data закрывает от регрессии); **3 CONFIRM start**
+  (车架号, 车载娱乐流量, 3D车模 — уже start, зафиксировано).
+  byte-match asset↔runtime key **7/7** (f32-exact `Math.round`; d2.25).
+- **Покрывает только известные экраны** (canonical baseline
+  pre_step4_96_7282). Новые экраны с пустыми id и без baseline —
+  fallback (эвристика + лог); это **не** закрыто сейчас — это
+  **T-36c** (пиксельный runtime-детектор, не раньше T-36b).
+- **Live-визуал 4 флипов — PENDING** (телефон оффлайн, No route to host);
+  оффлоун-критерии (171/171 self-diff + sweep PASS) закрыты.
+- **Не смешивать с итерациями №1/№2:** №3 = только гравитация (текст в
+  пилюле); №2 — ширина пилюли (W), ddy/stand — отдельная итерация (№4).
+- **Ship-кандидат изменён → v2.10.47 (code 99, md5
+  `8bc5bd7f06c6a8d7efae97a31ff8dba4`)**: это runtime-изменение (asset +
+  TranslationService), не tools-only, → поведение уже не «HEAD 89ce454»;
+  v2.10.46 (code 98) снят с кандидатуры (его PARTIAL live-A/B остаётся
+  базой общей геометрии — self-diff 171/171).
+
 ## v2.10.46 (2026-10-22) — T-35 dp-рефакторинг #0–#4: фундамент + 4 flip-класса
 Поведение на калибровочном устройстве (225dpi) **не изменено — доказано
 2.25-self-diff (171/171 узел: байт-идентичные Layout-выходы + trails) на

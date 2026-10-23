@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONException;
 
@@ -79,6 +80,18 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     // manager: those pills may be left-anchored unconditionally, which the
     // px-calibrated centering gates are not.
     private volatile Set<String> startLockedIds = new HashSet<String>();
+    // T-36a iter 3 (DESIGN.md, 10-23): per-node gravity facts for nodes whose
+    // resource-id is EMPTY (the id profile cannot reach them — boundary
+    // recorded there). Key = text + "|" + dp width x dp height (half-dp
+    // grid, d2.25), value = "start" | "center" = the APP's alignment fact
+    // (layout oracle + baseline), NOT the overlay's own rendered gravity.
+    // Built by loadEmptyIdAlign() before the first scan; null entries / a
+    // missing asset = the legacy length heuristic (the known limitation).
+    private volatile Map<String, String> emptyIdAlign = new HashMap<>();
+    // The EMPTY-ID-FALLBACK line is printed once per app session per key
+    // (never cleared — a 38-empty-id screen must not spam the logcat, and a
+    // repeatedly visited node must be logged once, not per scan).
+    private final Set<String> emptyFallbackLogged = new HashSet<String>();
     private boolean translationEnabled = true;
     private boolean trailingScanScheduled = false;
     private int scanEpoch = 0;
@@ -151,8 +164,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
         // Load the id map before the manager is built: the left-anchor lock
         // set, the per-id real font (decoupled sizing) and the step-4
-        // alignment classifier are layout inputs.
+        // alignment classifier are layout inputs; the empty-id gravity
+        // facts (T-36a iter 3) feed the spec builders at scan time.
         loadViewProfiles();
+        loadEmptyIdAlign();
         inlineManager = new InlineOverlayManager(this, startLockedIds,
             viewProfiles, alignClassifier);
 
@@ -304,6 +319,90 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             Log.e(TAG, "View profiles load failed (estimates stay active): "
                 + e.getMessage());
         }
+    }
+
+    // T-36a iter 3 (DESIGN.md «КОНТРАКТ Т-36a итерации №3», 10-23): the
+    // empty-id gravity facts. Separate asset from view_profiles.json because
+    // its key is NOT a resource-id (it is empty by definition) — it is
+    // "text|dpWxdpH", the node's text plus its density-normalized box, which
+    // is what uniquely identifies a no-id TextView at runtime. Flat map,
+    // "start" | "center" only; anything unparsable is dropped (a corrupt
+    // entry must never crash the boot and never mis-gravity a node).
+    private void loadEmptyIdAlign() {
+        try {
+            JSONObject obj = new JSONObject(readAll(
+                getAssets().open("empty_id_align.json")));
+            Map<String, String> align = new HashMap<>();
+            JSONArray names = obj.names();
+            if (names != null) {
+                for (int i = 0; i < names.length(); i++) {
+                    String k = names.getString(i);
+                    String v = obj.optString(k, null);
+                    // Only "text|dpWxdpH" keys with a definite align value;
+                    // comment/metadata keys (e.g. "_comment") are skipped.
+                    if (k == null || v == null || k.indexOf('|') < 0) continue;
+                    if (!v.equals("start") && !v.equals("center")) continue;
+                    align.put(k, v);
+                }
+            }
+            emptyIdAlign = align;
+            Log.i(TAG, "Empty-id align loaded: " + align.size() + " nodes");
+        } catch (Exception e) {
+            // Optional asset: without it every empty-id node keeps the
+            // legacy length heuristic (iter 3 boundary, not a failure).
+            Log.w(TAG, "Empty-id align load failed (heuristic stays active): "
+                + e.getMessage());
+        }
+    }
+
+    // Single centered-verdict (T-36a iter 3, DESIGN.md «КОНТРАКТ
+    // Т-36a итерации №3»): for EMPTY-id nodes the baseline data fact
+    // (empty_id_align.json) wins when present — the app's alignment, not the
+    // length guess; un-annotated empty-id nodes and ALL id-carried nodes keep
+    // the legacy length heuristic byte-for-byte (id-carried nodes never log,
+    // never build a key: their alignment is the id profile's domain, DESIGN
+    // «Граница id-профиля»). EMPTY-ID-FALLBACK is logged once per app
+    // session per key (a 38-empty-id screen must not spam the logcat; the
+    // line is the signal to add the screen to the baseline).
+    // sourceText = the node's CJK text (the data key — the annotation is
+    // keyed by the source, not the translation). displayText = what is
+    // actually rendered (RU when translated, else CJK) — the legacy length
+    // heuristic measures THIS, byte-for-byte as pre-iter-3.
+    boolean resolveCentered(android.graphics.Rect bounds, String viewId,
+            String sourceText, String displayText,
+            float estTextSizeSp, float density) {
+        if (sourceText == null) sourceText = "";
+        if (displayText == null) displayText = "";
+        boolean emptyId = viewId == null || viewId.length() == 0;
+        if (emptyId && bounds != null && bounds.width() > 0) {
+            // Key must byte-match the probe's exact_key(): sourceText + "|"
+            // + halfDp(w) + "x" + halfDp(h) (the runtime's own density-
+            // normalized box). A miss (text changed, box rescaled) is a
+            // clean fall-through to the heuristic below.
+            String key = sourceText + "|" + halfDp(bounds.width() / density)
+                + "x" + halfDp(bounds.height() / density);
+            String fact = emptyIdAlign.get(key);
+            if (fact != null) return fact.equals("center");
+            if (!emptyFallbackLogged.contains(key)) {
+                emptyFallbackLogged.add(key);
+                Log.i(TAG, "EMPTY-ID-FALLBACK: " + key);
+            }
+        }
+        // Legacy length heuristic (pre-iter-3 shape, unchanged for every
+        // id-carried node and every node the data does not annotate).
+        return bounds != null && bounds.width() > 0
+            && bounds.height() < 96 * density
+            && displayText.length() * estTextSizeSp * density * 0.5f
+                <= bounds.width() * 0.85f
+            && !displayText.contains("\n");
+    }
+
+    // half-dp (half-unit) on the 2.25 calibration grid, Java-number formatted
+    // (320 not 320.0) so the key byte-matches tools/_annotate_emptyid_align.py.
+    private static String halfDp(float pxOverDensity) {
+        double v = Math.round(pxOverDensity * 2) / 2.0;
+        if (v == Math.floor(v)) return String.valueOf((long) v);
+        return String.valueOf(v);
     }
 
     private Map<String, String> loadDictFromAssets(String filename) throws IOException {
@@ -606,12 +705,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             TextNodeInfo node = chineseNodes.get(i);
             String display = hits[i] != null ? hits[i] : node.text;
 
-            String displayNoBr = display != null ? display : "";
-            boolean centered = node.bounds.width() > 0
-                && node.bounds.height() < 96 * density
-                && displayNoBr.length() * node.estimatedTextSize * density * 0.5f
-                    <= node.bounds.width() * 0.85f
-                && !displayNoBr.contains("\n");
+            // T-36a iter 3: empty-id nodes consult the baseline align data;
+            // id-carried nodes and un-annotated nodes keep the legacy
+            // length heuristic (DESIGN «Граница id-профиля»).
+            boolean centered = resolveCentered(node.bounds, node.viewId,
+                node.text, display, node.estimatedTextSize, density);
 
             specs.add(new InlineOverlayManager.OverlaySpec(
                 node.bounds.left + "," + node.bounds.top,
@@ -947,11 +1045,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     float density = getResources().getDisplayMetrics().density;
                     for (TextNodeInfo n : done) {
                         if (n.translated != null) {
-                            boolean centered = n.bounds.width() > 0
-                                && n.bounds.height() < 96 * density
-                                && n.translated.length() * n.estimatedTextSize * density * 0.5f
-                                    <= n.bounds.width() * 0.85f
-                                && !n.translated.contains("\n");
+                            // T-36a iter 3: same resolveCentered as the scan
+                            // path (DESIGN «КОНТРАКТ Т-36a итерации №3»).
+                            boolean centered = resolveCentered(n.bounds,
+                                n.viewId, n.text, n.translated,
+                                n.estimatedTextSize, density);
                             inlineManager.showTranslation(
                                 n.bounds.left, n.bounds.top,
                                 n.bounds.width(), n.bounds.height(),

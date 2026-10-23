@@ -1,0 +1,10 @@
+{
+  "_comment": "T-36a iter 3 (DESIGN.md, 10-23): per-node gravity facts for EMPTY-resource-id a11y nodes. Key = text|dpbox (dp on the half-dp grid, d2.25; id is empty by definition — the dpbox disambiguates duplicate texts). Value = the APP's gravity, from the decompiled layout (/tmp/deepal_res_dec, res/layout/activity_my_car_setting.xml: these labels are TextViews with NO horizontal gravity attr = app START; the probe's rendered CENTER on 爱车昵称/车牌号 is the overlay's own length-heuristic bug, so the app fact is START). Nodes NOT listed keep the length heuristic (logged EMPTY-ID-FALLBACK). Exact keys = tools/_annotate_emptyid_align.py output, byte-for-byte.",
+  "3D车模|58.5x26.5": "start",
+  "智能手表|320x26.5": "start",
+  "爱车昵称|247x26.5": "start",
+  "车架号|126.5x26.5": "start",
+  "车牌号|265.5x26.5": "start",
+  "车载娱乐流量|243.5x26.5": "start",
+  "钥匙管理|320x26.5": "start"
+}

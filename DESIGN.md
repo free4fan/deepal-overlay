@@ -576,7 +576,7 @@ tall×1 → T-36b fit-hysteresis + pin), не «дожимаются» в #2 (м
 tv_title, my_tab txt_time, service_acc «Зарядка») + **EDGE×2**
 (dialog_keyless tv_content, shop tvNotShowTipDes) + **W+MIX×1**
 (service_acc «Частые услуги») — механизмы записаны в
-`tools/golden/sweep_report_v96.json` (mirror_cls) как данные для №3+/T-36b.
+`tools/golden/sweep_report_v96.json` (mirror_cls) как данные для №4+/T-36b.
 
 Откат (без «дожмём»): clean < 141 ИЛИ unknown > 0 ИЛИ port? > 0
 ИЛИ 13 узлов НЕ стали verified known-bounded (остались boundary
@@ -757,13 +757,70 @@ loadViewProfiles — null-safe, 1 helper, 2 call sites, лог fallback);
 ревью-телефона — до ship v2.10.46.
 
 **Не смешивать:** №3 = только гравитация. Ширина (№2 W) и позиция (ddy)
-— другие формы/коммиты/sweep'ы. Старый «№3» из итогов №2 (stand×2
-«№3 per-node stand-cap data», ddy×3, EDGE×2, tall×1) — **после ship →
-iter №4**; все ссылки на «№3» в §ИТОГ №2 читать как №4. T-36b
-(fit-hysteresis) — своя очередь, до ship. T-36c (пиксельный
-runtime-детектор гравитации для НОВЫХ экранов без baseline) — не сейчас;
-после T-36b, если появится новый empty-id экран без разметки (data-путь
-№3 его не покрывает — по определению «известные экраны»).
+— другие формы/коммиты/sweep'ы. Старый «№3» из итогов №2 (ddy×3 +
+stand×2 «per-node stand-cap data») — **после ship → iter №4**; старый
+«№4» (EDGE×2) — **iter №5** (своя форма); tall×1 — T-36b; все ссылки
+на «№3»/«№4» в §ИТОГ №2 читать как №4/№5. T-36b (fit-hysteresis) —
+своя очередь, до ship. T-36c (пиксельный runtime-детектор гравитации
+для НОВЫХ экранов без baseline) — не сейчас; после T-36b, если
+появится новый empty-id экран без разметки (data-путь №3 по определению
+покрывает только известные экраны).
+
+### ИТОГ Т-36a итерации №3 — empty-id align, **PASS** (10-24)
+
+Форма, реализованная: данные + один helper, без единой правки
+`computeLayout` (контракт выполнен дословно). `empty_id_align.json`
+(7 нод, `text|halfDpxhalfDp → start`) + `resolveCentered()` в
+TranslationService (2 call sites: scan :708 и batch-completion :1050;
+id-несущие узлы и не-помеченные проходят **по байту старую**
+length-эвристику — helper не меняет их результат математически:
+та же формула, тот же display-текст, те же bounds). Ключ = **CJK-текст
+source** (ассет по источнику, не переводу) + dp-бокс на half-dp сетке;
+byte-match ключей asset↔runtime **7/7** (f32-точные `Math.round`,
+проверено скриптом; `.5`-случаев нет по модулям: `8px/9 ∉ {k+0.5}`).
+
+Data-факты (проб `tools/_annotate_emptyid_align.py`, 38 empty-id нод
+canonical baseline; cross-check — layout-оракл /tmp/deepal_res_dec):
+- **4 FLIP center→start** (поведение меняется): 爱车昵称 «Прозвище
+  машины», 车牌号 «Номерной знак» (обе — из находки пользователя,
+  пиксели baseline 96/97 и 153/155 px по бокам), 智能手表 «Умные часы»,
+  钥匙管理 «Управление ключами» (та же семья; в baseline уже render-
+  start — data закрывает их от регрессии при новой RU-длинe).
+- **3 CONFIRM start** (поведение не меняется): 车架号, 车载娱乐流量,
+  3D车模 — в baseline уже start; data = фиксация факта.
+- Ложность layout-истины против render-правды зафиксирована: для
+  爱车昵称/车牌号 baseline render = CENTER (это баг-центр, его и чиним),
+  а приложение-факт = START (в source layout нет горизонтальной
+  gravity — TextView-молчание = start; `center_vertical` у строк —
+  только по вертикали).
+- Прочность оракула: 5/7 — `activity_my_new_car_setting.xml`
+  (канонический screen) `none-default-left`; 智能手表 — там же; 钥匙管理
+  — динамический (нет в strings.xml), 3D车模 — оракул в
+  `activity_about.xml` + baseline render start (slab, left +12px).
+
+Критерии (измерено):
+1. **self-diff vs snap_iter2_225.json: 171/171 инвариантны**
+   (gravity-only — ни один piлюль-прямоугольник не тронут);
+2. **sweep (pre-frame-1): 157 clean / 0 unknown / 5 known-bounded / 9
+   mirror — PASS, exit=0** (список 13 узлов тот же: stand×2 + tall×1 +
+   ddy×3 + EDGE×2 + W+MIX×1 — ни один не gravitation-зависим);
+3. live-визуал (4 флипа u START) — **PENDING, телефон оффлайн**
+   (оффлоун его в принципе не проверит: гравитация видна только
+   рендером);
+4. EMPTY-ID-FALLBACK-лог — записан (1 раз на сессию на ключ, не на
+   скан — исправление в процессе: 38-нодовый screen спамил бы logcat),
+   проверка при live-прогоне.
+
+APK: runtime-изменение → **новый ship-кандидат v2.10.47 (code 99,
+md5 `8bc5bd7f06c6a8d7efae97a31ff8dba4`)** — не 98/v2.10.46 (тот
+зафиксирован как «поведение HEAD 89ce454»). build PASS, ассет
+`assets/empty_id_align.json` в APK (938B). A/B ship v2.10.47 = тот же
+PARTIAL-каркас, что у 98 (4 экрана, 68 pills, `--frame1`) + теперь и
+4 gravity-флипa в поле зрения — когда вернётся телефон; оффлоун-гейт
+(критерии 1-2) уже закрыт в этом билде.
+
+По откату: не сработал (ни критерий не нарушен). Форма №3 одобрена
+оффлоуном; живая часть — под живой A/B.
 
 ### ИНВАРИАНТ self-diff для Т-36a (записать ДО №1, 10-22)
 
