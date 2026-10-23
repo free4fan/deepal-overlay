@@ -584,6 +584,55 @@ tv_title, my_tab txt_time, service_acc «Зарядка») + **EDGE×2**
 отклонена (новый контракт-блок), следующее расширение —
 другая форма.
 
+### Live A/B ship-кандидата v2.10.46 (code 98) — PARTIAL, 10-23 (до ship — запись состояния)
+
+**Ship = X: APK code 98 / v2.10.46 (md5 `8d069602c2ba0dbdd2810fbd2fcb797c`,
+`app/build/outputs/apk/debug/app-debug.apk`) = поведение HEAD
+`89ce454` (T-36a = tools-only; модель №1+№2: 157 clean / 5 known / 9
+mirror, оффлоун-свейп PASS exit=0). Телефон: Pixel 9 Pro (caiman),
+**та же геометрия, что калибровка** (960×2142 @ 360dpi = d 2.25).
+Установлено на устройство: код 98, md5 base.apk = md5 кандидата
+(байт-в-байт, проверено `adb pull` + md5sum 10-23). Не «установить»,
+а live A/B: модель против аппарата.
+
+Запущено через `am start -n deepal.com.cn.app/.SplashActivity`, логи
+собраны (тег `DeepalTranslate`): сервис healthy (profiles 1940 ids /
+start-locks 6626 / dict 5095 / cache RU 792), **0 crash/exception**,
+overlay-окна — штатные WM-предупреждения click-through (alpha 0.80,
+FLAG_NOT_TOUCHABLE) — не ошибка.
+
+Live-свейп 4 достижимых экранов (68 pills: service_deepal_grid 14,
+my_tab 32, shop 8, mashina-вкладка 14), **оба режима frame**:
+- `--frame1` (режим ship-билда v2.10.45+): **66/68 verified, 64 clean,
+  0 port?, 2 unknown**: (1) service_deepal_grid «Моб. интернет»
+  Δ=17.78dp ddx @1.50 — узел бритвенного fit-теста (= T-36b candidate,
+  offline там же known-bounded 5.78dp h @1.5 в frame1=False — одна
+  семья, после ship); (2) my_tab txt_content dev h−21 — live-текст
+  уведомления **другой**, чем в baseline («Вы единственный, кто…», не
+  «Вы получите 2 очка…») — precision floor на новом тексте, не
+  регрессия. shop tvNotShowTipDes dev h−32 — **идентичен offline**
+  (та же model-boundary, воспроизведена на аппарате).
+- без `--frame1` (режим оффлоун-гейта, pre-frame-1): 56/68, у 5
+  service-пилюль «port?» x-shift = frame-1 смещение позиций, а не
+  порт-дефект (live-билд — frame-1 ON). Вывод: live A/B только
+  `--frame1`; оффлоун-гейт — только pre-frame-1-билды/дампы (rule
+  против смешивания режимов — записано).
+- Визуал (screenshot, глазами): **service-grid ✓, my_tab ✓** —
+  RU-оверлеи на месте, пилюли читаемы, нет сбитых позиций.
+
+**Блокируется состоянием машины, не кодом (10-23):** машина в ОТПУСК /
+без телеметрии — вкладка Машина НЕ рендерит карточку авто
+(`tv_main_name`/`tv1×4`/`tvAirTile`/`tvDes` отсутствуют; trip-карта
+показывает «— — km»): недоступны screens **Машина-top** (карточный
+набор), **trip_info**, **dialog_keyless/cancel/ok** (5 обязательных
+визуалов: есть 2+explore-контент, нет 3). Кнопка «колокол» в live-бандле
+ведёт на общий «Настройки», не список уведомлений (не форсить).
+
+**Вердикт A/B: PARTIAL — не снимает ship-блока** (контракт: 171/171 +
+5 визуалов). Для полного A/B: машина online → Машина-top + trip_info +
+диалоги → 2.25 sweep `--frame1` по полному набору 11 экранов →
+визуалы. До того ship на усмотрение пользователя на PARTIAL-основании.
+
 ### ИНВАРИАНТ self-diff для Т-36a (записать ДО №1, 10-22)
 
 После модельной правки mirror 2.25 self-diff сравнивается **между**

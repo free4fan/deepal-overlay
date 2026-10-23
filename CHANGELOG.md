@@ -116,6 +116,19 @@ sweep + self-diff, Java `computeLayout` при этом НЕ трогается)
   + tall×1 (pin-пригодный, но fit-stage mirror уменьшает fs 42→32.67 — T-36b).
   Состояние после №2: 157 clean / 0 unknown / 5 known-bounded / 9
   mirror. Дальше: №3 ddy-anchor×3 + stand×2, №4 EDGE×2, tall×1 → T-36b.
+- **Live A/B ship-кандидата v2.10.46 (10-23, PARTIAL — ship-блок НЕ
+  снят):** телефон online (Pixel 9 Pro, та же 960×2142@360dpi), md5
+  установленного base.apk = md5 кандидата (байт-в-байт). App запущен
+  самим агентом, логи собраны (тег DeepalTranslate: profiles 1940 /
+  dict 5095, 0 crash). 4 достижимых экрана (68 pills) в режиме
+  `--frame1` (режим ship-билда): **66/68 verified, 64 clean, 0 port?,
+  2 unknown** — «Моб. интернет» (ddx@1.5, T-36b-семья бритвенного
+  fit-теста) и my_tab notification (live-текст другой, precision
+  floor). Визуал service-grid + my-tab ✓. Полное A/B (171/171 +
+  визуалы 5 экранов) блокировано не кодом, а состоянием машины
+  (ОТПУСК, нет телеметрии: вкладка Машина не рендерит карточку авто
+  → нет Машина-top/trip_info/dialog-keyless). Record: DESIGN
+  «Live A/B ship-кандидата v2.10.46».
 
 ## Инфраструктура (2026-10-22) — density sweep + план dp-рефакторинга
 поведение приложения **не изменено** (инфраструктура + документы).
