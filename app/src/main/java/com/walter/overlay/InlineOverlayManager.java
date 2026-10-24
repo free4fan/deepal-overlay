@@ -881,7 +881,31 @@ public class InlineOverlayManager {
                 // Loose label row: hug the source extent, never the row box.
                 nodeArea = Math.min(nodeArea, (int) (est * 1.35f) + padH);
             }
-            width = Math.max(nodeArea, textArea) + padH * 2;
+            // T-37 (10-24): fit-to-text width for the single-line pills
+            // where the NODE-CONTAINER decides the width (label-TextView
+            // weight=1 fills the row: «Прозвище» node 556px vs text 357px
+            // — 161px of empty right side, user TЗ «ровно под текст»).
+            // Cap the width to max(text, est) + 2·padH: text when the
+            // translation is wider, the CJK source est when the original
+            // is (23/171 nodes) — the original stays covered. Guards:
+            // single-line (this branch only), !stadium (gate-F buttons:
+            // the node IS the drawn stadium pill, pill==button by
+            // semantics — stadium mirrors the (F) predicate's
+            // width-independent part 1:1; on the (F) node itself the
+            // interior-fit forces textArea >= nodeArea, so nodeWon is
+            // false there too — no reorder, no double-branch).
+            boolean nodeWon = nodeArea >= textArea;
+            int t37fXInset = Math.round(GATE_F_X_INSET_DP * dm.density);
+            int t37fHMin = Math.round(GATE_F_H_MIN_DP * dm.density);
+            int t37fHMax = Math.round(GATE_F_H_MAX_DP * dm.density);
+            boolean t37Stadium = (est > 0 && x > t37fXInset
+                    && spec.width > screenWidth * 0.28f
+                    && spec.width < screenWidth * 0.65f
+                    && spec.height >= t37fHMin && spec.height <= t37fHMax);
+            width = nodeWon && !t37Stadium
+                    ? Math.min(Math.max(nodeArea, textArea) + padH * 2,
+                               Math.max(textArea, est) + padH * 2)
+                    : Math.max(nodeArea, textArea) + padH * 2;
         }
         int height;
         if (multiline) {

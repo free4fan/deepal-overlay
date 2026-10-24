@@ -528,7 +528,36 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
             node_area = min(node_area, ic(jf(est * 2.2)))
         elif loose:
             node_area = min(node_area, ic(jf(est * 1.35)) + padh)
-        width = max(node_area, text_area) + padh * 2
+        # T-37: fit-to-text width for single-line pills (10-24, user
+        # TЗ: «оверлей ровно под русский текст»). The node-container cap
+        # wins when the node itself decides the width (label-TextViews
+        # with weight=1 fill the row: Прозвище 556px node vs 357px text,
+        # 161px of empty right side). Cap the width down to the text,
+        # floored at the CJK source est so the original stays covered
+        # (23/171 nodes have CJK wider than the RU text). Guards:
+        # !multiline (same branch), !stadium (gate-F button: the node IS
+        # the drawn pill, the pill == button by semantics — the predicate
+        # below mirrors the (F) block's width-independent part EXACTLY;
+        # for the (F) node itself text_area >= s.w holds (target =
+        # interior - 1px), so nodeWon is False and the cap is a no-op
+        # there as well — double protection, zero reorder). nodeWon is
+        # measured on the area that actually loses the max — for
+        # text-wins nodes the cap is min(width, width>=…) = no-op.
+        node_won = node_area >= text_area
+        f_x = rp(GATE_F_X_INSET_DP, d)
+        f_hmin = rp(GATE_F_H_MIN_DP, d)
+        f_hmax = rp(GATE_F_H_MAX_DP, d)
+        stadium = (est > 0 and x > f_x
+                   and s.w > jf(sw * 0.28) and s.w < jf(sw * 0.65)
+                   and f_hmin <= s.h <= f_hmax)
+        log("t37", (node_won, stadium), 0,
+            "nw=%d ta=%d est=%d" % (node_area, text_area, est))
+        if node_won and not stadium:
+            width = min(
+                max(node_area, text_area) + padh * 2,
+                max(text_area, ic(jf(est))) + padh * 2)
+        else:
+            width = max(node_area, text_area) + padh * 2
 
     # ---------------- pill height -----------------------------------------
     if multiline:

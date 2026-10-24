@@ -196,6 +196,28 @@ dark_overlay=off).
     отдельный контракт (инвариант + 0 flips на 2.25) + свой коммит + sweep +
     self-diff; после — A/B live, node остаётся в KNOWN_LIMITS до live-
     подтверждения (стale-детектор подскажет, когда снять).
+ - **Т-37. Fit-to-text width (10-24/25) — оффлайн PASS, live A/B ждёт телефон.**
+   ТЗ пользователя (на живом телефоне после №3): «все оверлеи должны быть
+   размером ровно столько, чтобы поместился текст перевода» (ширина
+   settings-car строки = узел-контейнер weight=1, тёмная плашка >> текста).
+   Контракт ДО правок: DESIGN.md «Т-37. Fit-to-text width — ТЗ + КОНТРАКТ»
+   (commit `37b0b81`). Форма: один cap в width-уравнении `computeLayout`
+   (nodeWon && !stadium → min(width, max(textArea, est) + 2·padH)) + 1:1 в
+   mirror; новых px-констант нет (stadium = width-независимая часть
+   предиката gate-F). Гейты: **self-diff 2.25: 42/171 изменено, 129
+   byte-идентичны, 0 увеличений** (42 = 12 ∩ probe-37 [cap применим] + 18
+   probe-37 no-op [runtime textArea≥nodeArea — guard работает] + 30 вне
+   probe-37 [пиксель-скан не видел белую полосу]; все nodeWon=True/
+   stadium=False, new = max(textArea,est)+2·padH; 1 band-flip: Умные часы
+   ddx 0→−32, покрыто offline); **sweep exit=0, 0 unknown** (157/5/9 →
+   127 clean/4 known/40 mirror; known-limit trip_info «Deepal был с тобой»
+   разрешён формой → STALE-LIMIT 5→4; 37-эксклюжн не потребовался — узлы
+   легли в честный model-boundary-approx классификатор); **build
+   v2.10.48/code 100, md5 91e3b8ede31402a0ff358a4c84ff39da** (aapt2:
+   100/2.10.48 ✓, empty_id_align.json в assets). Live A/B (гейт 3):
+   settings_car + explore + service_acc + mashina 4-кнопки + my_tab плитки,
+   171/171 --frame1 + 8 CJK-floor узлов — БЛОКИРОВАН (телефон offline).
+   Записи: DESIGN «Т-37 ТЗ+КОНТРАКТ» + «ИТОГ T-37»; CHANGELOG v2.10.48.
 - Т-26. Retune px-гейтов под вторую плотность (шаг 3). **ОТМЕНЁН (10-22):**
   второй телефон не нужен — `tools/density_sweep.py` синтезирует 8 плотностей
   из одного дампа (решение пользователя: расчёт, не снапшоты). Замена = Т-35.
