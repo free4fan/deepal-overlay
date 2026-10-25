@@ -993,6 +993,70 @@ mashina (4-кнопки) + my_tab (плитки) → pixel-метрики left-p
 Дальний маршрут, Запись на ТО, explore-табы): CJK не торчит.
 Ship-решение — после гейта 3.
 
+### Т-38. Profile-center data fix — «Центр сообщений» (10-25, НАЙДЕНО ПОЛЬЗОВАТЕЛЕМ, ДО правок)
+
+**Претензия (live, 10-25):** на my_tab пилюля «Центр сообщений» висит в
+середине узла [92..802], а приложение рисует 消息中心 **влево**
+(пиксели 95..230) — т.е. пилюля НЕ над текстом.
+
+**Корень (данные, не T-37):**
+1. Приложение: CJK влево (live98-скрин и baseline: 95..230; layout-
+   оракул `layout_cell_title_nav.xml`: `txt_title` — `0dp`-узел **без
+   gravity** = start; якорь `left→parent`).
+2. Оверлей центрирует по **id-профилю**: `view_profiles.json` →
+   `txt_title: [null, {"g": "center"}]` (введён шагом 3, 10-18);
+   frame-1 fall-through (IOM:1221-1227, КАДР (1)) применяет
+   PROFILE_CENTER → `path=profile`, clamp-center на узле. T-37 к
+   позиции не при чём (только сузил 331→279).
+3. **Ошибка шага 3** (`tools/decompile_ids.py:159`): «ANY layout with
+   an explicit horizontal center => g:center for the id», absence of
+   gravity = no vote. `txt_title` — MIXED: 3 explicit-center /
+   7 no-gravity (и layout нашего экрана в их числе) → должен был
+   остаться в `mx:1`-классе (правило шага 3 для mixed: `g` НЕ
+   заявлять).
+4. Aудит 600 PROFILE_CENTER id x 11 baseline (89 инстансов):
+   57 CENTER-видимых все center-правильные; **отравленных видно в
+   baseline ровно 2**: `txt_title` (my_tab, ddx-от-узла −284px) и
+   `titleTv` (notifications-заголовок [0..960], −300px; держится пока
+   гейтом (C2)-54px-inset, т.к. node w=960 — до profile-фоллтра не
+   доходит; при будущих (C2)-релизах проявится).
+5. `titleTv` — тоже mixed (6 center / 3 no-gravity, и `dub_layout_
+   title_bar_v1` 0dp без gravity среди no-gravity).
+
+**Форма (контракт, жёстко): ДАННЫЕ, ноль кода, ноль новых px.**
+В `view_profiles.json`: запись `txt_title: [null, {"g": "center"}]` →
+`[null, {"mx": 1}]` (формат `mx:1` — как tv_title/tv_content: mixed,
+geometries-фоллбек, profile-center НЕ применяется). **Ни одно другое
+поле, ни один id, ни одна строка Java/mirror не трогаются.**
+`titleTv`: данные НЕ трогать (по per-node-правилу: в baseline он
+держится (C2), нет наблюдаемого дефекта → не расширяем скоуп
+«на всякий случай»); зафиксирован как загрязнённый id, watch при
+(C2)-релизах/новых экранах.
+Последствие для рантайма: узел `txt_title` больше не попадает в
+frame-1 fall-through (align != PROFILE_CENTER) → ddx остаётся 0 →
+пилюля у л-края узла над CJK (как в билде 96, только T-37-ширина).
+Остальные 56 CENTER-инстансов и все 598 id — byte-идентичны.
+
+**Гейты:**
+1. **frame-1 mirror self-check (live-режим, d2.25, frame1=True):**
+   ровно 1 узел меняет позицию — my_tab `txt_title` (ddx 307→0,
+   ширина 279, CJK 95..230 под ней 92..371 ✓); остальные 88 инстансов
+   PROFILE_CENTER (57 center + 30 novis + titleTv-960) byte-идентичны.
+2. **offline self-diff (pre-frame-1, snap vs snap): 171/171** —
+   профиль в pre-frame-1-режиме не читается (кадр (1) отключён),
+   фикс не может сдвинуть оффлоун-геометрию — доказательство, что
+   правка = только live-позиция.
+3. **sweep pre-frame-1: exit=0, 0 unknown** (инвариантен; 127/4/40).
+4. **build:** v2.10.49 / code 101; ship-кандидат (100/100 остаётся
+   предварительным, если пользователь не подтвердит 101 отдельно).
+5. **live A/B (телефон):** my_tab → «Центр сообщений» у л-края
+   (x≈92), CJK под пилюлей; 56 других center-пилюль (нав-табы,
+   grid-метки my_tab, кнопки) визуально неизменены; notifications-
+   header «车辆»/«Автомобиль» — без изменений ((C2) держит).
+
+Откат: `git checkout` view_profiles.json + «форма отклонена».
+Не смешивать: T-37 (width) / T-38 (profile data) — разные коммиты.
+
 ## Статус и история
 
 Статус: **кадр (1) шага 4 в live-верификации** (v2.10.45); ниже — история
