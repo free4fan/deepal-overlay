@@ -218,6 +218,25 @@ dark_overlay=off).
    settings_car + explore + service_acc + mashina 4-кнопки + my_tab плитки,
    171/171 --frame1 + 8 CJK-floor узлов — БЛОКИРОВАН (телефон offline).
    Записи: DESIGN «Т-37 ТЗ+КОНТРАКТ» + «ИТОГ T-37»; CHANGELOG v2.10.48.
+ - **Т-38. Profile-center data fix — «Центр сообщений» (10-25) — оффлайн
+   PASS, live A/B ждёт телефон.** ТЗ (live): my_tab «Центр сообщений»
+   нависает в центре узла, а приложение рисует 消息中心 влево (95..230)
+   → пилюля не над текстом. Корень (не T-37): шаг 3 ошибочно классифиц.
+   mixed-id `txt_title` как g:center (decompile_ids.py:159 — ANY
+   explicit center ⇒ g:center; absence of gravity не голос; mixed-
+   правило шага 3 предписывало НЕ заявлять g). Форма: **одно json-
+   поле** view_profiles — txt_title {g:center}→{mx:1} (1 строка, ноль
+   кода/px; titleTv — тоже mixed-отравлен (6/3 layouts) но удерживается
+   (C2)-инсет (node w=960) → данные не трогаем, watch). Гейты:
+   **frame-1 mirror: ровно 1/171 узел** (my_tab txt_title x 307→92,
+   path profile→none, CJK 95..230 покрыт; остальные byte-id) +
+   **self-diff pre-frame-1 171/171** (pre-frame-1 профиль не читает) +
+   **sweep exit=0, 0 unknown** (инвариантен) + **build v2.10.49/101,
+   md5 4c95a148ce456801bb32a2ac4cbeb6cd** (asset в APK ✓). Оффлайн:
+   my_tab pill x≈92. Live A/B (гейт 5): my_tab + header уведомлений —
+   БЛОКИРОВАН (телефон offline). Перезапись профилей (T-38b) — отдельный
+   контракт. Записи: DESIGN «Т-38 ТЗ+КОНТРАКТ» + «ИТОГ T-38»;
+   CHANGELOG v2.10.49.
 - Т-26. Retune px-гейтов под вторую плотность (шаг 3). **ОТМЕНЁН (10-22):**
   второй телефон не нужен — `tools/density_sweep.py` синтезирует 8 плотностей
   из одного дампа (решение пользователя: расчёт, не снапшоты). Замена = Т-35.

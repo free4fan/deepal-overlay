@@ -1,5 +1,43 @@
 # Changelog
 
+## v2.10.49 (10-25) — T-38: профиль-фикс «Центр сообщений» (txt_title {g:center}→{mx:1})
+Правка **данных, ноль кода**: в `view_profiles.json` запись
+`txt_title: [null, {"g": "center"}] → [null, {"mx": 1}]` (ONE строка).
+ТЗ (live, 10-25): на my_tab пилюля «Центр сообщений» висит в СЕРЕДИНЕ
+узла, а приложение рисует 消息中心 **влево** (пиксели 95..230) —
+тёмная плашка не над текстом.
+- **Корень (не T-37):** id-профиль `g:center` + frame-1 fall-through
+  (IOM:1221, КАДР (1)) центрировали пилюлю по узлу [92..802].
+  Профиль был обучен шагом 3 (10-18): правило `decompile_ids.py:159`
+  «любой layout с явным center ⇒ id g:center; absence of gravity = no
+  vote» — а `txt_title` **mixed** (3 center / 7 no-gravity layouts,
+  и layout нашего экрана `layout_cell_title_nav.xml` (0dp, без
+  gravity = start/left) в последних). По собственному mixed-правилу
+  шага 3 `g` заявлять **не следовало**.
+- **Скоуп:** аудит 600 PROFILE_CENTER id x 11 baseline (89
+  инстансов) — 57 CENTER-видимых все center-правильные; видимых
+  отравлений ровно 2: `txt_title` (my_tab) — **фикс**; `titleTv`
+  (notifications header, node w=960) — **данные не трогаем**: его узел
+  до profile-фоллтра не доходит ((C2)-гейт, 54px inset), пока —
+  загрязнённый mixed id, watch (T-38b-кандидат: перезапись
+  профили-конструктора по смешанным id + layout-зависимая гравитация).
+- **Гейты:** frame-1 mirror — ровно 1/171 узел меняет позицию
+  (my_tab `txt_title` x 307→92, path profile→none, w 279/h 72 —
+  CJK 95..230 покрыт; остальные 170 byte-идентичны); offline
+  self-diff 2.25 **171/171** (pre-frame-1 режим не читает профиль);
+  sweep pre-frame-1 **exit=0, 0 unknown** (127/4/40, инвариантен);
+  build ✓.
+- **Build:** v2.10.49 / code 101, md5
+  `4c95a148ce456801bb32a2ac4cbeb6cd` (aapt2: 101/2.10.49 ✓, asset
+  с фиксом в APK ✓).
+- **Live A/B (гейт 5) — БЛОКИРОВАН (телефон offline):** my_tab →
+  «Центр сообщений» у левого края (x≈92), ост. 56 center-пилюлей
+  визуально без изм.; header уведомлений — без изм. ((C2) держит).
+  **Ship-кандидат = v2.10.49 (code 101)** (subsumes: T-37 + T-38);
+  100 остаётся предыдущим до инсталла 101. Откат: git checkout
+  view_profiles.json.
+
+
 ## v2.10.48 (10-24/25) — T-37: fit-to-text width — пилюля = ровно max(RU, CJK) + padding
 Правка **ширины** одиночных (single-line) пилюль, где ширина решалась
 узлом-контейнером (label-TextView `weight=1` занимает всю строку — тёмная
