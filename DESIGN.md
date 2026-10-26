@@ -1292,9 +1292,9 @@ TranslationService:171) — условие «вызван из svc-окна» и
 1. **Отложенный self-diff (pre-frame-1): 171/171** — тип окна вне
    geometric-chain (доказательство: pills frames инвариантны).
 2. **Sweep pre-frame-1: exit=0, 0 unknown** (инвариантен).
-3. **Build 107 / 2.10.54** (105/106 — отклонённые формы №1), установка +
-   рестарт сервиса + rebind a11y (механика install-сброс, DESIGN ИТОГ
-   T-39).
+3. **Build 107 / 2.10.55** (105/106 — отклонённые формы №1; 2.10.54 занят
+   106), md5 `5c2a30f647ff886c7c41015c2307554c`; установка + рестарт
+   сервиса + rebind a11y (механика install-сброс, DESIGN ИТОГ T-39).
 4. **Live-гейт (решающий, ДО pixel): dumpsys window** — walter-окна:
    mAttrs alpha=1.0 (default) + `ty=ACCESSIBILITY_OVERLAY`;
    `mShownAlpha=1.0`. Фоллбек (IOException → APPLICATION_OVERLAY)
