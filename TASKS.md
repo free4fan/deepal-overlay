@@ -1095,5 +1095,19 @@ dark_overlay=off).
 - Статус: **сделан** (v2.10.29).
 
 ## В ожидании (дополняется по мере рекомендаций)
-- **T-39b гейт 6 (regression byte-by-byte on машина/мой/сервис):** Phone 192.168.4.124 went into doze after gate 5 ("No route to host"). Reinstall 110 + re-bind + recapture 3 screens (script is ready, T-39b_* pills is in /tmp/opencode/t40/). Gated 1/2/4/5 is green (build 110/2.10.58, md5 b4ae0460…).
-- **T-42 live gate 3/4:** data was committed (build 111/2.10.59, md5 b3ed7b8c…; offline 171/171 + sweep PASS). Waiting on phone to install: share-car CTA = "Add user (0/5)" center-aligned (|center−480| ≥ 2px), CJK on the left is 0, other pills on the page are byte-by-byte + machine grid is byte-by-byte.
+- **Живые гейты — один объединённый live-прогон (билд 112/2.10.60, md5
+  `3d2e3bc5…`), при подключении телефона** (10-27: туннель
+  127.0.0.1:43721 оборван, IP 192.168.4.124 mёртв — требуется новая
+  сессия подключения, `adb devices` пуст):
+  - **T-43 live (решающий):** share-car в СКРОЛЛЕННОМ состоянии —
+    ровно одна title-пилюля (маленький узел [388,153,572,266]) без
+    дубля; `TITLE-DEDUP` в logcat.
+  - **T-43 гейт 4 / T-42 гейт 4 / T-39b гейт 6 (один прогон):**
+    expanded-state share-car byte-в-byte, Машина/Мой/Сервис/климат
+    byte-в-byte с 110; settings_car (единственная collapser-пара в
+    baseline, oy=0 касание) — обе пилюли на месте.
+- **Уже закрыто оффлайн:** T-39b гейты 1/2/4/5 (билд 110), T-42 гейт 3
+  (расширенное состояние, снято до обрыва: CTA centered center_x=480,
+  перевод «Добавить пользователя (0/5)» на месте, title/История
+  byte-в-byte), T-43 оффлайн 0-дельта (self-diff 171/171 + sweep PASS;
+  зонд baseline: 0 строгих пересечений у пар с одинаковым текстом).
