@@ -253,6 +253,16 @@ dark_overlay=off).
    Корневая причина опровергнута: resolveCentered → spec.centered →
    gravity текста ВНУТРИ окна, НЕ ddx. Откат: git checkout + 104→103
    (md5 f6b201d4… = тот же APK).
+ - **Т-40. Opaque-пилюли: TYPE_ACCESSIBILITY_OVERLAY (10-26) — ЗАКРЫТО,
+   live-подтверждено (v2.10.55/107).** Корень: AOSP-кап alpha 0.8 для
+   SAW+FLAG_NOT_TOUCHABLE (не переопределяется через LayoutParams.alpha —
+   live-опровергнуто формами 105/106). Форма: тип окна →
+   TYPE_ACCESSIBILITY_OVERLAY (trusted, кап не применяется) + one-shot
+   fallback на BadTokenException. Gates: 171/171 self-diff, sweep exit=0,
+   live 3 канонических семейства (Машина+Климат+Настройки авто, Мой,
+   Сервис+Бонусы H5): окна ACCESSIBILITY_OVERLAY alpha=1.0, слой
+   (26,26,26) opaque, CJK-fantoms ушли (A/B crop), frames byte-в-byte,
+   touch pass-through сохранён (тап под пилюлей прошёл в приложение).
  - **Т-39b. (F)-гейт: сузить полосу для пустых-id label-строк с
    toggle (ОТКРЫТО, код-форма, СВОЙ КОНТРАКТ ДО ПРАВКИ).** Измерено:
    строка [224..746]x102h (пустой id, SDK car-control) попадает в

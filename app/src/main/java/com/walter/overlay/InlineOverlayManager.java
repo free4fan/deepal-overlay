@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class InlineOverlayManager {
+    private static final String TAG = "InlineOverlay";
     // Reuse an overlay (move it) instead of recreate when the same text moved by at most this much
     private static final int DRIFT_TOLERANCE = 240;
     // Unclaimed overlays survive this long (covers ~2 scan cycles): during fast
@@ -112,6 +113,12 @@ public class InlineOverlayManager {
     private final Map<TextView, Long> bgColors = new HashMap<>();
     private final Paint measurePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int cornerRadiusPx = -1;
+    // T-40 (DESIGN.md, 10-26): set if this ROM refuses to let an
+    // accessibility service add a TYPE_ACCESSIBILITY_OVERLAY window —
+    // create() then permanently falls back to TYPE_APPLICATION_OVERLAY
+    // (reverting to the system's 20%-transparency cap, the documented
+    // worst case rather than no overlay at all).
+    private volatile boolean accessibilityOverlayFailed = false;
 
     public static class OverlaySpec {
         public final String key;
@@ -474,6 +481,10 @@ public class InlineOverlayManager {
     private void updateParams(TextView tv, WindowManager.LayoutParams lp,
                               int width, int height, int x, int y) {
         if (lp.width == width && lp.height == height && lp.x == x && lp.y == y) return;
+        // T-40 (DESIGN.md, 10-26): alpha left at the LayoutParams default
+        // (1.0); a forced write here changed nothing (WMS stored 0.8 with
+        // or without it) — see contract for the live evidence and the
+        // next-form candidates.
         lp.width = width;
         lp.height = height;
         lp.x = x;
@@ -500,9 +511,23 @@ public class InlineOverlayManager {
         tv.setGravity(layout.gravity);
         tv.setPadding(layout.padH, layout.padV, layout.padH, layout.padV);
 
-        int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        // T-40 (DESIGN.md, 10-26): create the pill as a TRUSTED
+        // accessibility overlay instead of a plain SYSTEM_ALERT_WINDOW.
+        // AOSP caps the window alpha of SAW windows carrying
+        // FLAG_NOT_TOUCHABLE at 0.8 (the cap is applied above
+        // LayoutParams.alpha and cannot be overridden from the app) —
+        // the CJK then bled through the semi-transparent slab on every
+        // screen and read as "the overlay does not cover the text".
+        // TYPE_ACCESSIBILITY_OVERLAY is on the AOSP trusted-window
+        // exclusion list, so the 0.8 cap does not apply while
+        // FLAG_NOT_TOUCHABLE keeps the touch pass-through. This manager
+        // only ever runs from the bound accessibility service (the
+        // single construction site passes `this` from
+        // TranslationService), the calling context the framework
+        // requires. minSdk 26 >= the type's API 22, so no version branch.
+        int type = accessibilityOverlayFailed
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            : WindowManager.LayoutParams.TYPE_PHONE;
+            : WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
             layout.width,
@@ -516,16 +541,25 @@ public class InlineOverlayManager {
         params.x = parseX(spec.key) + layout.dx;
         params.y = parseY(spec.key) + layout.dy;
         params.gravity = Gravity.TOP | Gravity.START;
-        // On this device WMS rewrites overlay params (adds CENTER to the
-        // gravity, forces alpha 0.8) — the CJK then shows *through* the pill
-        // and reads as the translation being misaligned/offset from the
-        // original text. Force full opacity; the rounded corners are
-        // per-pixel alpha inside the surface and are not affected.
-        params.alpha = 1.0f;
 
         try {
             windowManager.addView(tv, params);
             return tv;
+        } catch (android.view.WindowManager.BadTokenException e) {
+            // ROM refused the accessibility window (or the token died).
+            // One-shot retry as a plain overlay so the translation still
+            // renders at all; from then on straight to the plain type.
+            bgColors.remove(tv);
+            accessibilityOverlayFailed = true;
+            Log.w(TAG, "TYPE_ACCESSIBILITY_OVERLAY refused — falling back to TYPE_APPLICATION_OVERLAY", e);
+            try {
+                params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+                windowManager.addView(tv, params);
+                return tv;
+            } catch (Exception e2) {
+                bgColors.remove(tv);
+                return null;
+            }
         } catch (Exception e) {
             bgColors.remove(tv);
             return null;

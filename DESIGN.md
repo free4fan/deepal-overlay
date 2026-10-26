@@ -1229,7 +1229,37 @@ live-пилюля **317..653 (гайт (F), node-центр)** → **CJK тор�
   (T-37 в живую: «Добавить» 281, «Руководство» 157); 2/12 — ddx-диф
   на lower-band (y≈2010) — см. дивергенцию (F)/band выше (T-36b).
 
-### Т-40. Alpha-прозрачность пилюль: WMS ре-прэп params на updateViewLayout → CJK проступает СКВОЗЬ пилюлю (10-26, live ТЗ: 3 канонических семейства)
+### Т-40. Alpha-прозрачность пилюль: системный кап SAW+NOT_TOUCHABLE → CJK проступает СКВОЗЬ пилюлю (10-26, live ТЗ: 3 канонических семейства)
+
+**ИСПРАВЛЕНИЕ ФОРМЫ (10-26, после билдов 105/106): форма №1 (явный
+`alpha=1.0f` в create+update) ОПРОВЕРГНУТА live-тестом.**
+- Билд 105 (оба явных alpha=1.0f) и билд 106 (alpha нигде) — mAttrs
+  пилюль = alpha=0.8 в обоих случаях, toggle (без NOT_TOUCHABLE) = 1.0
+  (тот же сервис, тот же APK). Запись приложения не переопределяется.
+- Корень (AOSP, цитата пользователя 10-26): правило WMS «Cap alpha to
+  max if SAW + FLAG_NOT_TOUCHABLE» — окна класса SYSTEM_ALERT_WINDOW
+  с `FLAG_NOT_TOUCHABLE` принудительно получают alpha ≤ 0.8 («20%
+  transparency to honor FLAG_NOT_TOUCHABLE and let touches pass
+  through»); приложение НЕ может переопределять кап через
+  `LayoutParams.alpha`. Это и есть источник «оверлей не перекрывает /
+  выглядит как фоллбэк» систематически: серые CJK-glyphs приложения
+  проступают сквозь полупрозрачный слой даже при верной геометрии.
+- Отменённая версия тезиса: «WMS re-prepares params на update-пути» —
+  нет: триггер = тип SAW + флаг, не update-путь.
+
+**Форма №2 (действующая): тип окна → `TYPE_ACCESSIBILITY_OVERLAY`.**
+Trusted-окна accessibility в AOSP исключены из капа (независимо от
+FLAG_NOT_TOUCHABLE) → alpha=1.0 при сохранённом touch pass-through.
+Создаём из AccessibilityService (IOM context = `this`,
+TranslationService:171) — условие «вызван из svc-окна» исполнено.
+Реализация (`create()`, IOM): попробован `TYPE_ACCESSIBILITY_OVERLAY`;
+при IOException/RockException (ROM отказывает не-sys-вызывающему) —
+ОДНОКРАТНЫЙ фоллбек на `TYPE_APPLICATION_OVERLAY` (flag
+`accessibilityOverlayFailed`, запоминание; логируется) → худший исход =
+былое поведение 0.8, не отсутствие оверлея. Геометрия (computeLayout) —
+0 изменений; только `params.type`.
+
+**Остальное без изменений:**
 
 **Наблюдение пользователя (live, 10-26):** «на экране кажется fallback / не
 учитываются наработки» — систематически на семействах Машина/Мой/Сервис.
@@ -1253,34 +1283,30 @@ live-пилюля **317..653 (гайт (F), node-центр)** → **CJK тор�
    alpha — WMS при relayout/update пересобирает attrs и возвращает 0.8
    (окно, не обновлявшееся после addView, держит 1.0 — прогноз механизма).
 
-**Форма (контракт, жестко): 2px кода — alpha в ОБОИХ точках windows:**
-1. `create()`: `params.alpha = 1.0f` — УЖЕ ЕСТЬ (IOM:524), оставляю.
-2. `updateParams()`: перед `updateViewLayout` — `lp.alpha = 1.0f;`
-   (одна строка, вне computeLayout — геометрия не трогается).
-   Комментарий: причина = WMS re-prepare на update-пути (live-факт
-   mAttrs alpha=0.8 при params.alpha=1.0f в create()).
-
 **Взаимодействие:** geometry (width/ddx/ddy) — 0 изменений; только
-alpha-канал окна. Фон пилюль не становится «чёрнее» — тот же BG_SCRIM,
-только перестает просвечивать.
+тип окна. Фон пилюль не становится «чёрнее» — тот же BG_SCRIM, только
+перестает просвечивать. Touch pass-through сохранён (NOT_TOUCHABLE на
+месте; TYPE_ACCESSIBILITY_OVERLAY не перехватывает тапы).
 
 **Gates:**
-1. **Отложенный self-diff (pre-frame-1): 171/171** — alpha вне
+1. **Отложенный self-diff (pre-frame-1): 171/171** — тип окна вне
    geometric-chain (доказательство: pills frames инвариантны).
 2. **Sweep pre-frame-1: exit=0, 0 unknown** (инвариантен).
-3. **Build 104**, aapt2 104/2.10.53, установка + рестарт сервиса +
-   rebind a11y (механика install-sброс, DESIGN ИТОГ T-39).
+3. **Build 107 / 2.10.54** (105/106 — отклонённые формы №1), установка +
+   рестарт сервиса + rebind a11y (механика install-сброс, DESIGN ИТОГ
+   T-39).
 4. **Live-гейт (решающий, ДО pixel): dumpsys window** — walter-окна:
-   mAttrs alpha=1.0 / mShownAlpha=1.0 (в т.ч. на обновлявшихся).
-   Если WMS всё же принудительно держит 0.8 → форма НЕЗАКРЫТА, откат +
-   обход (чёрный scrim / opaque-формат) отдельным контрактом.
+   mAttrs alpha=1.0 (default) + `ty=ACCESSIBILITY_OVERLAY`;
+   `mShownAlpha=1.0`. Фоллбек (IOException → APPLICATION_OVERLAY)
+   засчитывается как НЕЗАКРЫТО: откат + отдельный контракт.
 5. **Pixel-гейт (bonus_h5):** подложка пилюль = (26,26,26) opaque; ZERO
    CJK-пятен темнее слоя внутри окна (было: (72,72,72) + пятна 44–58).
 6. **Канонические семейства (ТЗ 10-26):** Машина (+Климат,
    Настройки авто), Мой (+подменю), Сервис (+Бонусы H5) — скрин +
    alpha=1.0 + spot pixel-покрытие CJK.
-7. **Geometry-инвариантность live:** pillows frames из 103 byte-в-byte
-   (кроме alpha) на тех же узлах.
+7. **Geometry-инвариантность live:** pills frames byte-в-byte с
+   билдом 106 на тех же узлах (изменён только тип окна — px-логику
+   computeLayout не трогал).
 
 Откат: `git checkout InlineOverlayManager.java` + «форма отклонена».
 Не смесиваем: T-37 (width) / T-38 (profile) / T-39b ((F)-гейт) / T-40
