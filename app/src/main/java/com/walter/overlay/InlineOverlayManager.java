@@ -35,9 +35,15 @@ public class InlineOverlayManager {
     private static final int WRAP_MAX_LINES = 8;
     private static final int CORNER_RADIUS_DP = 6;
 
-    private static final int BG_DARK_SETTING = 0xDD1A1A1A; // manual "Dark overlay" mode
     private static final int BG_DARK_ZONE = 0xFF202020;    // toolbar/header: opaque dark, blends into the bar
     private static final int BG_SCRIM = 0xFF1A1A1A;        // content: opaque dark — original CJK must never show through
+    // T-41 (DESIGN.md, 10-26): the user's window alpha for the "Translucent
+    // overlay" mode (pref dark_overlay=ON). 0.8 is the "standard coefficient"
+    // the user asked for — and the value AOSP force-capped every pill to
+    // before T-40 (SAW+FLAG_NOT_TOUCHABLE rule). Since the windows are now
+    // TYPE_ACCESSIBILITY_OVERLAY (trusted, cap no longer applies), the alpha
+    // is a plain LayoutParams write the user can switch on/off.
+    public static final float ALPHA_USER_TRANSPARENT = 0.8f;
     // T-35 #0 (density sweep): the measurement foundation is measured in dp,
     // not in the calibration device's px. Values are the old 225dpi px constants
     // divided by 2.25 (24px==10.67dp etc.), held as float dp so the rounded
@@ -278,7 +284,7 @@ public class InlineOverlayManager {
      * Diff-based update: existing overlays are reused and moved in-place
      * (no remove/recreate), so scrolling does not cause flicker.
      */
-    public void reconcile(List<OverlaySpec> specs, boolean wordWrap, boolean darkOverlay) {
+    public void reconcile(List<OverlaySpec> specs, boolean wordWrap, float overlayAlpha) {
         Set<TextView> claimed = new HashSet<>();
         long now = android.os.SystemClock.uptimeMillis();
 
@@ -286,7 +292,7 @@ public class InlineOverlayManager {
         for (OverlaySpec s : specs) {
             TextView tv = activeViews.get(s.key);
             if (tv != null) {
-                apply(tv, s, wordWrap, darkOverlay, specs);
+                apply(tv, s, wordWrap, overlayAlpha, specs);
                 claimed.add(tv);
             }
         }
@@ -310,7 +316,7 @@ public class InlineOverlayManager {
             }
             if (best != null) {
                 activeViews.remove(bestKey);
-                apply(best, s, wordWrap, darkOverlay, specs);
+                apply(best, s, wordWrap, overlayAlpha, specs);
                 activeViews.put(s.key, best);
                 claimed.add(best);
             }
@@ -344,7 +350,7 @@ public class InlineOverlayManager {
         // Pass 4: create overlays for new nodes
         for (OverlaySpec s : specs) {
             if (!activeViews.containsKey(s.key)) {
-                TextView tv = create(s, wordWrap, darkOverlay, specs);
+                TextView tv = create(s, wordWrap, overlayAlpha, specs);
                 if (tv != null) {
                     activeViews.put(s.key, tv);
                     lastSeenMs.put(tv, now);
@@ -410,16 +416,16 @@ public class InlineOverlayManager {
                                 String translatedText, float textSizeSp,
                                 boolean darkZone, boolean centered,
                                 int estSourceWidthPx,
-                                boolean wordWrap, boolean darkOverlay) {
+                                boolean wordWrap, float overlayAlpha) {
         showTranslation(left, top, width, height, translatedText, textSizeSp,
-            darkZone, centered, estSourceWidthPx, wordWrap, darkOverlay, null);
+            darkZone, centered, estSourceWidthPx, wordWrap, overlayAlpha, null);
     }
 
     public void showTranslation(int left, int top, int width, int height,
                                 String translatedText, float textSizeSp,
                                 boolean darkZone, boolean centered,
                                 int estSourceWidthPx,
-                                boolean wordWrap, boolean darkOverlay,
+                                boolean wordWrap, float overlayAlpha,
                                 String viewId) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
@@ -429,18 +435,18 @@ public class InlineOverlayManager {
 
         TextView existing = activeViews.get(key);
         if (existing != null) {
-            apply(existing, spec, wordWrap, darkOverlay, null);
+            apply(existing, spec, wordWrap, overlayAlpha, null);
         } else {
-            existing = create(spec, wordWrap, darkOverlay, null);
+            existing = create(spec, wordWrap, overlayAlpha, null);
             if (existing == null) return;
             activeViews.put(key, existing);
         }
         lastSeenMs.put(existing, android.os.SystemClock.uptimeMillis());
     }
 
-    private void apply(TextView tv, OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
+    private void apply(TextView tv, OverlaySpec spec, boolean wordWrap, float overlayAlpha,
                        List<OverlaySpec> siblings) {
-        Layout layout = computeLayout(spec, wordWrap, darkOverlay, siblings);
+        Layout layout = computeLayout(spec, wordWrap, overlayAlpha, siblings);
         if (layout.hidden) {
             // Slide sliver: park the existing overlay (it is claimed by this
             // spec, so reconciliation keeps tracking — it reappears as soon as
@@ -448,7 +454,8 @@ public class InlineOverlayManager {
             WindowManager.LayoutParams lp0 = (WindowManager.LayoutParams) tv.getLayoutParams();
             if (lp0.width != 0) {
                 updateParams(tv, lp0, 0, 0,
-                    parseX(spec.key) + layout.dx, parseY(spec.key) + layout.dy);
+                    parseX(spec.key) + layout.dx, parseY(spec.key) + layout.dy,
+                    overlayAlpha);
             }
             if (tv.getVisibility() != View.GONE) tv.setVisibility(View.GONE);
             return;
@@ -474,27 +481,33 @@ public class InlineOverlayManager {
 
         updateParams(tv, (WindowManager.LayoutParams) tv.getLayoutParams(),
             layout.width, layout.height,
-            parseX(spec.key) + layout.dx, parseY(spec.key) + layout.dy);
+            parseX(spec.key) + layout.dx, parseY(spec.key) + layout.dy,
+            overlayAlpha);
     }
 
     // Only touches the window when something actually changed
     private void updateParams(TextView tv, WindowManager.LayoutParams lp,
-                              int width, int height, int x, int y) {
-        if (lp.width == width && lp.height == height && lp.x == x && lp.y == y) return;
-        // T-40 (DESIGN.md, 10-26): alpha left at the LayoutParams default
-        // (1.0); a forced write here changed nothing (WMS stored 0.8 with
-        // or without it) — see contract for the live evidence and the
-        // next-form candidates.
+                              int width, int height, int x, int y,
+                              float overlayAlpha) {
+        if (lp.width == width && lp.height == height && lp.x == x && lp.y == y
+                && lp.alpha == overlayAlpha) return;
         lp.width = width;
         lp.height = height;
         lp.x = x;
         lp.y = y;
+        // T-40/T-41 (DESIGN.md, 10-26): the window type is now
+        // TYPE_ACCESSIBILITY_OVERLAY (trusted) — no AOSP 0.8 cap applies, so
+        // LayoutParams.alpha is honored as written. overlayAlpha is the
+        // user's choice (1.0f default, ALPHA_USER_TRANSPARENT when the
+        // "Translucent overlay" toggle is on) and applies to existing
+        // windows on every update pass, not just creation.
+        lp.alpha = overlayAlpha;
         try { windowManager.updateViewLayout(tv, lp); } catch (Exception ignored) {}
     }
 
-    private TextView create(OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
+    private TextView create(OverlaySpec spec, boolean wordWrap, float overlayAlpha,
                             List<OverlaySpec> siblings) {
-        Layout layout = computeLayout(spec, wordWrap, darkOverlay, siblings);
+        Layout layout = computeLayout(spec, wordWrap, overlayAlpha, siblings);
         if (layout.hidden) return null; // don't spawn a slide sliver
 
         TextView tv = new TextView(context);
@@ -541,6 +554,11 @@ public class InlineOverlayManager {
         params.x = parseX(spec.key) + layout.dx;
         params.y = parseY(spec.key) + layout.dy;
         params.gravity = Gravity.TOP | Gravity.START;
+        // T-41 (DESIGN.md, 10-26): the user's alpha (1.0f default; 0.8f for
+        // the "Translucent overlay" mode). No cap on this window type — see
+        // the T-40 comment above; updateParams() keeps existing windows in
+        // sync when the toggle flips.
+        params.alpha = overlayAlpha;
 
         try {
             windowManager.addView(tv, params);
@@ -566,15 +584,15 @@ public class InlineOverlayManager {
         }
     }
 
-    private Layout computeLayout(OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
+    private Layout computeLayout(OverlaySpec spec, boolean wordWrap, float overlayAlpha,
                                  List<OverlaySpec> siblings) {
-        return computeLayout(spec, wordWrap, darkOverlay, siblings, true);
+        return computeLayout(spec, wordWrap, overlayAlpha, siblings, true);
     }
 
     // allowDeep=false — inner pass while resolving the row-above collision
     // guard: reuse this layout for a sibling without triggering its own guard
     // layout lookup (recursion stop).
-    private Layout computeLayout(OverlaySpec spec, boolean wordWrap, boolean darkOverlay,
+    private Layout computeLayout(OverlaySpec spec, boolean wordWrap, float overlayAlpha,
                                  List<OverlaySpec> siblings, boolean allowDeep) {
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         int screenWidth = dm.widthPixels;
@@ -977,8 +995,12 @@ public class InlineOverlayManager {
             height = Math.min(height, maxPillH);
         }
 
-        int bgColor = darkOverlay ? BG_DARK_SETTING
-            : spec.darkZone ? BG_DARK_ZONE : BG_SCRIM;
+        // T-41 (DESIGN.md, 10-26): the slab is ALWAYS opaque in both modes —
+        // the "Translucent overlay" toggle controls the WINDOW alpha only
+        // (1.0 vs ALPHA_USER_TRANSPARENT), never the background color. The
+        // first form (alpha<1 → the old 0xDD1A1A1A 87%-slab) measured (97)
+        // on the white H5 page — double translucency — and was rejected.
+        int bgColor = spec.darkZone ? BG_DARK_ZONE : BG_SCRIM;
         int textColor = 0xFFFFFFFF;
 
         int gravity;
@@ -1315,7 +1337,7 @@ if (ddx == 0 && est > 0 && width > est
                 if (sX > x + width || sX + s.width < x) continue; // no node overlap
                 Layout up;
                 try {
-                    up = computeLayout(s, wordWrap, darkOverlay, siblings, false);
+                    up = computeLayout(s, wordWrap, overlayAlpha, siblings, false);
                 } catch (Exception e) {
                     continue;
                 }

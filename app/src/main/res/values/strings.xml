@@ -39,7 +39,7 @@
     <string name="word_wrap_desc">Wrap long translations to multiple lines</string>
     <string name="btn_quit_keep_acc">Quit (keep accessibility)</string>
     <string name="btn_quit_disable_acc">Quit (disable accessibility)</string>
-    <string name="dark_overlay">Dark overlay</string>
-    <string name="dark_overlay_desc">Dark background with white text for all overlays</string>
+    <string name="dark_overlay">Translucent overlay</string>
+    <string name="dark_overlay_desc">Render overlays at 0.8 opacity — softer on the eyes, CJK under the pill shows through slightly</string>
 
 </resources>

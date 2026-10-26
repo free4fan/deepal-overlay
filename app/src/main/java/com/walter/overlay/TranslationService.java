@@ -643,7 +643,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         int targetLang = prefs.getInt("target_lang", 0);
         boolean wordWrap = prefs.getBoolean("word_wrap", false);
-        boolean darkOverlay = prefs.getBoolean("dark_overlay", false);
+        // T-41 (DESIGN.md): the "dark_overlay" pref is now the user's
+        // "Translucent overlay" mode — ON = window alpha 0.8, OFF = 1.0.
+        float overlayAlpha = prefs.getBoolean("dark_overlay", false)
+            ? InlineOverlayManager.ALPHA_USER_TRANSPARENT : 1.0f;
 
         if (!isTargetPackage(packageName)) {
             root.recycle();
@@ -730,7 +733,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             // window is foreign now — never paint a stale window's text
             if (epochAtScan != scanEpoch) return;
             if (!isTargetPackage(activePackage)) return;
-            inlineManager.reconcile(specs, wordWrap, darkOverlay);
+            inlineManager.reconcile(specs, wordWrap, overlayAlpha);
         });
 
         if (!toTranslate.isEmpty()) {
@@ -1041,7 +1044,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     if (!isTargetPackage(activePackage)) return;
                     SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
                     boolean ww = p.getBoolean("word_wrap", false);
-                    boolean dk = p.getBoolean("dark_overlay", false);
+                    // T-41: "dark_overlay" = translucent-mode flag → window alpha
+                    float dk = p.getBoolean("dark_overlay", false)
+                        ? InlineOverlayManager.ALPHA_USER_TRANSPARENT : 1.0f;
                     float density = getResources().getDisplayMetrics().density;
                     for (TextNodeInfo n : done) {
                         if (n.translated != null) {

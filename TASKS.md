@@ -253,6 +253,16 @@ dark_overlay=off).
    Корневая причина опровергнута: resolveCentered → spec.centered →
    gravity текста ВНУТРИ окна, НЕ ddx. Откат: git checkout + 104→103
    (md5 f6b201d4… = тот же APK).
+ - **Т-41. Тумблер «Полупрозрачный оверлей» — alpha 0.8 по выбору
+   пользователя (10-26) — ЗАКРЫТО, live-подтверждено (v2.10.57/109).**
+   «чёрный режет глаз» → пользовательский режим 0.8 ВМЕСТО «тёмного фона».
+   Форма: window alpha только (1.0/0.8, константа), слой opaque в обоих
+   режимах; key prefs переиспользован; live без рестарта (prefs-чтение на
+   scan-цикле + updateParams-синхронизация живых окон). Gates: 171/171,
+   sweep exit=0; live A/B: OFF=alpha default 1.0 + slab (26), ON=0.8 + slab
+   (72) на H5 «Бонусы»; flip через UI (тап) — 32/32 окна 0.8 без рестарта;
+   frames byte-в-byte; pass-through цел. FORMA отклонена (108): slab-цвет
+   следовал за тумблером (0xDD → slab 97 ≠ 72).
  - **Т-40. Opaque-пилюли: TYPE_ACCESSIBILITY_OVERLAY (10-26) — ЗАКРЫТО,
    live-подтверждено (v2.10.55/107).** Корень: AOSP-кап alpha 0.8 для
    SAW+FLAG_NOT_TOUCHABLE (не переопределяется через LayoutParams.alpha —

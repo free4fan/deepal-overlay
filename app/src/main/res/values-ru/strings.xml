@@ -39,7 +39,7 @@
     <string name="word_wrap_desc">Переносить длинные переводы на несколько строк</string>
     <string name="btn_quit_keep_acc">Выход (оставить доступность)</string>
     <string name="btn_quit_disable_acc">Выход (отключить доступность)</string>
-    <string name="dark_overlay">Тёмный фон оверлея</string>
-    <string name="dark_overlay_desc">Тёмный фон и белый текст для всех оверлеев</string>
+    <string name="dark_overlay">Полупрозрачный оверлей</string>
+    <string name="dark_overlay_desc">Оверлеи с коэффициентом 0.8 — мягче для глаза, CJK под пилюлей слегка просвечивает</string>
 
 </resources>
