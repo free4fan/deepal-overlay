@@ -92,6 +92,10 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     // (never cleared — a 38-empty-id screen must not spam the logcat, and a
     // repeatedly visited node must be logged once, not per scan).
     private final Set<String> emptyFallbackLogged = new HashSet<String>();
+    // The TITLE-DEDUP line is printed once per app session per source text
+    // (same session-once pattern: a collapsing bar is re-scanned every 3s
+    // watchdog tick, and the pair must be logged once, not per scan).
+    private final Set<String> dedupLogged = new HashSet<String>();
     private boolean translationEnabled = true;
     private boolean trailingScanScheduled = false;
     private int scanEpoch = 0;
@@ -659,6 +663,55 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         List<TextNodeInfo> chineseNodes = new ArrayList<>();
         collectChineseNodes(root, chineseNodes);
         root.recycle();
+
+        // T-43 (DESIGN.md, 10-27): a collapsing app-bar keeps BOTH title
+        // TextViews in the a11y tree while the large one is only alpha-faded
+        // (the app's layout_anim_appbar: tvBigTitle fades by alpha,
+        // tvSmallTitle is visibility-animated; a11y exposes neither). The
+        // two nodes carry the SAME source text and their on-screen rects
+        // strictly overlap → two pills over one visible label ("Поделиться
+        // ав" + "Поделиться авто" on the share page). Keep the node LATER in
+        // traversal: the later sibling draws on top, i.e. is the visible one
+        // (18sp small title while scrolled; in the expanded state
+        // tvSmallTitle is absent from the tree, so nothing is dropped there).
+        // STRICT overlap only (ox>0 && oy>0): touching edges (oy==0) keep
+        // both — the settings_car collapser pair [388,153,572,266]/
+        // [0,266,960,389] touches with oy=0 and both pills are legitimate.
+        // Collection level (pre-model): the mirror is fed by the baseline
+        // pills.json and is unaffected; gate 1 proved 0 strict-overlap
+        // same-text pairs among all 171 baseline nodes (0-delta offline).
+        // No new px constants: ox/oy are zero-threshold rect comparisons.
+        if (chineseNodes.size() > 1) {
+            List<TextNodeInfo> survivors = new ArrayList<>();
+            for (int j = 0; j < chineseNodes.size(); j++) {
+                TextNodeInfo b = chineseNodes.get(j);
+                int drop = -1;
+                for (int i = 0; i < survivors.size(); i++) {
+                    TextNodeInfo a = survivors.get(i);
+                    if (!a.text.equals(b.text)) continue;
+                    int ox = Math.min(a.bounds.right, b.bounds.right)
+                        - Math.max(a.bounds.left, b.bounds.left);
+                    int oy = Math.min(a.bounds.bottom, b.bounds.bottom)
+                        - Math.max(a.bounds.top, b.bounds.top);
+                    if (ox > 0 && oy > 0) {
+                        drop = i;
+                        break;
+                    }
+                }
+                if (drop >= 0) {
+                    TextNodeInfo a = survivors.remove(drop);
+                    if (!dedupLogged.contains(b.text)) {
+                        dedupLogged.add(b.text);
+                        Log.i(TAG, "TITLE-DEDUP: " + b.text
+                            + " kept=" + (b.viewId != null ? b.viewId : "-")
+                            + " dropped=" + (a.viewId != null ? a.viewId : "-"));
+                    }
+                }
+                survivors.add(b);
+            }
+            chineseNodes.clear();
+            chineseNodes.addAll(survivors);
+        }
 
         if (chineseNodes.isEmpty()) {
             // Clear stale overlays only when the window actually changed and has
