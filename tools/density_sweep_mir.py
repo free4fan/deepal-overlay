@@ -672,10 +672,17 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
         f_x = rp(GATE_F_X_INSET_DP, d)
         f_hmin = rp(GATE_F_H_MIN_DP, d)
         f_hmax = rp(GATE_F_H_MAX_DP, d)
+        # T-39b (DESIGN.md, 10-26): gate (F) is a DIALOG-ACTION-BUTTON rule —
+        # the button is always id-carried (tvPositive/tvNegative). Empty-id
+        # label rows (the left-aligned toggle row 空气净化 522x102 beside the
+        # Switch) match its shape and get center-placed, exposing the CJK on
+        # the left. Exclude empty ids from (F); the row falls to looseRow.
+        # Mirrors the IOM exclusion byte-for-byte.
         f_pred = (path == "none" and est > 0 and width > est
                   and not start_locked and x > f_x
                   and s.w > jf(sw * 0.28) and s.w < jf(sw * 0.65)
-                  and f_hmin <= s.h <= f_hmax and s.w > jf(est * 2.0))
+                  and f_hmin <= s.h <= f_hmax and s.w > jf(est * 2.0)
+                  and s.vid not in (None, ""))
         if f_pred:
             if not (tall or loose):
                 text_px = max(text_px, base_px)

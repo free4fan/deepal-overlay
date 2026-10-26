@@ -1196,7 +1196,8 @@ if (ddx == 0 && est > 0 && width > est
                     && spec.width > screenWidth * 0.28f
                     && spec.width < screenWidth * 0.65f
                     && spec.height >= fHMin && spec.height <= fHMax
-                    && spec.width > est * 2f) {
+                    && spec.width > est * 2f
+                    && spec.viewId != null && spec.viewId.length() > 0) {
                 // The node IS the button (both halves of the dialog-action
                 // pair): the a11y box is the drawn stadium button. Cover it
                 // exactly so the pill cannot stick out of the border in any
