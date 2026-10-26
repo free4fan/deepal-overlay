@@ -1550,3 +1550,67 @@ Java), прогнанная по baseline `pre_step4` в двух режимах
   `tvTopTitle.p = 20dp`. 20·2.25=45 ≠ 55-59 — проверить на golden-после
   переключения на `p`. Пока: НЕ переключать (это сдвиг геометрии = отдельный
   релиз с diff'ом).
+
+### Т-41. Пользовательский режим прозрачности оверлея (alpha 0.8) — «чёрное режет глаз» (10-26, live ТЗ)
+
+**Наблюдение пользователя (10-26, после live-проверки T-40):** непрозрачные
+пилюли «визуально полностью тёмный фон очень контрастный и режет глаз» →
+нужна ВОЗМОЖНОСТЬ включить прозрачность «со стандартным коэффициентом 0.8» —
+вместо тумблера «Dark overlay» (решено на вопрос: вариант 1 = замена,
+не дополнительный переключатель).
+
+**Корень (почему это стало возможным только после T-40):** до T-40
+`TYPE_APPLICATION_OVERLAY` + `FLAG_NOT_TOUCHABLE` держал системный кап
+alpha 0.8 — «0.8» было единичным допустимым состоянием и его нельзя было
+ни выбрать ни отключить (явные `alpha=1.0f` пререзались; билды 105/106).
+После T-40 окна пилюль = `TYPE_ACCESSIBILITY_OVERLAY` (trusted) — кап не
+применяется, `LayoutParams.alpha` пишется и держится в любом значении
+(1.0 live-зафиксирован в mAttrs всех полей) → user alpha — чистая запись.
+
+**Форма (контракт, жестко):**
+1. **Ключ prefs — переиспользованный `dark_overlay`** (SharedPreferences
+   `deepal`): ON = прежний «тёмный фон» (`BG_DARK_SETTING` 0xDD1A1A1A),
+   OFF = opaque-скрим (текущее). Новый ключ не вводится; `dark_overlay=ON`
+   теперь трактуется как `overlayAlpha=0.8f`, OFF = `1.0f`. Миграция:
+   ничего делать не нужно — пользователи, у которых тумблер был OFF
+   (default), получат opaque (текущее поведение); те кто включил «тёмный
+   фон» — получат 0.8, что семантически «тумблер делает фон мягче».
+2. **Константа** `ALPHA_USER_TRANSPARENT = 0.8f` в IOM (единственное
+   новое число — user-facing параметр, не px, не геометрия).
+3. **Сигнатура:** `darkOverlay:boolean` → `overlayAlpha:float` во всей
+   цепочке IOM (`reconcile`, `showTranslation` x2, `apply`, `create`,
+   `computeLayout`) + call-sites в TranslationService (scan ~:646/:733,
+   translate-batch ~:1044). `computeLayout` получает float (bgColor-выбор
+   не меняется: `alpha<1.0f → BG_DARK_SETTING` как было для darkOverlay).
+4. **updateParams():** `lp.alpha != target → lp.alpha = target` (сравнивать
+   до relayout — обновляемые окна тоже получают 0.8/1.0, не только новые;
+   T-40-комментарий «alpha left default» — переписать под эту форму).
+   create(): `params.alpha = overlayAlpha`.
+5. **UI (activity_main.xml + strings en/ru):** блок «Dark overlay» →
+   «Translucent overlay / Полупрозрачный оверлей», desc: «фон с
+   коэффициентом 0.8 — мягче для глаза, CJK под пилюлей слегка
+   просвечивает» (en аналог). switch id `darkOverlaySwitch` не меняется.
+6. **Live-эффект:** сервис читает prefs каждый scan-цикл (`scanWindow` +
+   watchdog 3s) → переключение применится к ВСЕМ живым пилюлям без
+   рестарта (updateParams доносит alpha в уже существующие окна).
+
+**Gates:**
+1. **Offline (pre-frame-1):** self-diff 171/171 + sweep exit=0 (alpha
+   вне geometry-цепи — как T-40; доказательство: frames инвариантны).
+2. **Build 108 / 2.10.56**, установка + rebind a11y.
+3. **Live-гейт A (default OFF = opaque):** живые окна
+   `ty=ACCESSIBILITY_OVERLAY`, mAttrs alpha=1.0 (default — не печатится)
+   ИЛИ alpha=1.0; пиксель слоя (26,26,26) по ТЗ-скринам — поведение T-40
+   не нарушено (регрессия).
+4. **Live-гейт B (toggling ON):** сменить тумблер в MainActivity →
+   все живые окна mAttrs alpha=0.8 + mShownAlpha=0.8 (dumpsys),
+   пиксель слоя на «Бонусы» H5 = (72,72,72) (арифметика 0.8·26+0.2·255 —
+   тот же 72, что был до T-40, но ТЕПЕРЬ по выбору, не по капу).
+5. **Live-гейт C (toggling OFF):** обратно к 1.0 / (26,26,26);
+   геометрия frames byte-в-byte с гейтом A (alpha не трогает width/pos).
+6. **Touch pass-through** (тап под пилюлей при alpha=0.8 — проходит).
+
+**Откат:** `git checkout` IOM + TranslationService + MainActivity +
+layout + strings + build.gradle; DESIGN «ИТОГ T-41: форма отклонена».
+Порядок правки: контракт (этот блок) → код IOM → TranslationService
+(call-sites) → MAIN/UI/strings → оффлайн-гейты → live A/B/C.
