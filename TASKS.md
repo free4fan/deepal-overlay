@@ -1095,4 +1095,5 @@ dark_overlay=off).
 - Статус: **сделан** (v2.10.29).
 
 ## В ожидании (дополняется по мере рекомендаций)
-- (пока пусто — сюда записываются новые рекомендации и дефеты, найденные при проверках)
+- **T-39b гейт 6 (regression byte-by-byte on машина/мой/сервис):** Phone 192.168.4.124 went into doze after gate 5 ("No route to host"). Reinstall 110 + re-bind + recapture 3 screens (script is ready, T-39b_* pills is in /tmp/opencode/t40/). Gated 1/2/4/5 is green (build 110/2.10.58, md5 b4ae0460…).
+- **T-42 live gate 3/4:** data was committed (build 111/2.10.59, md5 b3ed7b8c…; offline 171/171 + sweep PASS). Waiting on phone to install: share-car CTA = "Add user (0/5)" center-aligned (|center−480| ≥ 2px), CJK on the left is 0, other pills on the page are byte-by-byte + machine grid is byte-by-byte.
