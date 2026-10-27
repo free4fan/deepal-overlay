@@ -689,7 +689,16 @@ public class InlineOverlayManager {
         //    常用服务; the car's 车锁/车窗 grid cells). The source CJK sits in
         //    part of the box; the pill hugs the box width (the next column
         //    starts far enough away) and is one line tall, centered on the box.
-        boolean tallIconBox = !closeRow && !standaloneRow && est > 0
+        //    T-44 (DESIGN.md, 10-27): this class does NOT carry the !closeRow
+        //    gate that the sibling classes (standaloneRow/wideRow/looseRow) do.
+        //    A one-line CJK label sitting in a 2-line-tall box (the small
+        //    collapsing-header title: a 184x113 node whose 18sp text is one
+        //    line, with the toolbar's next item on the same row) must still hug
+        //    one text line — the closeRow neighbor (the toolbar's sibling) must
+        //    not inflate the pill to the box's 2-line height. Dropping only the
+        //    closeRow gate (not the width/height shape gates) keeps the pill a
+        //    one-line hug; the mirror probe proved 0/171 baseline nodes change.
+        boolean tallIconBox = !standaloneRow && est > 0
             && spec.width <= est * 1.35f + 2
             && spec.height > estimatePx * 1.6f && spec.height < estimatePx * 6f;
         //

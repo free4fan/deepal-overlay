@@ -366,7 +366,10 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
     # ---------------- shape classes ----------------------------------------
     stand = (not close_row and est > 0
              and s.w > jf(est * 2.5) and s.h > jf(estimate_px * 1.8))
-    tall = (not close_row and not stand and est > 0
+    # T-44 (DESIGN.md, 10-27): tallIconBox drops the close_row gate (the
+    # sibling shape classes keep it): a one-line CJK label in a 2-line box with
+    # a same-row neighbor must still hug one line. Mirror of the IOM predicate.
+    tall = (not stand and est > 0
             and s.w <= jf(est * 1.35) + 2
             and s.h > jf(estimate_px * 1.6) and s.h < jf(estimate_px * 6.0))
     wide = (not close_row and not stand and not tall
