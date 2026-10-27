@@ -2021,3 +2021,67 @@ mirror → оффлайн (sweep!) → live 3/4.
 
 **Откат (актуален):** `git checkout` IOM +
 `tools/density_sweep_mir.py` + `build.gradle`.
+
+### T-45. Кнопка-перезагрузка (stadium): slab оверлея вылезает за границу кнопки слева (10-27, live ТЗ: «сейчас открыт скрин на котором оверлей вылазит за границы кнопки»)
+
+**Live-факты (10-27, билд 113/2.10.61, ChargeStatisticsMonthActivity — error-состояние загрузки):**
+- Узел: `tv_retry` node [275,1299,685,1401] (w=410, h=102), текст
+  «перезагрузить», est=216 (сп из профиля нет), fsPx=43.84.
+  Пилюля 113: **[275,1307,342,85]** (ddx=0 left-anchor, ddy=8).
+- **Декомпилированный layout**
+  (`carcontrol_base_view_load_error.xml` — общий load-error include;
+  `tv_retry` есть ровно в ЭТОМ одном layout во всём приложении):
+  `tv_retry` = **САМА КНОПКА**: `160dp×40dp`,
+  `android:gravity="center"`, `background=@drawable/
+  carcontrol_tools_r_40_c_202020_l_1` (радиус 40 ≈ полный stadium).
+  App-scale: кнопка 410×102px = 160×40dp.
+- **Пиксельная геометрия (замер по screencap):** stadium = узел
+  (275..684 × 1299..1400, центр (479,1349) ≡ центр узла). Dуга стартует
+  с x≈322 на верхней линии y=1299 (левая дуга: y=1307 → граница
+  x≈299); прямая левая грань x≈276 только в средней части (y≈1341..
+  1357). Левые углы текущей пилюли (x=275 при y=1307/1392) **за дугой
+  на ~25px** (то, что пользователь видит как «вылезает»).
+- **Корень (зеркало воспроизвело детерминированно):** shape=**loose**
+  (w=410 > est·1.7=367 ∧ h=102 > estPx·1.8=97.2), t37Stadium=True
+  (IOM: 0.28<w<624 — ширина от текста, это правильно), и **ни один
+  ddx-гейт не fires**: E (centeredLabel) — tight-box w≤est·1.35+2 не
+  выполняется; (F) — w > est·2 (410>432) нет; (C1) — не full-width
+  header; (D) — нет. → ddx=0. Frame-1 PROFILE_CENTER fall-through
+  (IOM:1287, точная механика T-42 `bt_list_reate_share`) — **не сработал,
+  т.к. `tv_retry` отсутствует в `view_profiles.json`**.
+- **Доказательство минимальности:** 0 узлов id=tv_retry в 171
+  baseline-нодах (golden-сеты). Экрaн (ChargeStats error) не входит в
+  171 — data-only change 0-diff offline по построению.
+
+**Форма (контракт, жестко):**
+1. **Data-only:** `view_profiles.json` += `tv_retry: [null,
+   {"g":"center"}]` (sp=null = нет шрифта, только gravity; формат уже
+  есть в профиле — `apa_error_img` и др.; `sl` absent → align=clean
+   PROFILE_CENTER, без clash). Механика T-42 (PROFILE_CENTER
+   fall-through), код не меняется.
+2. **Ожидаемый live-результат:** ddx = (410−342)/2 = **34** → пилюля
+   [309,1307,342,85]: все 4 угла ВНУТРИ дуги (левый угол x=309 vs
+   дуга при этой y x≈299: +10; верхние/нижние симметрично ddy=8,
+   правый −33 до straight edge). «перезагрузить» центрирован как
+   собственный CJK app (gravity=center).
+3. **Не миксуем:** T-44-код (171/171 + sweep PASS + live) не трогается;
+   это только additive profile-row. Билд 114 = 113 + эта строка.
+
+**Gates:**
+1. **Offline:** self-diff 171/171 (целевой узел invariant — 0 tv_retry
+   в baseline) + sweep PASS; A/B mirror (align map with tv_retry →
+   PROFILE_CENTER vs без): 0/171.
+2. **Build 114** (2.10.62), install + rebind.
+3. **Live-гейт (решающий):** ChargeStatisticsMonthActivity (error-
+   state) — пилюля «перезагрузить» ВНУТРИ stadium (все углы внутри
+   дуги, 0 poke), CJK «重新加载» покрыт полно, центр ≈ 480. Остальные
+   пилюли экрана (заголовок «Статистика зарядок за 30 дней»,
+   «Загрузка не удалась») — без дельты; состояние не меняется от
+   пере-скана.
+4. **Регрессия 1 прогон:** share-car scrolled (T-44 target: h=62
+   unharmed) + share-car expanded (4/4 с 111) + settings_car (обе
+   title-пилюли) + mashina-top (16/16 ser_t0) — byte-в-byte;
+   tv_retry на них отсутствует.
+
+**Откат:** `git checkout` view_profiles.json + build.gradle.
+Порядок: контракт → data → offline → live 3/4.
