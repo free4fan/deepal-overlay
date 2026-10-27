@@ -2085,3 +2085,91 @@ mirror → оффлайн (sweep!) → live 3/4.
 
 **Откат:** `git checkout` view_profiles.json + build.gradle.
 Порядок: контракт → data → offline → live 3/4.
+
+**ИТОГ T-45: target PASS (10-27, билд 114/2.10.62); регрессия — одним
+прогоном с T-46.** Live (решающий, ChargeStatisticsMonthActivity
+error-state): пилюля «перезагрузить» `[309,1307,342,85]` (ddx 0→34):
+все 4 угла ВНУТРИ stadium (граница дуги левее/правее углу):
+yy=1307 дуга x=298..661 → левый угол 309 внутри на 11px, правый 651
+внутри на 10px; yy=1392 дуга 298..661 → +11/+10px; верх/низ ddy=8px, CJK «重新加载»
+покрыт, другие пилюли экрана (заголовок/tv_error) без дельты. Зум-
+факт (t46_retry_zoom.png) — slab центрирован в stadium, вылетов 0.
+Объединённая регрессия gate 4 T-45 идёт в T-46 gate 4 (один live-
+прогон закрывает оба). Коммиты: контракт `7c106a4`, data+билд
+`d55d506`.
+
+### T-46. Кнопка «Добавить» в Блоки сцен: пилюля гораздо больше кнопки (10-28, live ТЗ: «в разделе блок сцен оверлей кнопки добавить слишком велик»)
+
+**Live-факты (10-27→10-28, билд 114/2.10.62, Блоки сцен, карточки):**
+- Узел: `tvAction` node [662,1035,868,1114] (**w=206, h=79**),
+  «Добавить» (CJK «一键添加»), est=211, fsPx=52.7.
+  Пилюля 114: **[662,1020,281,109]** — шире на 75px, выше на 30px кнопкой.
+- **Drawn stadium-кнопка = нода в точности** (black-edge замер по
+  screencap: x 662..867, y 1035..1113 — совпадает с a11y-нодой):
+  приложение рисует stadium под CJK «一键添加» (4 знака ≈ 88dp).
+- **Layout** (`scene_item_recomment_content.xml`, `tvAction` —
+  `MediumBoldTextView`, `background=r_40` stadium, `gravity="center"`,
+  **14sp**, wrap_content, padding 12/5dp): кнопка = wrap по CJK,
+  текст по центру. App-scale: 206×79px = ≈ 91×35dp.
+- **Корень (зеркало воспроизвело детерминированно):** shape-**none**
+  (all 4 ложны: w=206 < est·1.35+2=287 — не tallIconBox; w < est·2.5 —
+  не wideRow; w < est·1.7 — не looseRow) → ddx=0 (left-anchor на левый
+  край), height=109 = node+2·padV (fs-кламп: textSizePx=max(est_sp→
+  54px, ...) — кламп, не реальный 14sp/31.5px; padV=15 от клампа),
+  width=T-37 fit-to-text: textArea=254 (52.7·4.6) > nodeArea=206·0.75
+  логика → **width=281 = text+2padH** — RU «Добавить» шире, чем
+  маленький CJK-стadium, и slab вылезает справа; сверху/снизу 15+
+  за кнопку (h 109 > 79). (F) не берёт: w=206 < 0.28·960=269 и
+  h=79 < 95.9 (fHMin 42.67dp) — (F) задуман под ПОЛУЭКРАННЫЕ
+  dialog-кнопки (368×102), здесь 91×35dp chip.
+- **Доказательство минимальности (mirror-зонд, sweep):** candidate
+  small-stadium-button-предикат **(F2)** — 0/1368 (171 baseline-узлов ×
+  8 плотностей) при: `ddx==0 && est>0 && width>est && !sl && x >
+  fXInset && 56dp < w < 150dp && 28dp < h < 46dp && w > 0.75*est &&
+  id не empty`. Target tvAction (206×79) = hit; tv_retry T-45
+  (410×102) = miss (w 182dp > 150dp) — формы не пересекаются.
+
+**Форма (контракт, жестко):**
+1. **IOM gate (F2)** — после (F), перед frame-1 fall-through:
+   small-stadium-button — node = маленький stadium-chip (56< w/150dp,
+   28<h <46dp), CJK заполняет кнопку (w > 0.75·est), x-inset, ddx==0
+   (ни (A)-(E) не взяли), id не empty. Действия — byte-в-byte зеркало
+   (F)-тела БЕЗ `!tallIconBox && !looseRow` гарда (у чиза shape==none,
+   гард ложь → else-ветка, т.е. тот же путь: font=max(fs,estimatePx),
+   shrink-to-inner, **width=node**, **height=node**, ddy=0,
+   **stadium=true**, **gravity=CENTER**, ddx=(node−node)/2=0).
+   Комментарий: (F) — wide dialog-кнопки; (F2) — small inline-
+   stadium-chips (сценарий «Добавить», будущие одноимённые chips) —
+   та же семантика «нода = нарисованная кнопка», разные размерные
+   границы.
+2. **Mirror** density_sweep_mir.py — byte-в-byte порт (f2-блок после
+   f_pred-блока, `path="F2"`).
+3. **Ожидаемый live-результат (целевой узел):** width=206=node,
+   height=79=node, stadium (radius h/2≈40), font → 14sp-area (кламп
+   54px shrink до inner 206−2padH−1), ddx=ddy=0, центр кнопки
+   (480?? нет: node center x=765). CJK «一键添加» покрыт (клик-
+   зона совпадает с оверлеем).
+4. **Не миксуем:** (F) не трогается (0/171 доказательство для его
+   форм — есть), T-44 (tallIconBox), T-45 (data-only). Билд 115 =
+   114 + только (F2).
+
+**Gates:**
+1. **Offline:** self-diff 171/171 (baseline-узлы не срабатывают
+   (F2) — зонд 0/1368) + **full sweep PASS exit=0 (8 d)** —
+   предикат новый, sweep = gate.
+2. **Build 115** (2.10.63), install + rebind.
+3. **Live-гейт (решающий):** Блоки сцен — карточки: пилюля
+   «Добавить» = кнопка 1:1 (width≈206, height≈79, 0 вылетов за
+   stadium в 4-х сторонах, CJK покрыт, чиз-радиус); обе карточки
+   («по дороге на работу»/«иди домой с работой»). Остальные пилюли
+   экрана (Блоки сцен header, tv_tab_title×2, tvType «Руководство»,
+   tvName, tvMsg) — без дельты.
+4. **Регрессия 1 прогон (закрывает T-44 gate 4 + T-45 gate 4 + T-39b
+   гейт 6 хвостов):** share-car scrolled (T-44: h=62) + expanded
+   (4/4 с 111) + ChargeStatisticsMonth (T-45: retry pill в stadium) +
+   settings_car (обе title-пилюли) + mashina-top (16/16 ser_t0).
+
+**Откат:** `git checkout` IOM +
+tools/density_sweep_mir.py + build.gradle; DESIGN «ИТОГ T-46:
+форма отклонена». Порядок: контракт → IOM+mirror → offline (sweep!) →
+live 3/4.
