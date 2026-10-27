@@ -1095,15 +1095,19 @@ dark_overlay=off).
 - Статус: **сделан** (v2.10.29).
 
 ## В ожидании (дополняется по мере рекомендаций)
-- **T-45 live-гейт (билд 114/2.10.62, md5 `e53edcc2…`, оффлайн PASS):**
-  ChargeStatisticsMonthActivity (error-состояние) — пилюля
-  «перезагрузить» ВНУТРИ stadium-кнопки (ddx 0→34, все углы внутри дуги,
-  0 poke), CJK покрыт, остальные пилюли экрана без дельты; регрессия
-  1 прогон: share-car scrolled (T-44 h=62) + expanded (4/4 111) +
+- **T-46 live-гейт (билд 115/2.10.63, md5 `944f78e9…`, оффлайн PASS):**
+  Блоки сцен — пилюля кнопки «Добавить» (tvAction 206×79) = кнопка
+  1:1 (width≈206, height≈79, 0 вылетов за stadium в 4 сторонах,
+  CJK «一键添加» покрыт, chip-радиус); обе карточки. Остальные пилюли
+  экрана без дельты. Регрессия 1 прогон (закрывает T-44 gate 4 + T-45
+  gate 4 + T-39b хвост): share-car scrolled (T-44 h=62) + expanded
+  (4/4 vs 111) + ChargeStatisticsMonth (T-45: retry inside stadium) +
   settings_car (обе title) + mashina-top (16/16 ser_t0). Оффлайн:
-  self-diff 171/171, sweep PASS, A/B align-map 0/171, 0 baseline-узлов
-  tv_retry. Ждёт подключения телефона (wireless-ADB:
-  `192.168.4.124:33269` дропнул 10-27 после установки; `adb devices`).
+  self-diff 171/171, sweep PASS exit=0, зонд F2 0/1368 (171×8d),
+  A/B T-45 profile-узлы не тронуты.
+  **T-45 закрыт target-side** (10-27 live PASS на 114: retry pill
+  [309,1307,342,85] внутри stadium, углы 10-11px от дуги; DESIGN
+  «ИТОГ T-45»).
 - **T-39c-территория (не tasked, minor):** «В салоне / • Воздух»
   (tv_air_title) a11y-bounds ≠ rendered-CJK; визуальный вердикт
   пользователя по T-41 0.8-режиму (toggle ON на телефоне) не получен.

@@ -92,6 +92,21 @@ public class InlineOverlayManager {
     // x>30px = 13.33dp.
     // Font may shrink to this (sp) so the text fits the column instead of ellipsizing
     private static final float FIT_MIN_SP = 9;
+    // gate (F2) (T-46): the SMALL stadium chip — the node IS a small drawn
+    // button (a 91x35dp chip, e.g. the scene-card «Добавить» tvAction
+    // 206x79 = 一键添加; its stadium corners round under the a11y box). The
+    // pill must hug the node exactly (width=node, height=node, stadium
+    // radius, gravity center) — generic width/height inflate it 75px past
+    // the button (DESIGN T-46: 281x109 over the 206x79 stadium, 15px
+    // top/bottom + 75px right overhang). (F) cannot take these: 56..150dp
+    // wide is far below its 0.28*screen floor, 28..46dp tall below its
+    // 42.67dp fHMin, and w>2*est never holds (the CJK FILLS the chip:
+    // w>0.75*est). The x-inset reuses (F)'s; probe 0/1368 (171 baseline
+    // x 8 densities), the T-45 retry button (182dp) is out of range.
+    private static final float GATE_F2_W_MIN_DP = 56f;
+    private static final float GATE_F2_W_MAX_DP = 150f;
+    private static final float GATE_F2_H_MIN_DP = 28f;
+    private static final float GATE_F2_H_MAX_DP = 46f;
     // A pill narrower than this whose text still overflows is a meaningless
     // one-letter "А…" sliver — hide it (width 0) instead of drawing it
     private static final float MIN_MEANINGFUL_PILL_DP = 32f;
@@ -1254,6 +1269,57 @@ if (ddx == 0 && est > 0 && width > est
                     }
                     stadium = true;
                     gravity = Gravity.CENTER; // label centered in the button
+                }
+                ddx = (spec.width - width) / 2;
+                ddx = Math.max(ddx, -x); // never cross the screen edge
+                if (x + ddx + width > x + maxW) ddx = (int) (maxW - width);
+            }
+            // (F2) SMALL STADIUM CHIP (T-46, DESIGN.md 10-28): the node IS a
+            // small drawn button (the scene-card «Добавить» tvAction 206x79
+            // = 一键添加; its stadium corners round under the a11y box). The
+            // generic width/height inflate it ~75px past the button (DESIGN:
+            // 281x109 over a 206x79 stadium). (F) cannot take these: 56..150dp
+            // wide is far below (F)'s 0.28*screen floor, 28..46dp tall below
+            // its 42.67dp fHMin, and w>2*est never holds (the CJK FILLS the
+            // chip, w>0.75*est). Same semantics as (F) — the a11y box IS the
+            // drawn button — so hug it exactly (body byte-for-byte (F)):
+            // width=node, height=node, stadium radius, gravity center. The
+            // body's font-shrink-to-interior carries «Добавить» inside the
+            // chip. x-inset reuses (F)'s. The !tallIconBox&&!looseRow guard is
+            // kept exactly as (F) (a chip is shape-none, so the full body runs
+            // and the fallback below still centers ddx for a tall/loose edge).
+            // Probe 0/1368 (171x8d); the T-45 retry button (182dp) is out too.
+            if (ddx == 0 && est > 0 && width > est
+                    && !startLocked && x > fXInset
+                    && spec.width / dm.density > GATE_F2_W_MIN_DP
+                    && spec.width / dm.density < GATE_F2_W_MAX_DP
+                    && spec.height / dm.density > GATE_F2_H_MIN_DP
+                    && spec.height / dm.density < GATE_F2_H_MAX_DP
+                    && spec.width > est * 0.75f
+                    && spec.viewId != null && spec.viewId.length() > 0) {
+                if (!tallIconBox && !looseRow) {
+                    textSizePx = Math.max(textSizePx, estimatePx);
+                    padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                    padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
+                    measurePaint.setTextSize(textSizePx);
+                    textPxWidth = measurePaint.measureText(spec.text);
+                    float target = spec.width - padH * 2f - 1f;
+                    if (textPxWidth > target) {
+                        textSizePx = Math.max(MIN_TEXT_SP * dm.density,
+                            textSizePx * target / textPxWidth);
+                        padH = Math.max(Math.round(PAD_H_FLOOR_DP * dm.density), (int) (textSizePx * 0.4f));
+                        padV = Math.max(Math.round(PAD_V_FLOOR_DP * dm.density), (int) (textSizePx * 0.3f));
+                        measurePaint.setTextSize(textSizePx);
+                        textPxWidth = measurePaint.measureText(spec.text);
+                    }
+                    width = spec.width;
+                    int minH = Math.max((int) (textSizePx + padV * 2), Math.round(MIN_SINGLE_LINE_HEIGHT_DP * dm.density));
+                    if (minH <= spec.height) {
+                        height = Math.min(spec.height, maxPillH);
+                        ddy = (spec.height - height) / 2;
+                    }
+                    stadium = true;
+                    gravity = Gravity.CENTER;
                 }
                 ddx = (spec.width - width) / 2;
                 ddx = Math.max(ddx, -x); // never cross the screen edge

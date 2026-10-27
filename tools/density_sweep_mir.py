@@ -714,6 +714,47 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
             "x=%d w=%d h=%d est=%d sl=%s" % (x, s.w, s.h, est,
                                              bool(start_locked)))
 
+        # (F2) T-46: the SMALL stadium chip (56<w/150dp, 28<h/46dp,
+        # w>0.75*est, x-inset, ddx==0, carries an id): byte-for-byte port
+        # of the (F) body (the node IS the drawn button — hug it:
+        # width=node, height=node, shrink-to-interior). (F) cannot take
+        # these: 56..150dp is below its 0.28*screen floor, 28..46dp below
+        # fHMin, and w>2*est never holds (CJK fills the chip). Probe
+        # 0/1368 (171 baseline x 8 densities).
+        f2_pred = (path == "none" and est > 0 and width > est
+                   and not start_locked and x > f_x
+                   and s.w / d > 56.0 and s.w / d < 150.0
+                   and s.h / d > 28.0 and s.h / d < 46.0
+                   and s.w > jf(est * 0.75)
+                   and s.vid not in (None, ""))
+        if f2_pred:
+            if not (tall or loose):
+                text_px = max(text_px, base_px)
+                padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+                padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
+                text_w = measure(s.text, text_px)
+                target = jf(jf(s.w - padh * 2.0) - 1.0)
+                if text_w > target:
+                    text_px = max(jf(10.0 * d),
+                                  jfd(jf(text_px * target), text_w))
+                    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(text_px * 0.4)))
+                    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(text_px * 0.3)))
+                    text_w = measure(s.text, text_px)
+                width = s.w
+                min_h = max(ic(jf(text_px) + padv * 2), rp(MIN_LINE_H_DP, d))
+                if min_h <= s.h:
+                    height = min(s.h, max_pill_h)
+                    ddy = jdiv(s.h - height, 2)
+            ddx = jdiv(s.w - width, 2)
+            ddx = max(ddx, -x)
+            if x + ddx + width > x + maxw:
+                ddx = ic(maxw - width)
+            if path == "none":
+                path = "F2"
+        log("gateF2", (f2_pred,), 0,
+            "x=%d w=%d h=%d est=%d sl=%s" % (x, s.w, s.h, est,
+                                             bool(start_locked)))
+
         # frame-1 profile fall-through (v2.10.45, fa10056)
         profile_hit = (frame1 and ddx == 0 and est > 0 and width > est
                        and s.vid and ctx.align.get(s.vid) == "PROFILE_CENTER")
