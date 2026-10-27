@@ -1095,6 +1095,15 @@ dark_overlay=off).
 - Статус: **сделан** (v2.10.29).
 
 ## В ожидании (дополняется по мере рекомендаций)
+- **T-45 live-гейт (билд 114/2.10.62, md5 `e53edcc2…`, оффлайн PASS):**
+  ChargeStatisticsMonthActivity (error-состояние) — пилюля
+  «перезагрузить» ВНУТРИ stadium-кнопки (ddx 0→34, все углы внутри дуги,
+  0 poke), CJK покрыт, остальные пилюли экрана без дельты; регрессия
+  1 прогон: share-car scrolled (T-44 h=62) + expanded (4/4 111) +
+  settings_car (обе title) + mashina-top (16/16 ser_t0). Оффлайн:
+  self-diff 171/171, sweep PASS, A/B align-map 0/171, 0 baseline-узлов
+  tv_retry. Ждёт подключения телефона (wireless-ADB:
+  `192.168.4.124:33269` дропнул 10-27 после установки; `adb devices`).
 - **T-39c-территория (не tasked, minor):** «В салоне / • Воздух»
   (tv_air_title) a11y-bounds ≠ rendered-CJK; визуальный вердикт
   пользователя по T-41 0.8-режиму (toggle ON на телефоне) не получен.
