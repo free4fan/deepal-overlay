@@ -1905,3 +1905,63 @@ service), не layout-модель:**
 **Откат:** `git checkout` TranslationService.java + build.gradle;
 DESIGN «ИТОГ T-43: форма отклонена». Порядок: контракт (этот
 блок) → код (дедуп-в сборе) → оффлайн 1 → live 2/3/4.
+
+### Т-44. Small-title collapsing-заголовок: slab на 2 строки под 1-строчным текстом (10-27, live ТЗ: «у оверлея Поделиться авто слишком большая высота без надобности»)
+
+**Live-факты (10-27, билд 112, share-car скролленное состояние):**
+- Узел `分享车辆` id=`tvSmallTitle` [388,153,572,266] (w=184, h=113),
+  est=216, estimatePx=54 (sp=24·d, shape-класс решается по estimate).
+  App рисует 18sp (профиль tvSmallTitle [18.0, g:center]) **в одну
+  строку**, centered в узле. Live-пилюля 112: **[308,142,344,135]** —
+  1 строка RU («Поделиться авто», зум fакт), slab высотой на 2 строки.
+- **Корень (зеркало воспроизвело детерминированно):** все 4 shape-
+  класса идут через гейт `!closeRow`; у узла closeRow (сосед
+  `История` [745,153,909,266] в той же строке) → классы все ложные →
+  высота = общий fallback `h = spec.height + padV*2` = 113+22 = **135**
+  (mirror: `tall=False (closeRow=True)`, `h=135, ml=False, fs=39.6`).
+  Форма `tallIconBox` (одна строка: `h = fs*1.4 + 2padV` ≈ 77) по
+  предикату СООТВЕТСТВУЕТ узлу (w=184 ≤ 1.35·est, 1.6·estPx < h <
+  6·estPx) — её блокирует только `!closeRow`.
+- **Доказательство минимальности (mirror-зонд, 171 baseline-нода,
+  d=2.25):** снятие `!closeRow` **только с tallIconBox** (standaloneRow/
+  wideRow/looseRow не трогать — их снятие даёт 106 ложных срабатываний
+  по зонду) → **0/171 узлов меняет (w,h,ml,wl)**. (Sweep по 8
+  плотностям после Java-правки = итоговое подтверждение.)
+
+**Форма (контракт, жестко):**
+1. IOM `tallIconBox` (IOM ~692): `boolean tallIconBox = !closeRow &&
+   !standaloneRow && ...` → **`!standaloneRow && ...`** (убрать
+   только `!closeRow`; комментарий: icon-box-класс не зависит от
+   соседей по строке — closeRow-гейт оставался у других классов).
+2. **Mirror** density_sweep_mir.py (стр. ~369): то же удаление из `
+   tall = (not close_row and not stand and ...)` → `tall = (not stand
+   and ...)` — byte-в-byte с Java.
+3. **Ожидаемый live-результат (целевой узел; зеркальный прогноз
+   RELAXED-mirror по точному spec + sibling):** w=**248**,
+   h=**61** (1 строка; tall-ветка ужимает fs в fit до fitting —
+   mirror BEFORE/112 = w319/h135 совпал с device byte-в-byte по h,
+   так что прогноз калиброван), centered на узле (ddx=(184−248)/2=
+   −32), ddy=(113−61)/2 centered по y; gravity CENTER (tallIconBox-
+   ветка IOM:1007); CJK 1-строки покрыт.
+4. **Не миксуем:** T-43 (дедуп — тот же узел, но другая ось: там уже
+   1 пилюля, здесь её высота); T-42 (dанные). Билд 113 = 112 +
+   только эта форма.
+
+**Gates:**
+1. **Offline:** self-diff 171/171 (2.25) + **full sweep PASS exit=0
+   (8 плотностей)** — предикат менялся, sweep и есть gate (зеркальный
+   0/171-зонд = предварительное доказательство).
+2. **Build 113** (2.10.61), install + rebind.
+3. **Live-гейт (решающий):** share-car скролленное — title-пилюля
+   h ≤ 80 (ожидаем 77), 1 строка, CJK покрыт, width/центр без
+   дельты с 112 (319/cx≈483); дубля НЕТ (T-43 не сломан);
+   остальные пилюли страницы (История/CTA/empty-text) byte-в-byte.
+4. **Канонические семейства + regression-пакет одним прогоном**
+   (закрывает T-39b гейт 6 + T-42 гейт 4): Машина/Мой/сервис-грид/
+   климат byte-в-byte с 110; share-car expanded byte-в-byte с
+   110/111-gate3; settings_car (единственный baseline-collapser-
+   state) — обе title-пилюли на месте.
+
+**Откат:** `git checkout` IOM + density_sweep_mir.py + build.gradle;
+DESIGN «ИТОГ T-44: форма отклонена». Порядок: контракт → IOM+
+mirror → оффлайн (sweep!) → live 3/4.
