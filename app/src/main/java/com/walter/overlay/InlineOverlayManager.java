@@ -160,17 +160,30 @@ public class InlineOverlayManager {
         // (the app's own layout names the role) and per-id real font lookup;
         // null when unknown.
         public final String viewId;
+        // a11y isClickable() of the node (T-47): the semantic "node IS a
+        // drawn button" signal. Gate (F2) — small stadium chip — requires
+        // it: a left-aligned title (wrap_content text, CJK fills the node)
+        // is geometrically indistinguishable from a small stadium button,
+        // but only the button is clickable (DESIGN T-47).
+        public final boolean clickable;
 
         public OverlaySpec(String key, String text, int width, int height,
                            float textSizeSp, boolean darkZone, boolean centered,
                            int estSourceWidthPx) {
             this(key, text, width, height, textSizeSp, darkZone, centered,
-                estSourceWidthPx, null);
+                estSourceWidthPx, null, false);
         }
 
         public OverlaySpec(String key, String text, int width, int height,
                            float textSizeSp, boolean darkZone, boolean centered,
                            int estSourceWidthPx, String viewId) {
+            this(key, text, width, height, textSizeSp, darkZone, centered,
+                estSourceWidthPx, viewId, false);
+        }
+
+        public OverlaySpec(String key, String text, int width, int height,
+                           float textSizeSp, boolean darkZone, boolean centered,
+                           int estSourceWidthPx, String viewId, boolean clickable) {
             this.key = key;
             this.text = text;
             this.width = width;
@@ -180,6 +193,7 @@ public class InlineOverlayManager {
             this.centered = centered;
             this.estSourceWidthPx = estSourceWidthPx;
             this.viewId = viewId;
+            this.clickable = clickable;
         }
     }
 
@@ -1289,8 +1303,14 @@ if (ddx == 0 && est > 0 && width > est
             // kept exactly as (F) (a chip is shape-none, so the full body runs
             // and the fallback below still centers ddx for a tall/loose edge).
             // Probe 0/1368 (171x8d); the T-45 retry button (182dp) is out too.
+            // T-47: spec.clickable is the semantic discriminator — the node
+            // must be a drawn BUTTON (a11y isClickable). A same-sized
+            // left-aligned title (wrap_content, CJK fills the node) passes
+            // every size condition but is not clickable; size-only F2 turned
+            // the scene-card titles into oval slabs (DESIGN T-47).
             if (ddx == 0 && est > 0 && width > est
                     && !startLocked && x > fXInset
+                    && spec.clickable
                     && spec.width / dm.density > GATE_F2_W_MIN_DP
                     && spec.width / dm.density < GATE_F2_W_MAX_DP
                     && spec.height / dm.density > GATE_F2_H_MIN_DP

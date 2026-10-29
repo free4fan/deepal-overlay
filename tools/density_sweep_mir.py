@@ -253,10 +253,10 @@ def text_lines_capped(text, avail, fs, max_lines):
 # ------------------------------ spec / context ============================
 class Spec:
     __slots__ = ("x", "y", "w", "h", "text", "est", "sp", "vid", "real_fs",
-                 "key0")
+                 "key0", "clickable")
 
     def __init__(self, x, y, w, h, text, est, sp, vid, real_fs=0.0,
-                 key0=None):
+                 key0=None, clickable=False):
         (self.x, self.y, self.w, self.h) = (x, y, w, h)
         (self.text, self.est, self.sp, self.vid) = (text, est, sp, vid)
         # the BASE-density node key ("x,y" from the dump) — survives the
@@ -270,6 +270,10 @@ class Spec:
         # (the dump shows 20.25px = a 9sp real font). 0 = unknown → the
         # estimate-sp fallback below (the Java pre-profile behavior).
         self.real_fs = real_fs
+        # T-47: a11y isClickable — the "node IS a drawn button" signal that
+        # gate (F2) requires (a same-sized left-aligned title is not
+        # clickable). Baseline dumps predate the field → default False.
+        self.clickable = clickable
 
     @property
     def key(self):
@@ -721,8 +725,12 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
         # these: 56..150dp is below its 0.28*screen floor, 28..46dp below
         # fHMin, and w>2*est never holds (CJK fills the chip). Probe
         # 0/1368 (171 baseline x 8 densities).
+        # T-47: s.clickable is the semantic discriminator (IOM byte-for-
+        # byte) — a same-sized left-aligned title passes every size
+        # condition but is not clickable.
         f2_pred = (path == "none" and est > 0 and width > est
                    and not start_locked and x > f_x
+                   and s.clickable
                    and s.w / d > 56.0 and s.w / d < 150.0
                    and s.h / d > 28.0 and s.h / d < 46.0
                    and s.w > jf(est * 0.75)

@@ -153,6 +153,11 @@ def scale(pills, d):
                           sp1 if est else sp0,
                           p.get("id") or None,
                           real_fs=real_fs,
+                          # T-47: a11y isClickable from the dump (baseline
+                          # dumps predate the field → False, so (F2) cannot
+                          # fire on them — parity with the IOM live behavior,
+                          # whose size conditions no baseline node passes)
+                          clickable=bool(p.get("clickable", False)),
                           # base-density key: the per-node L facts are keyed
                           # by the DEVICE (dump) coordinates and must survive
                           # the per-density rescaling (Spec.key does not)

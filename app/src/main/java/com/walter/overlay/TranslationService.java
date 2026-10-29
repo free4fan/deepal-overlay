@@ -772,7 +772,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 display, node.bounds.width(), node.bounds.height(),
                 node.estimatedTextSize, node.darkZone, centered,
                 estimateSourceWidth(node.text, node.estimatedTextSize, density),
-                node.viewId));
+                node.viewId, node.clickable));
             if (hits[i] == null) {
                 toTranslate.add(node);
             }
@@ -912,7 +912,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                         // recognition; null for nodes without a view id).
                         String shortId = shortViewId(node.getViewIdResourceName());
                         result.add(new TextNodeInfo(clean, bounds, textSize,
-                            darkZone, shortId));
+                            darkZone, shortId, node.isClickable()));
                     }
                 }
             }
@@ -1348,6 +1348,11 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         // Short resource id (e.g. "tvTopTitle") or null — same validity window
         // as darkZone, used for id-keyed anchoring in the layout code.
         String viewId;
+        // a11y isClickable() — same validity window. T-47: the semantic
+        // "this node IS a drawn button" signal that gate (F2) consults
+        // (a small stadium chip is clickable; a same-sized title label
+        // is not — size alone cannot tell them apart, DESIGN T-47).
+        boolean clickable;
 
         TextNodeInfo(String text, Rect bounds, float estimatedTextSize, boolean darkZone) {
             this.text = text;
@@ -1357,12 +1362,13 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
 
         TextNodeInfo(String text, Rect bounds, float estimatedTextSize,
-                     boolean darkZone, String viewId) {
+                     boolean darkZone, String viewId, boolean clickable) {
             this.text = text;
             this.bounds = bounds;
             this.estimatedTextSize = estimatedTextSize;
             this.darkZone = darkZone;
             this.viewId = viewId;
+            this.clickable = clickable;
         }
     }
 }
