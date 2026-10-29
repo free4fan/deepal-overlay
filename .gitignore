@@ -34,5 +34,20 @@ __pycache__/
 # Release artifacts — APKs live on GitHub Releases, not in the repo
 *.apk
 
-# golden runs (baselines are committed explicitly)
-tools/golden/
+# golden run dirs are ignored by pattern; baselines/snapshots/reports and the
+# committed W4_C pills subset are tracked (git add -f if the pattern matches)
+tools/golden/W4_[AB]_*
+tools/golden/live*
+tools/golden/frame1_*
+tools/golden/v2_10_44_*
+tools/golden/_v96_single
+tools/golden/empty_id_align_draft.json
+# W4_C: only the committed subset (manifest + mashina_top/shop pills.json)
+tools/golden/W4_C_clean_96/*
+!tools/golden/W4_C_clean_96/manifest.txt
+!tools/golden/W4_C_clean_96/mashina_top/
+!tools/golden/W4_C_clean_96/shop/
+tools/golden/W4_C_clean_96/mashina_top/screenshot.png
+tools/golden/W4_C_clean_96/mashina_top/overlays.txt
+tools/golden/W4_C_clean_96/shop/screenshot.png
+tools/golden/W4_C_clean_96/shop/overlays.txt

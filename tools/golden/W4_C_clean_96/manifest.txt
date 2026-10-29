@@ -1,0 +1,13 @@
+run=W4_C_clean_96 dev=192.168.4.124:35087 ts=2026-10-20T08:42:08Z
+apk_apk=dbgB.apk apk_md5=5b7b927ae03f841c041245fecdb2aad0
+apk_version=versionName=2.10.44
+screen=mashina_top
+screen=mashina_scroll
+screen=trip_info
+screen=service_deepal_grid
+screen=service_acc
+screen=my_tab
+screen=settings_car
+screen=notifications
+screen=explore
+screen=shop

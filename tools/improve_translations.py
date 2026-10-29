@@ -38,7 +38,7 @@ app/src/main/assets/dict_zh_en.json и dict_zh_ru.json через LLM API
 
 Переменные окружения:
   API_URL (default http://10.0.0.128:11434/v1/chat/completions)
-  API_KEY (default ollama), API_MODEL (default Qwen3.8-27B-BF16:latest),
+  API_KEY (default ollama), API_MODEL (default qwen3.8:27b),
   API_MAX_TOKENS (20000), API_TIMEOUT (900), API_BATCH_SIZE (12),
   API_LONG_THRESHOLD (200 — строки длиннее отправляются по одной),
   API_DEBUG (1 — лог в tools/logs/improve_translations.log),

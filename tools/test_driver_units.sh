@@ -24,6 +24,10 @@ set -uo pipefail
 D="$(cd "$(dirname "$0")/.." && pwd)"
 S="$D/tools/capture_retest.sh"
 FIX="$D/tools/golden/W4_C_clean_96"        # real (degraded-run) fixtures
+# Committed W4_C subset = mashina_top/pills.json + shop/pills.json +
+# manifest.txt (screenshots/overlays.txt stay untracked, run dirs are
+# gitignored). The shop KEEP assertion below additionally needs the session
+# a11y dump /tmp/opencode/w4c_g.xml (not in the repo) — skipped when absent.
 WORK=$(mktemp -d /tmp/opencode/unit_test.XXXX)
 trap 'rm -rf "$WORK"' EXIT
 FAIL=0

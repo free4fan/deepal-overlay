@@ -623,13 +623,12 @@ def sweep(pills, ctx_bag, word_wrap, tol, frame1=True):
 # excluded from the defect count; the gate is GREEN (exit=0) when no
 # UNATTRIBUTED defect exists. A new dx with a key NOT listed here still
 # fails the gate (exit=1); a key here that matches nothing is reported as
-# STALE. Sync this set with tools/golden/sweep_report_v96.json + DESIGN.md.
+# STALE. Sync this set with tools/golden/sweep_report_v2_10_66.json + DESIGN.md.
 KNOWN_LIMITS = frozenset({
     ("mashina_scroll", "tv1", "Быстрый холод", "h"),
     ("service_deepal_grid", "item_help_center_tv", "Моб. интернет", "h"),
     ("explore", "tv_content", "Фестиваль двойной", "h"),
     ("my_tab", "txt_content", "Вы получите 2 очка", "h"),
-    ("trip_info", "", "Deepal был с тобой", "w"),
 })
 KNOWN_LIMIT_REF = {
     ("mashina_scroll", "tv1"):
@@ -640,8 +639,6 @@ KNOWN_LIMIT_REF = {
         "min(h,maxPillH)-бритва: tie 129==129 @2.25, natural выигрывает 2.75-4.0 (ic(fs*1.25)/padv)",
     ("my_tab", "txt_content"):
         "накопление truncation ic(fs*1.25) на 2 линиях (<1px/линию; двойного ic нет)",
-    ("trip_info", ""):
-        "int-квантование est СТОРОНЫ ПРИЛОЖЕНИЯ (estimateSourceWidth->int: 200px->88px@1.0) + sp-recompute — не константа computeLayout; float-est проверен численно: равно всем d",
 }
 
 
