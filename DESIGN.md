@@ -2272,3 +2272,87 @@ ChargeStatisticsMonth 3/3 — retry pill [309,1307,342,85] = 114
 невоспроизводимо live (share-список пуст — машина в ОТПУСК; закрыто
 113-записью, код с 113 не тронут). Коммиты: контракт `2ed56b6`,
 код+билд `20dd153`.
+
+### T-48. Разделы Сервис-таба (Зарядка / Частые услуги / Сервисные купоны) — разные размеры оверлеев (10-29, live ТЗ)
+
+**Live ТЗ (10-29):** «в закладке Сервис разделы Зарядка Частые услуги
+и Сервисные купоны имееют разные размеры оверлеев» + решение
+пользователя: **«унифицировать в больший»** (92px-класс купонного
+заголовка) — осознанное отклонение от по-нодной покровности (тот же
+класс, что T-41 alpha: preference пользователя, не дефект).
+
+**Live-факты (билд 116/2.10.64, Сервис-таб, captures t48_*):**
+- «Зарядка» (充电服务) tv_charging_title: нода 184×130, est=216,
+  pill 184×62, fs 31.5px.
+- «Частые услуги» (常用服务) tv_car_purchase_title: нода 184×130,
+  est=216, pill 236×62, fs 31.5px.
+- «Сервисные купоны» (服务卡券) tv_title: нода 858×66, est=176,
+  pill 431×92, fs 44px.
+- Покровность: 0 CJK-пикселей вне пилюль (pixel-check) — оверлеи
+  честные, РАЗНИЦА РАЗМЕРОВ = ДИЗАЙН САМОГО ПРИЛОЖЕНИЯ: пара —
+  18sp wrap_content + paddingVertical 12dp
+  (cservice_item_charging_service.xml / cservice_item_car_purchase.xml,
+  drb_sp_18=18.0sp), купон — 20sp (cservice_item_service_car_info.xml,
+  drb_sp_20=20.0sp). Профиль: пара `[18.0, {sl:1}]`, купон
+  `[None, {mx:1}]`.
+- Механика (live-верифицировано формулами): пара идёт tallIconBox:
+  шрифт rescale'ится fsTib = basePx×(w−16)/est (est=216 посчитан при
+  clamped 24sp-оценке → фактор 168/216=0.778), h(TIB) =
+  (int)(1.4·fs)+2·padV: 31.5→62 ✓ (live), купон (обычная строка):
+  h = node_h+2·padV = 66+26 = 92 ✓ (live).
+- **Почему data-only не хватает:** максимум data-only = sp 24
+  (MAX_TEXT_SP clamp): fs 42, h 82 (mirror-probe, real_fs=0) — на
+  10px ниже купонного класса (92). «Унифицировать» требует 20sp-класс.
+
+**Форма (контракт, жестко):**
+1. **Код (IOM + mirror, byte-for-byte): TIB-rescale НЕ применяется к
+   нодам С profile-sp.** Расширение v2.10.36-декаплинга («the box is
+   sized to this real font»): profile-sp = авторитетный реальный
+   шрифт (декомпилированный факт), estimate-based rescale (est при
+   clamped 24sp) его не переопределяет. IOM: рядом с fontSp-lookup
+   (~:694) фикс `boolean profileFont` (true ⇔ realFontSp.get(viewId)
+   ≠ null); TIB-блок (~:785) += `!profileFont`. Mirror:
+   `profile_font = (s.vid is not None and s.vid in
+   ctx.real_font_sp)`; `if tall and est > 0 and not profile_font`.
+   Всё остальное (форма TIB, floor FIT_MIN, ширина, ddy) — без
+   изменений.
+2. **Data: пара sp 18→20** — `tv_charging_title: [20.0, {'sl': 1}]`,
+   `tv_car_purchase_title: [20.0, {'sl': 1}]` (sl сохранён). 20 =
+   drb_sp_20 = layout-шрифт купонного заголовка (вердикт из
+   decompiled layouts) — нормализация пары в класс «больше» по
+   решению пользователя.
+3. **Ожидаемый live:** пара — fs 45px, h 89, ddy≈20, ddx=0
+   (start-locked; правая половина строки заголовков пуста), w
+   fit-to-RU («Зарядка» ≈184–216, «Частые услуги» ≈296–316); купон
+   без изменений (44/92/431). Итог: слэбы 89/89/92 (≤3px), шрифты
+   45/45/44 (≤1px) — один размерный класс.
+4. **Blast radius (доказательство):** mirror даёт приоритет
+   real_fs (fsPx из dump) над profile-sp → baseline-пара
+   service_acc (real_fs 24.5; scaling там и без того не срабатывает:
+   fsTib 19.06 < floor 20.25) byte-идентична С и БЕЗ skip; остальные
+   5 baseline-TIB-нод profile-sp НЕ имеют (tv_content×2, content,
+   tvDes, tv_title) → skip для них no-op → **0/171 baseline-изменений
+   на всех 8d**. Live: TIB+profile-sp узлы на всех сниманных
+   экранах = только 2 целевых заголовка (аудит в regression-прогоне).
+
+**Gates:**
+1. **Offline:** self-diff 171/171 + full sweep PASS exit=0 (8d);
+   mirror-probe (real_fs=0 = live-модель): текущая форма
+   воспроизводит live (31.5/62, ddy34, ddx0; w — model-boundary
+   222 vs 236, задокументирован), новая форма (sp20+skip) → fs 45,
+   h 89; купон без изменений (44/92, w model-boundary 377 vs 431).
+2. **Build 117** (2.10.65), install + rebind.
+3. **Live-гейт (решающий):** Сервис-таб — все 3 заголовка одного
+   размерного класса (пара в 92px-классе: slab ≈89–92, RU-шрифт =
+   класс купона), CJK 100% покрыт (pixel-check, 0 px вне пилюль),
+   остальные пилюли экрана без дельты vs t48_now_pills/t48_top
+   (кроме 2 целевых заголовков).
+4. **Регрессия 1 прогон:** mashina-top 16/16 vs ser_t0; share-car
+   expanded 4/4 vs 111; ChargeStatistics 3/3 (retry = 114);
+   settings_car 18/18 vs 113; SceneHome (заголовки обычные пилюли,
+   кнопки hug) + TIB+profile-sp аудит всех снимков (изменились
+   только целевые заголовки).
+
+**Откат:** `git checkout` view_profiles.json + IOM + mirror +
+build.gradle; DESIGN «ИТОГ T-48: форма отклонена». Порядок: контракт
+→ IOM+mirror+data → offline → live 3/4.
