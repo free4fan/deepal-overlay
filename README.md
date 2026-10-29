@@ -16,7 +16,8 @@
 ## Использование
 
 - **Плавающая кнопка ON/OFF** (правый верхний угол) — включение/выключение перевода
-- **Quit** — отключает accessibility service, закрывает приложение (при следующем запуске нужно снова включить accessibility в настройках)
+- **Quit (keep accessibility)** — закрывает приложение, accessibility service остаётся включённым
+- **Quit (disable accessibility)** — отключает accessibility service, закрывает приложение (при следующем запуске нужно снова включить accessibility в настройках)
 - **Open Deepal** — запускает приложение Deepal
 
 ### Настройки (в MainActivity)
@@ -25,7 +26,7 @@
 - **Translation Language** — язык перевода (English / Русский)
 - **Scan all apps** — переводить во всех приложениях (не только в Deepal)
 - **Word wrap** — перенос длинных переводов на несколько строк
-- **Dark overlay** — тёмный фон для всех переводов
+- **Translucent overlay** — полупрозрачный оверлей (window alpha 0.8, «не режет глаз»; слой пилюль opaque в обоих режимах)
 - **App theme** — тема приложения (Светлая / Тёмная / Системная)
 
 ## Требования
@@ -36,21 +37,23 @@
 ## Как работает
 
 1. Accessibility Service отслеживает события окон (открытие, скролл, смена контента)
-2. При обнаружении китайского текста — ищет перевод в embedded словаре (4856 строк)
+2. При обнаружении китайского текста — ищет перевод в embedded словаре (5097 RU / 5096 EN)
 3. Если строка не найдена в словаре — отправляет запрос к Google Translate API
 4. Перевод отображается как overlay поверх оригинального текста:
-   полупрозрачный тёмный scrim в контенте, непрозрачный тёмный в зоне тулбара,
-   коротким подписям в узких узлах (кнопки, заголовки) передаётся центрирование
+   слой пилюль opaque в обоих режимах (CJK не «проежается» под переводом —
+   системный alpha-кап 0.8 обходим через TYPE_ACCESSIBILITY_OVERLAY);
+   пользовательский режим с window alpha 0.8; коротким подписям в узких
+   узлах (кнопки, заголовки) передаётся центрирование
 
 ## Технические детали
 
 - **Package**: `com.walter.overlay`
 - **Min SDK**: 26 (Android 8.0)
 - **Target SDK**: 34 (Android 14)
-- **Embedded dictionaries**: `dict_zh_en.json` (4856 строк), `dict_zh_ru.json` (4856 строк)
-- **Overlay**: `TYPE_APPLICATION_OVERLAY` с адаптивным фоном (scrim/тёмный по зоне)
+- **Embedded dictionaries**: `dict_zh_en.json` (5096 строк), `dict_zh_ru.json` (5097 строк)
+- **Overlay**: `TYPE_ACCESSIBILITY_OVERLAY` (однократный фоллбек на `TYPE_APPLICATION_OVERLAY` при `BadTokenException`); слой opaque — AOSP-кап alpha 0.8 для SAW+NOT_TOUCHABLE окон не применяется к trusted-окнам
 - **Flicker-free**: обновление overlay in-place без пересоздания
-- **Точный размер**: ширина меряется `Paint.measureText`, кегль в px (не SP)
+- **Точный размер**: ширина меряется `Paint.measureText` (fit-to-text — пилюля ровно под текст); кегль — sp из id-профиля `view_profiles.json`, для узлов без профиля — оценка
 - **Word wrap**: нативный перенос по фактической ширине (max 8 строк)
 - **Кэш**: LRU (20000), постоянного файла `translation_cache.json`
 
@@ -133,7 +136,7 @@ python3 tools/improve_translations.py --all            # полная перез
 Изменения пишутся в `tools/logs/improve_report_<ts>.json` — сверять до пуша.
 
 Env: `API_URL` (default `http://10.0.0.128:11434/v1/chat/completions`),
-`API_KEY`, `API_MODEL` (default `Qwen3.8-27B-BF16:latest`), `API_BATCH_SIZE`.
+`API_KEY`, `API_MODEL` (default `qwen3.8:27b`), `API_BATCH_SIZE`.
 
 Особенности под наше приложение (vs HU-проект): значения словаря рисует
 `TextView.setText` (plain text, JSON-ассет), поэтому скрипт НЕ применяет

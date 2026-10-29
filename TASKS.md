@@ -150,7 +150,7 @@ dark_overlay=off).
     **Нумерация (10-24):** ddy/stand-итерация ниже переименована №3→**№4**
     (№3 занят empty-id align-итерацией), tall×1 (W-cap) — **T-36b**.
     **Итерация №3 (empty-id align, T-36a arc) — PASS оффлоун (10-23/24,**
-    **контракт записан ДО правок**, `fb7b100`; DESIGN «Граница id-профили»,
+    **контракт записан ДО правок**, `fb7b100`; DESIGN «Граница id-профиля»,
     «КОНТРАКТ/ИТОГ Т-36a №3»). Форма = ДАННЫЕ + один helper, `computeLayout`
     не тронут (контракт №3 выполнен дословно). Проб
     `tools/_annotate_emptyid_align.py` (38 empty-id нод canonical baseline,
@@ -176,7 +176,7 @@ dark_overlay=off).
     кандидатуры (его PARTIAL-A/B ниже остаётся базой общей геометрии —
     self-diff 171/171). Дальше: **№4 (ddy×3 + stand×2)** — после ship;
     T-36c (runtime-пиксельный детектор для новых экранов без baseline) —
-    не раньше T-36b. Записи: DESIGN.md «Граница id-профили», «КОНТРАКТ
+    не раньше T-36b. Записи: DESIGN.md «Граница id-профиля», «КОНТРАКТ
     Т-36a итерации №3», «ИТОГ Т-36a итерации №3»; CHANGELOG v2.10.47.
     **Live A/B ship-кандидата v2.10.46 (code 98) — PARTIAL (10-23,
     DESIGN «Live A/B ship-кандидата»):** телефон online (Pixel 9 Pro,
@@ -196,7 +196,9 @@ dark_overlay=off).
     отдельный контракт (инвариант + 0 flips на 2.25) + свой коммит + sweep +
     self-diff; после — A/B live, node остаётся в KNOWN_LIMITS до live-
     подтверждения (стale-детектор подскажет, когда снять).
- - **Т-37. Fit-to-text width (10-24/25) — оффлайн PASS, live A/B ждёт телефон.**
+ - **Т-37. Fit-to-text width (10-24/25) — ЗАКРЫТО (в продакшене с
+   v2.10.48/100; ship в 107/2.10.55); формальный live A/B — см.
+   «В ожидании».**
    ТЗ пользователя (на живом телефоне после №3): «все оверлеи должны быть
    размером ровно столько, чтобы поместился текст перевода» (ширина
    settings-car строки = узел-контейнер weight=1, тёмная плашка >> текста).
@@ -216,10 +218,12 @@ dark_overlay=off).
    v2.10.48/code 100, md5 91e3b8ede31402a0ff358a4c84ff39da** (aapt2:
    100/2.10.48 ✓, empty_id_align.json в assets). Live A/B (гейт 3):
    settings_car + explore + service_acc + mashina 4-кнопки + my_tab плитки,
-   171/171 --frame1 + 8 CJK-floor узлов — БЛОКИРОВАН (телефон offline).
-   Записи: DESIGN «Т-37 ТЗ+КОНТРАКТ» + «ИТОГ T-37»; CHANGELOG v2.10.48.
- - **Т-38. Profile-center data fix — «Центр сообщений» (10-25) — оффлайн
-   PASS, live A/B ждёт телефон.** ТЗ (live): my_tab «Центр сообщений»
+   171/171 --frame1 + 8 CJK-floor узлов — в «В ожидании» (телефон в
+   ОТПУСК с 10-23). Записи: DESIGN «Т-37 ТЗ+КОНТРАКТ» + «ИТОГ T-37»;
+   CHANGELOG v2.10.48.
+ - **Т-38. Profile-center data fix — «Центр сообщений» (10-25) —
+   ЗАКРЫТО (в продакшене с v2.10.49/101; ship в 107/2.10.55);
+   формальный live A/B — см. «В ожидании».** ТЗ (live): my_tab «Центр сообщений»
    нависает в центре узла, а приложение рисует 消息中心 влево (95..230)
    → пилюля не над текстом. Корень (не T-37): шаг 3 ошибочно классифиц.
    mixed-id `txt_title` как g:center (decompile_ids.py:159 — ANY
@@ -234,7 +238,8 @@ dark_overlay=off).
    **sweep exit=0, 0 unknown** (инвариантен) + **build v2.10.49/101,
    md5 4c95a148ce456801bb32a2ac4cbeb6cd** (asset в APK ✓). Оффлайн:
    my_tab pill x≈92. Live A/B (гейт 5): my_tab + header уведомлений —
-   БЛОКИРОВАН (телефон offline). Перезапись профилей (T-38b) — отдельный
+   в «В ожидании» (телефон в
+   ОТПУСК с 10-23). Перезапись профилей (T-38b) — отдельный
    контракт. Записи: DESIGN «Т-38 ТЗ+КОНТРАКТ» + «ИТОГ T-38»;
    CHANGELOG v2.10.49.
  - **Словарь (10-25, live ТЗ): `空调` = «Климат»** (вместо
@@ -274,7 +279,8 @@ dark_overlay=off).
    (26,26,26) opaque, CJK-fantoms ушли (A/B crop), frames byte-в-byte,
    touch pass-through сохранён (тап под пилюлей прошёл в приложение).
  - **Т-39b. (F)-гейт: сузить полосу для пустых-id label-строк с
-   toggle (ОТКРЫТО, код-форма, СВОЙ КОНТРАКТ ДО ПРАВКИ).** Измерено:
+   toggle — ЗАКРЫТО (билд 110/2.10.58; гейт 6 закрыт регрессией 113
+   10-27; контракт записан ДО правки).** Измерено:
    строка [224..746]x102h (пустой id, SDK car-control) попадает в
    пиксельную полосу (F) (x>30, 0.28<w<0.65sw, h96..130, w>2est)
    по совпадению формы → (F) центрирует. Формы-кандидаты (решается в
@@ -534,6 +540,11 @@ dark_overlay=off).
    НЕ ковырять `enabled_accessibility_services` toggle'ами: off→on одной
    строки оставил сервис Enabled-but-not-Bound; строку править только
    целиком (оба сервиса), как правило сессии.
+8. **Self-diff референс — в репо, не в /tmp.** `tools/golden/
+   snap_preT38_225.json` (живой 171-нодовый снапшот d2.25) —
+   обязательный референс `tools/_snapshot_225.py` на каждый PR.
+   Закоммичен 10-29 (REVIEW): до этого gate не воспроизводился на
+   fresh-clone — референс лежал в /tmp/opencode.
 
 ## Сделано
 
@@ -544,8 +555,8 @@ dark_overlay=off).
   a11y.xml + overlays.txt + screenshot.png + manifest.txt) и
   `tools/diff_golden.py` (модели покрытия `label`/`block`, overhang ≤2px,
   источник пилюль a11y/dumpsys/MISSING→hard-fail, node-diff). Протестировано
-  на синтетике (MOVED + overhang ловятся). **Baseline v2.10.43 на устройство**
-  — ближайший шаг при наличии телефона.
+  на синтетике (MOVED + overhang ловятся). **Baseline v2.10.43 на
+  устройство** — снято 10-17 (`tools/golden/v2_10_43_baseline/`).
 - **Шаг 2** — таблица инвентаризации гейтов A–F + shape-классов в
   `DESIGN.md`: кто что обслуживает, кто покрывается профилем
   (`tvTopTitle`=[24sp,g:center,p:20]; `exit_button`={fw,sl}; 635 id уже
@@ -1095,6 +1106,10 @@ dark_overlay=off).
 - Статус: **сделан** (v2.10.29).
 
 ## В ожидании (дополняется по мере рекомендаций)
+- **Формальные live A/B гейты T-37/T-38** (формы в продакшене с
+  107/2.10.55, оффлайн PASS; статусы Т-37/Т-38 — ЗАКРЫТО). Ждут
+  live-сессию телефона (машина в ОТПУСК с 10-23): T-37 — explore-tab
+  + 8 CJK-floor узлов; T-38 — my_tab + header уведомлений.
 - **ЗАКРЫТО 10-29 (билд 116/2.10.64, md5 `1a1f32f3…`): T-45, T-46,
   T-47.** T-45 (retry-кнопка ChargeStatistics): live PASS (pill
   [309,1307,342,85] внутри stadium) + регрессия-хвост закрыт прогоном
@@ -1153,10 +1168,29 @@ dark_overlay=off).
   задокументирован (Мой → ⚙ (885,182) → «Настройки разрешений»).
   DESIGN «ИТОГ T-49». Коммиты: контракт+data+билд `3c81e47`, ИТОГ
   (текущий).
+- **ЗАКРЫТО 10-29 (без билда): REVIEW-10-29 (ревью кода/доков на
+  актуальность + мёртвый код; «все 4» группы, group 5 отложена).**
+  Код: `9d9457a` — clickable через async showTranslation (13-арг.) +
+  в golden dump (T-47 пункт 1; live-верификация при следующей
+  сессии, самосходится reconcile ≤3s). Гигиена гейта: `7c23f25` —
+  STALE KNOWN_LIMITS trip_info удалена (0 STALE-LIMIT), sync-коммент →
+  `sweep_report_v2_10_66.json`, self-diff-референсы + W4_C subset
+  закоммичены, .gitignore golden-правило по run-каталогам. Мёртвый
+  код: `2cb3b1a` — осиротевшие конструкторы/методы/imports (Java+TS),
+  зеркало (_LINE_FACTOR, wrap_line_count), 20 one-shot tools + 6
+  stale PNG. Документы (текущий коммит): DESIGN ИТОГ T-40/T-43 +
+  статус, TASKS статусы T-37/T-38 (ЗАКРЫТО, формальный live A/B →
+  «В ожидании»)/T-39b (ЗАКРЫТО) + правило 8, CHANGELOG 2.10.58→
+  2.10.66, README, prompt.md. Оффлайн после каждого кодового
+  коммита: compile ✓, self-diff 171/171, sweep PASS exit=0 (4
+  known-bounded + 39 mirror, 0 STALE), driver-units PASSED,
+  diff_golden 4/4, profile-align 7284 ids PASS. Group 5 (px literals
+  в toolbar-гейтах IOM) — отложена: нужен DESIGN-контракт + mirror
+  twin + sweep (геометрический сдвиг, отдельный релиз).
 - **T-39c-территория (не tasked, minor):** «В салоне / • Воздух»
   (tv_air_title) a11y-bounds ≠ rendered-CJK; визуальный вердикт
   пользователя по T-41 0.8-режиму (toggle ON на телефоне) не получен.
-- **СВЕРКА trip_info «Deepal был с тобой» (STALE-LIMIT снят, T-32):**
+- **СВЕРКА trip_info «Deepal был с тобой» (STALE-LIMIT снят, T-37):**
   пилюля теперь видна в mashina-top-снах ([102,295,344,73] в final
   pass 10-26), но визуальная CJK-coverage-сверка не сделана (нужна
   чистая страница + скрин; отдельно от текущих форм).
