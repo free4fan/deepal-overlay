@@ -2250,3 +2250,25 @@ clickable — семантический ноль-маржи.
 **Откат:** `git checkout` TranslationService + IOM + mirror +
 build.gradle; DESIGN «ИТОГ T-47: форма отклонена». Порядок: контракт
 → service+IOM+mirror → offline → live 3/4.
+
+**ИТОГ T-47: ФОРМА ПРИНЯТА, ЗАКРЫТО (10-29, билд 116/2.10.64, md5
+`1a1f32f3…`).** Offline: self-diff 171/171, sweep PASS exit=0; probe:
+tvName (clickable=False) → path=none, left-anchored fit-to-text
+(mirror 439×94 = модельная граница, live 461×94), tvAction
+(clickable=True) → path=F2 206×79 0/0. Live (SceneHome «моя сцена»):
+заголовки карточек = обычные прямоугольные пилюли (RU «по дороге на
+работу» полностью читается, CJK покрыт, НЕ овал) — [92,968,461,94]
+и [92,1686,467,94], ровно 114-значения; кнопки «Добавить» — hug 1:1
+без дельты (T-46 не регресснул). Регрессия 1 прогон (закрывает T-46
+gate 4 + T-44 gate 4 + T-45 gate 4 + T-39b хвост) — ВСЁ ПРОШЛО:
+mashina-top 16/16 byte-в-byte vs ser_t0; share-car expanded 4/4
+byte-в-byte vs 111 (CTA center cx=480, title 1-линия);
+ChargeStatisticsMonth 3/3 — retry pill [309,1307,342,85] = 114
+(T-45 profile-фолбэк не тронут F2: 182dp вне диапазона); settings_car
+18/18 byte-в-byte vs 113 (обе title). F2-hug аудит всех 116-снапов:
+единственные hug-узлы = tvAction-кнопки (tvDes-«hug» — до-существующий,
+в ser_t0 baseline, вне F2-диапазона: 182dp>150dp, 57.8dp>46dp).
+Остаток: T-44-состояние (title 184×113, h=62) на share-car
+невоспроизводимо live (share-список пуст — машина в ОТПУСК; закрыто
+113-записью, код с 113 не тронут). Коммиты: контракт `2ed56b6`,
+код+билд `20dd153`.

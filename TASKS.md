@@ -1095,19 +1095,22 @@ dark_overlay=off).
 - Статус: **сделан** (v2.10.29).
 
 ## В ожидании (дополняется по мере рекомендаций)
-- **T-46 live-гейт (билд 115/2.10.63, md5 `944f78e9…`, оффлайн PASS):**
-  Блоки сцен — пилюля кнопки «Добавить» (tvAction 206×79) = кнопка
-  1:1 (width≈206, height≈79, 0 вылетов за stadium в 4 сторонах,
-  CJK «一键添加» покрыт, chip-радиус); обе карточки. Остальные пилюли
-  экрана без дельты. Регрессия 1 прогон (закрывает T-44 gate 4 + T-45
-  gate 4 + T-39b хвост): share-car scrolled (T-44 h=62) + expanded
-  (4/4 vs 111) + ChargeStatisticsMonth (T-45: retry inside stadium) +
-  settings_car (обе title) + mashina-top (16/16 ser_t0). Оффлайн:
-  self-diff 171/171, sweep PASS exit=0, зонд F2 0/1368 (171×8d),
-  A/B T-45 profile-узлы не тронуты.
-  **T-45 закрыт target-side** (10-27 live PASS на 114: retry pill
-  [309,1307,342,85] внутри stadium, углы 10-11px от дуги; DESIGN
-  «ИТОГ T-45»).
+- **ЗАКРЫТО 10-29 (билд 116/2.10.64, md5 `1a1f32f3…`): T-45, T-46,
+  T-47.** T-45 (retry-кнопка ChargeStatistics): live PASS (pill
+  [309,1307,342,85] внутри stadium) + регрессия-хвост закрыт прогоном
+  T-47 (116: 3/3, retry-пилюля byte-в-byte 114). T-46 (кнопка
+  «Добавить» Блоки сцен, 281×109 slab → 206×79): gate (F2)
+  small-stadium-chip (DESIGN T-46, билд 115), live PASS — все кнопки
+  hug stadium 1:1. T-47 (регрессия T-46: F2 захватил заголовок
+  tvName — «овал» на названии сцены): дискриминатор = a11y
+  isClickable (кнопка true, заголовок false; DESIGN T-47, билд 116),
+  live PASS — заголовки = обычные пилюли (461×94 = 114-значения).
+  Регрессия 1 прогон 116 — ВСЁ ПРОШЛО: mashina-top 16/16 vs ser_t0,
+  share-car expanded 4/4 vs 111, ChargeStatistics 3/3, settings_car
+  18/18 vs 113, F2-hug аудит = только tvAction. Остаток: T-44-состояние
+  share-car (title 184×113, h=62) невоспроизводимо live (share-список
+  пуст, машина в ОТПУСК) — закрыто 113-записью, код не тронут.
+  Коммиты: T-46 `09d1ec3`/`d8ca64a`, T-47 `2ed56b6`/`20dd153`/ИТОГ.
 - **T-39c-территория (не tasked, minor):** «В салоне / • Воздух»
   (tv_air_title) a11y-bounds ≠ rendered-CJK; визуальный вердикт
   пользователя по T-41 0.8-режиму (toggle ON на телефоне) не получен.
