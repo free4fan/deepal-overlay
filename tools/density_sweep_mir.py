@@ -105,8 +105,6 @@ def ic(x):
 # lines TextView NEEDS for the full text inside (width − 2·padH) — the
 # sweep sizes it with the same exact layout (tools/density_sweep.py).
 _TEXT_SLOPES = None
-_LINE_FACTOR = 1.25        # lh = (int)(fs·1.25) — Java convention; the dump
-                           # confirms 2 lines at fs 30.67px → h 94 = 2·ic(1.25fs)+2padV
 
 def set_text_slopes(m):
     global _TEXT_SLOPES
@@ -140,7 +138,8 @@ def _units(ch):
     if ch == '…':
         return 0.50
     if ch.isalpha():
-        return 0.50        # Cyrillic/Latin average (tools/_calib_text_model.py)
+        return 0.50        # Cyrillic/Latin average (one-shot calibration baked in;
+                           # probe script deleted 10-29, findings are these coefficients)
     if ch.isdigit():
         return 0.57
     return 0.44            # punctuation
@@ -872,33 +871,6 @@ def _words(text):
         else:
             out.append(part)
     return out
-
-
-def wrap_line_count(text, box_w, fs, max_lines, max_hpx, d):
-    padh = max(rp(PADH_FLOOR_DP, d), ic(jf(fs * 0.4)))
-    padv = max(rp(PADV_FLOOR_DP, d), ic(jf(fs * 0.3)))
-    avail = jf(jf(box_w) - 2.0 * padh)
-    if avail < fs:
-        return 0
-    lines = 1
-    x = 0.0
-    space_w = measure(" ", fs)
-    for word in _words(text):
-        ww = measure(word, fs)
-        need = ww + (space_w if x > 0 else 0.0)
-        if x + need > avail and x > 0:
-            x = ww
-            lines += 1
-            if lines > max_lines:
-                return 0
-        else:
-            x += need
-        if x > avail:
-            return 0
-    h = jf(jf(lines * fs) * 1.25 + 2.0 * padv)
-    if max_hpx < JMAX and h > jf(float(max_hpx) + 2.0):
-        return 0
-    return lines
 
 
 def truncate_to_lines(text, box_w, fs, max_lines, max_hpx, d):

@@ -4,7 +4,6 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Rect;
@@ -810,12 +809,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         return HTML_PATTERN.matcher(s).replaceAll("").replaceAll("\\s+", " ").trim();
     }
 
-    private boolean isToolbarId(AccessibilityNodeInfo node) {
-        String id = node.getViewIdResourceName();
-        if (id == null) return false;
-        return id.toLowerCase().contains("toolbar") || id.toLowerCase().contains("appbar");
-    }
-
     private void collectChineseNodes(AccessibilityNodeInfo node, List<TextNodeInfo> result) {
         collectChineseNodes(node, result, 0);
     }
@@ -1353,13 +1346,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         // (a small stadium chip is clickable; a same-sized title label
         // is not — size alone cannot tell them apart, DESIGN T-47).
         boolean clickable;
-
-        TextNodeInfo(String text, Rect bounds, float estimatedTextSize, boolean darkZone) {
-            this.text = text;
-            this.bounds = bounds;
-            this.estimatedTextSize = estimatedTextSize;
-            this.darkZone = darkZone;
-        }
 
         TextNodeInfo(String text, Rect bounds, float estimatedTextSize,
                      boolean darkZone, String viewId, boolean clickable) {

@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -169,20 +168,6 @@ public class InlineOverlayManager {
 
         public OverlaySpec(String key, String text, int width, int height,
                            float textSizeSp, boolean darkZone, boolean centered,
-                           int estSourceWidthPx) {
-            this(key, text, width, height, textSizeSp, darkZone, centered,
-                estSourceWidthPx, null, false);
-        }
-
-        public OverlaySpec(String key, String text, int width, int height,
-                           float textSizeSp, boolean darkZone, boolean centered,
-                           int estSourceWidthPx, String viewId) {
-            this(key, text, width, height, textSizeSp, darkZone, centered,
-                estSourceWidthPx, viewId, false);
-        }
-
-        public OverlaySpec(String key, String text, int width, int height,
-                           float textSizeSp, boolean darkZone, boolean centered,
                            int estSourceWidthPx, String viewId, boolean clickable) {
             this.key = key;
             this.text = text;
@@ -231,13 +216,6 @@ public class InlineOverlayManager {
 
         Layout(int width, int height, float textSizePx, int bgColor, int textColor,
                boolean multiline, int gravity, int padH, int padV, boolean hidden,
-               int dx, int dy) {
-            this(width, height, textSizePx, bgColor, textColor, multiline, gravity,
-                padH, padV, hidden, dx, dy, null, false);
-        }
-
-        Layout(int width, int height, float textSizePx, int bgColor, int textColor,
-               boolean multiline, int gravity, int padH, int padV, boolean hidden,
                int dx, int dy, CharSequence caption, boolean stadium) {
             this.width = width;
             this.height = height;
@@ -254,19 +232,6 @@ public class InlineOverlayManager {
             this.caption = caption;
             this.stadium = stadium;
         }
-    }
-
-    public InlineOverlayManager(Context context) {
-        this(context, null, null);
-    }
-
-    public InlineOverlayManager(Context context, Set<String> startLockedIds) {
-        this(context, startLockedIds, null);
-    }
-
-    public InlineOverlayManager(Context context, Set<String> startLockedIds,
-                                Map<String, Integer> realFontSp) {
-        this(context, startLockedIds, realFontSp, null);
     }
 
     public InlineOverlayManager(Context context, Set<String> startLockedIds,
@@ -441,15 +406,6 @@ public class InlineOverlayManager {
     }
 
     private long lastGoldenDumpMs;
-
-    public void showTranslation(int left, int top, int width, int height,
-                                String translatedText, float textSizeSp,
-                                boolean darkZone, boolean centered,
-                                int estSourceWidthPx,
-                                boolean wordWrap, float overlayAlpha) {
-        showTranslation(left, top, width, height, translatedText, textSizeSp,
-            darkZone, centered, estSourceWidthPx, wordWrap, overlayAlpha, null, false);
-    }
 
     public void showTranslation(int left, int top, int width, int height,
                                 String translatedText, float textSizeSp,
