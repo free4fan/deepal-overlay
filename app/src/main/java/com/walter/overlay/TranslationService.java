@@ -1113,7 +1113,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                                 n.bounds.width(), n.bounds.height(),
                                 n.translated, n.estimatedTextSize, n.darkZone, centered,
                                 estimateSourceWidth(n.text, n.estimatedTextSize, density),
-                                ww, dk, n.viewId);
+                                ww, dk, n.viewId, n.clickable);
                         }
                     }
                     startBatchIfIdle();

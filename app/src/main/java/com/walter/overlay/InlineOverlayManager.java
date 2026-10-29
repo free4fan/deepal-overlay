@@ -427,6 +427,7 @@ public class InlineOverlayManager {
                     .put(lp.x).put(lp.y).put(lp.width).put(lp.height));
                 o.put("est", s.estSourceWidthPx);
                 o.put("sp", s.textSizeSp); // node's estimated font (sp) -> 1em
+                o.put("clickable", s.clickable); // T-47: loader defaults False; new dumps must carry it
                 o.put("fsPx", tv.getPaint().getTextSize());
                 arr.put(o);
             }
@@ -447,7 +448,7 @@ public class InlineOverlayManager {
                                 int estSourceWidthPx,
                                 boolean wordWrap, float overlayAlpha) {
         showTranslation(left, top, width, height, translatedText, textSizeSp,
-            darkZone, centered, estSourceWidthPx, wordWrap, overlayAlpha, null);
+            darkZone, centered, estSourceWidthPx, wordWrap, overlayAlpha, null, false);
     }
 
     public void showTranslation(int left, int top, int width, int height,
@@ -455,12 +456,12 @@ public class InlineOverlayManager {
                                 boolean darkZone, boolean centered,
                                 int estSourceWidthPx,
                                 boolean wordWrap, float overlayAlpha,
-                                String viewId) {
+                                String viewId, boolean clickable) {
         if (translatedText == null || translatedText.isEmpty()) return;
 
         String key = left + "," + top;
         OverlaySpec spec = new OverlaySpec(key, translatedText, width, height,
-            textSizeSp, darkZone, centered, estSourceWidthPx, viewId);
+            textSizeSp, darkZone, centered, estSourceWidthPx, viewId, clickable);
 
         TextView existing = activeViews.get(key);
         if (existing != null) {
