@@ -2326,13 +2326,20 @@ ChargeStatisticsMonth 3/3 — retry pill [309,1307,342,85] = 114
    fit-to-RU («Зарядка» ≈184–216, «Частые услуги» ≈296–316); купон
    без изменений (44/92/431). Итог: слэбы 89/89/92 (≤3px), шрифты
    45/45/44 (≤1px) — один размерный класс.
-4. **Blast radius (доказательство):** mirror даёт приоритет
-   real_fs (fsPx из dump) над profile-sp → baseline-пара
-   service_acc (real_fs 24.5; scaling там и без того не срабатывает:
-   fsTib 19.06 < floor 20.25) byte-идентична С и БЕЗ skip; остальные
-   5 baseline-TIB-нод profile-sp НЕ имеют (tv_content×2, content,
-   tvDes, tv_title) → skip для них no-op → **0/171 baseline-изменений
-   на всех 8d**. Live: TIB+profile-sp узлы на всех сниманных
+4. **Blast radius (доказательство):** baseline-пара service_acc имеет
+   profile-sp (18) И real_fs=31.5 в dump → старая модель ТИБ-rescale
+   «упрямляла» её до 24.5/48/ddy41, тогда как СОБСТВЕННАЯ pill
+   baseline-dump'а = [51,152,184,62] / [51,1222,236,62] (fsPx 31.5,
+   ddy 34, h 62) — модель не воспроизводила device-рендер baseline.
+   T-48 (skip) меняет baseline-выход ТОЛЬКО этих 2 узлов: fs 24.5→31.5,
+   h 48→62, ddy 41→34, padh 9→12, padv 7→9 (w 184→184 / 184→222; 222
+   vs device 236 = тот же 14px text-model-boundary, что и live) — т.е.
+   модель ДОГНАЛА device-рендер (charging byte-в-byte, purchase в
+   модельной границе). Прочие 5 baseline-TIB-нод profile-sp не имеют
+   (tv_content×2, content, tvDes, tv_title) → skip no-op. Self-diff
+   baseline-сдвиг: ровно 2 целевых узла, референса-снапшот обновлён
+   (бэкап .preT48), 171/171 по новой; sweep: 39 boundary (было 40 —
+   один node стал чище). Live: TIB+profile-sp узлы на всех сниманных
    экранах = только 2 целевых заголовка (аудит в regression-прогоне).
 
 **Gates:**

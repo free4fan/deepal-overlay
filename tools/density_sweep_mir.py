@@ -355,6 +355,11 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
     # the estimate (the Java pre-profile code path — the sp IS the
     # estimate there). Unclamped: the app sets real float px sizes
     # (e.g. 20.25px @2.25 = an unrounded 9sp).
+    # T-48 (IOM byte-for-byte): the node carries an authoritative profile
+    # sp (the app's real font) — the estimate-based TIB rescale below must
+    # not override it. Presence, not value: ctx.real_font_sp only holds
+    # non-null profile sps, like the IOM's realFontSp map.
+    profile_font = (s.vid is not None and s.vid in ctx.real_font_sp)
     if s.real_fs and s.real_fs > 0:
         text_px = jf(s.real_fs)
     else:
@@ -401,7 +406,9 @@ def compute_layout(s, word_wrap, siblings, ctx, trail=None, allow_deep=True,
             text_cap = at_heading
             fit_w = at_heading
             heading_cap = True
-    if tall and est > 0:
+    # T-48 (IOM byte-for-byte): TIB rescale skipped for profile-font nodes
+    # (the profile sp is the authoritative real font — DESIGN T-48).
+    if tall and est > 0 and not profile_font:
         fs_tib = jfd(jf(base_px * (s.w - 16.0)), est)
         if fs_tib < text_px and fs_tib >= jf(9.0 * d):
             text_px = fs_tib

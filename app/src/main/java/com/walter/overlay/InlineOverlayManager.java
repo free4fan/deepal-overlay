@@ -692,9 +692,10 @@ public class InlineOverlayManager {
         // Real font: the app's per-id sp (decompiled profile) when the node's
         // id resolves to one unambiguous size; otherwise the estimate.
         float fontSp = spec.textSizeSp;
+        boolean profileFont = false;
         if (spec.viewId != null && realFontSp != null) {
             Integer sp = realFontSp.get(spec.viewId);
-            if (sp != null) fontSp = sp;
+            if (sp != null) { fontSp = sp; profileFont = true; }
         }
         float textSizePx = fontSp * dm.density;
         textSizePx = Math.max(MIN_TEXT_SP * dm.density,
@@ -782,7 +783,12 @@ public class InlineOverlayManager {
         // than the tight box (常用服务 4×54px in a 184px tile). Cap the
         // caption font so `est` (the CJK extent at the source font) still
         // spans the box on one line — never below the floor.
-        if (tallIconBox && est > 0) {
+        // T-48: a profile sp is the app's authoritative real font (the
+        // v2.10.36 decoupling sizes the box to it), so the estimate-based
+        // rescale (est computed at the clamped 24sp estimate) must not
+        // override it (DESIGN T-48: the 18sp service-tab headers rendered
+        // in the 20sp section-header class stayed 0.78x smaller).
+        if (tallIconBox && est > 0 && !profileFont) {
             float fsTib = basePx * (spec.width - 16f) / est;
             if (fsTib < textSizePx && fsTib >= FIT_MIN_SP * dm.density) {
                 textSizePx = fsTib;
