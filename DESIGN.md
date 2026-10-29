@@ -2173,3 +2173,80 @@ yy=1307 дуга x=298..661 → левый угол 309 внутри на 11px, 
 tools/density_sweep_mir.py + build.gradle; DESIGN «ИТОГ T-46:
 форма отклонена». Порядок: контракт → IOM+mirror → offline (sweep!) →
 live 3/4.
+
+**ИТОГ T-46: button PASS; title-регрессия закрыта T-47 (билды
+115→116).** Live (SceneHomeActivity «моя сцена»): все 3 кнопки
+«Добавить» (tvAction) = stadium 1:1 (pill 206×79 = node, ddx=ddy=0,
+radius h/2) — до 114: 281×109 slab, вылет 75px. На 116 кнопка без
+дельты (T-47 не трогал размерные условия). Заголовок tvName на 115
+был stadium-«овалом» 1:1 (F2-ложное срабатывание, RU «по дороге на
+р...»); на 116 — обычная left-anchored пилюля [92,968,461,94] = ровно
+114-значение (T-47). Живое ТЗ (10-29): «название сцен перекрывается
+овальным оверлеем, это неправильно» — устранено.
+
+### T-47. F2 (T-46) захватывает заголовок карточки сцены — «овальный оверлей» на названии (10-29, live ТЗ)
+
+**Live-факты (билд 115/2.10.63, SceneHomeActivity «моя сцена»,
+карточки):**
+- tvName «по дороге на работу» node [92,981,276,1049] = 184×68px
+  (81.8×30.2dp), est=181, x=92: F2-условия ВСЕ истинны → pill
+  [92,981,184,68] stadium (radius 34) = «овал» на заголовке, RU
+  «по дороге на р...» (обрезан). На 114 (до F2): обычная left-anchored
+  fit-to-text пилюля [92,968,461,94] — RU читаем, CJK покрыт.
+- Кнопка «Добавить» (tvAction 206×79) при этом hug 1:1 — T-46 target
+  работает.
+- **Структурный дискриминатор в самом a11y-дереве (uiautomator dump
+  этого экрана):** tvAction **clickable=true**, tvName/tvMsg/tvType
+  **clickable=false**. Класс не помогает (оба android.widget.TextView —
+  MediumBoldTextView наследует TextView, a11y отчитывает базовый
+  класс). «Clickable-нода = нарисованная кнопка» — та же семантика,
+  что и у (F)/(F2) («нода = нарисованная кнопка»), но надёжный сигнал
+  вместо размера.
+
+**Корень:** F2-предикат геометрический (56<w<150dp, 28<h<46dp,
+w>0.75·est, x-inset, ddx=0, width>est, id не empty, !sl); left-
+aligned заголовок (wrap_content текст, CJK заполняет ноду)
+геометрически неотличим от small-stadium-кнопки. Размерные ужимки
+(напр. h≥32dp) дают 1.8dp-маржу до заголовка (30.2dp) — хрупко;
+clickable — семантический ноль-маржи.
+
+**Форма (контракт, жестко):**
+1. **`clickable` через весь pipeline (data-поле, не гейт):**
+   TranslationService `collectChineseNodes` — `node.isClickable()`
+   (захват в тот же validity-window, что darkZone/viewId) →
+   `TextNodeInfo.clickable` → `OverlaySpec.clickable` (новый
+   final-поле; legacy-конструкторы делегируют false) → IOM.
+2. **F2-предикат (IOM + mirror, byte-for-byte):** += `spec.clickable`
+   (mirror: Spec-поле, default False; `and s.clickable` в f2_pred).
+   Размерные условия НЕ меняются.
+3. **Ожидаемый live-результат:** заголовок tvName (clickable=false) →
+   F2 пропускает → generic-путь = старая пилюля 114 (left-anchored
+   fit-to-text ~461×94, RU «по дороге на работу» читаем, CJK покрыт,
+   обычный радиус, не овал); кнопки «Добавить» (clickable=true) —
+   hug 1:1 без изменений.
+4. **Доказательство:** множество F2-кандидатов только УМЕНЬШАЕТся
+   (конъюнкт) — baseline-зонд 0/1368 остаётся 0 (ни один baseline-узел
+   не проходит размерные условия — зонд уже доказал); probe:
+   tvName-нода (clickable=False) → path≠F2, tvAction-нода
+   (clickable=True) → path=F2.
+5. **Не миксуем:** (F), T-44, T-45, размерные условия F2. Билд 116 =
+   115 + только clickable.
+
+**Gates:**
+1. **Offline:** self-diff 171/171 + full sweep PASS exit=0 (8d);
+   probe (mirror): tvName (clickable=False) path≠F2 w≈461-й путь,
+   tvAction (clickable=True) path=F2 w=206 h=79.
+2. **Build 116** (2.10.64), install + rebind.
+3. **Live-гейт (решающий):** SceneHome «моя сцена» — заголовки
+   карточек: обычная прямоугольная пилюля (RU полностью читается,
+   left-anchored, CJK покрыт, НЕ овал); кнопки «Добавить» — hug 1:1
+   без дельты (T-46 не регресснул). Остальные пилюли экрана без
+   дельты.
+4. **Регрессия 1 прогон (закрывает T-46 gate 4 + T-44 gate 4 + T-45
+   gate 4 + T-39b хвост):** share-car scrolled (h=62) + expanded (4/4)
+   + ChargeStatisticsMonth (retry в stadium) + settings_car (обе
+   title) + mashina-top (16/16 ser_t0).
+
+**Откат:** `git checkout` TranslationService + IOM + mirror +
+build.gradle; DESIGN «ИТОГ T-47: форма отклонена». Порядок: контракт
+→ service+IOM+mirror → offline → live 3/4.
