@@ -5094,5 +5094,9 @@
   "提供官方活动参与服务": "Official event participation",
   "提供用户内容发布和内容查看服务": "Content publishing & viewing",
   "用于创建多对一管家服务群，以及解答用户咨询": "1-on-1 concierge group and support",
-  "用于向用户推荐同城的车友会": "Recommend local owners' clubs"
+  "用于向用户推荐同城的车友会": "Recommend local owners' clubs",
+  "其他号码登录": "Log in with another number",
+  "和本地活动，以及在车控功能中支持蓝牙钥匙、提供精准导航和准确显示车辆状态": "and local events, and supports Bluetooth keys in the vehicle control functions, providing precise navigation and accurate vehicle status display",
+  "自动登录失败，请使用其他方式登录！": "Auto login failed. Please log in with another method!",
+  "需要您的同意，深蓝汽车才能访问您的%1$s来展示附近%2$s%3$s。": "With your consent, Deepal can access your %1$s to show you nearby %2$s%3$s."
 }

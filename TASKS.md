@@ -6,6 +6,36 @@
 dark_overlay=off).
 
 ## Активные
+- **Т-50. Deepal v1.10.4 (code 1916) — новая версия приложения (10-30;
+  билд 120/2.10.68; live-гейт ПЕНДИНГ — телефон оффлайн).**
+  Словарь +4 (EN 5096→5100, RU 5097→5101): 其他号码登录, хвост
+  описания (…和本地活动…蓝牙钥匙…), 自动登录失败…, шаблон согласия
+  %1$s/%2$s/%3$s (深蓝=Deepal, форматтеры 1:1) — Google-сырьё
+  вычищено вручную (LLM-API 10.0.0.128:11434 недоступен). GONE 448
+  не удаляются (153 — в новые локали самого приложения: v1.10.4
+  впервые шлёт свою мультиязычную таблицу ru 493/en 586/ja 151…;
+  295 — Huawei-ADS/серверные строки не в string-таблице).
+  Версионный аудит (декомпы /tmp/deepal_res_dec → /tmp/deepal_res_v1104,
+  декомпы live в /tmp — артефакты: /tmp/opencode/verdiff/):
+  8169→8200 id (+38/−7), 11 новых/10 удалённых layout (coupons-
+  экосистема ушла), 486 реально изменились (FloatingAdTipsView в
+  activity_main gone, parking-photos). **view_profiles.json: 0
+  изменений** — (1) 3 id приобрели sp (tvCouponNeedNum 11/tvCouponDes
+  12/banner_title 20), в профиле sp=None → рантайм 0 изменений (дано
+  для T-38b-кюрации); (2) tv_charging_title/tv_car_purchase_title
+  20 vs 18 = намеренный T-48 override, НЕ регрессия; (3) 17
+  startLock-flips = только новые/изменённые layout (viewTop/tvCount —
+  parking-photos), golden-скрины от профиля не зависят; (4) 7
+  профиль-идов исчезли (coupons) — мёртвые, lookup-безопасны.
+  Gates: self-diff 171/171 + sweep PASS exit=0 (0 unknown).
+  **Live-гейт (когда телефон вернётся):** поставить Deepal v1.10.4 +
+  билд 120 → регрессия 1 прогон (mashina-top 16/16, SceneHome 12/12,
+  share-car expanded 4/4, ChargeStatistics 3/3 retry [309,1307,342,85],
+  settings_car 18/18, сервис-заголовки T-48 212×89/344×89/431×92,
+  T-49 статусы 245×80/244×76) + новые экраны: логин (4 новые строки
+  RU читаются), parking-photos (новые id → heuristic-fallback,
+  пилюли валидны, CJK покрыт), main-экран (FloatingAdTipsView
+  gone — не интерферирует).
 - **Т-35. DP-рефакторинг `computeLayout` по списку sweep — ЗАВЕРШЁН (10-22,
   milestone закрыт; plan-артефакт — DESIGN.md «ПЛАН DP-РЕФАКТОРИНГА
   (10-22)»).** Формулировка финального состояния: dp-рефакторинг

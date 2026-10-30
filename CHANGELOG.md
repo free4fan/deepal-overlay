@@ -1,5 +1,70 @@
 # Changelog
 
+## v2.10.68 (10-30) — Deepal v1.10.4 (code 1916): словарь +4, версионный аудит (профиль не тронут)
+**Запрос (10-30):** вышла новая версия приложения Deepal —
+`deepal.com.cn.app v1.10.4` (versionCode 1916); наш артефакт-базис
+— v1.10.2 (1914) (1915 в артефактах не было).
+**Словарь (data-only, код не тронут):** 4 новые CJK-строки:
+`其他号码登录` → «Log in with another number» / «Вход с другим
+номером»; хвост описания возможностей (…和本地活动…蓝牙钥匙…) →
+«…and local events, and supports Bluetooth keys…» / «…и локальные
+мероприятия, а также поддерживает Bluetooth-ключи…»;
+`自动登录失败，请使用其他方式登录！` → «Auto login failed. Please
+log in with another method!» / «Автоматический вход не удался.
+Пожалуйста, войдите другим способом!»; шаблон согласия
+`需要您的同意，深蓝汽车才能访问您的%1$s来展示附近%2$s%3$s。` →
+«With your consent, Deepal can access your %1$s to show you
+nearby %2$s%3$s.» / «Чтобы показывать вам ближайшие %2$s%3$s,
+Deepal с вашего согласия получит доступ к %1$s.» — бренд `深蓝` =
+**Deepal** (правило improve-промпта), форматтеры 1:1, plain text.
+EN 5096→5100, RU 5097→5101. Google-перевод вычищен вручную
+(бренд «Deep Blue» → Deepal, RU-согласование с плейсхолдерами).
+**GONE 448 — не удаляем** (практика с v2.10.12): 153 значения
+ушли в новые локали самого приложения (v1.10.4 впервые шлёт
+собственную мультиязычную таблицу: ru 493, en 586, ja 151, …;
+из них — zh-родитель 54, zh-rHK 60, ja 39), 295 не в
+string-таблице APK (Huawei-ADS-партнёрские строки, серверные/
+H5-runtime-строки) — словарь-суперсет, lookup-уменьшения нет.
+Форматированные значения (%n$s после подстановки) идут через
+runtime-Google-фолбэк — по дизайну, как остальные %-ключи.
+**Версионный аудит v1.10.2→v1.10.4 (декомпы `/tmp/deepal_res_dec`
+→ `/tmp/deepal_res_v1104` + `tools/decompile_ids.py`):**
+8169→8200 layout-идов (+38/−7); 11 новых layout (parking-photos,
+scene update dialog, origin web events, floating ad), 10 удалено
+(coupons-экраны — `activity_my_coupons` и family); 486 layout
+реально изменились после отсечения apktool-шумов кодирования
+(fill_parent↔match_parent, dip↔dp, #rgb-расширение) — широкое
+обновление: FloatingAdTipsView-виджет (новый, `activity_main`,
+visibility=gone), parking-photos-фича, диалог-семьи. Runtime-факты
+(sp/sl читаются из `view_profiles.json`, **не пересчитываются
+от APK**; layout-XML рантайм не читает — только a11y-rect):
+(1) 3 id приобрели определённый sp (tvCouponNeedNum 11.0 /
+tvCouponDes 12.0 / banner_title 20.0) — в профиле у них sp=None
+→ рантайм их sp не читает → 0 изменения поведения (данный для
+будущей кюрации профиля, T-38b-семья); (2) sp-несоответствия
+tv_charging_title/tv_car_purchase_title (профиль 20.0 vs
+decompile 18.0) = **намеренный T-48 override** (18→20, решение
+пользователя — унификация сервис-заголовков), НЕ регрессия;
+(3) startLock-flips 17 = только НОВЫЕ экраны, делящие id
+(viewTop/tvCount — parking-photos-лейауты; `et_input` 1→1 тот же
+файл) — golden-экраны не тронуты; (4) 7 профиль-идов исчезли из
+APK (llRecord, emptyLayout, tvTimes, tv_sfj_name, tvRecordTitle,
+tabRecyclerView, dialogProgress — coupons-экосистема) — мёртвые
+записи, lookup-безопасны. **view_profiles.json: 0 изменений**
+(перезапись профиля = отдельный контракт).
+**Gates:** self-diff 171/171 (словарь вне геометрии — инвариант
+по построению), sweep PASS exit=0 (0 unknown, 4 known-bounded
+KNOWN_LIMITS, 39 mirror model-boundary). Билд 120/2.10.68, md5
+`c692e18ccd360c646c192ba301ac7486` (aapt2: 120/2.10.68 ✓, словарь
+5100/5101 в assets ✓).
+**Live (PENDING — телефон оффлайн, adb 0 устройств):** поставить
+Deepal v1.10.4 + билд 120 → регрессия 1 прогон канонических
+экранов (mashina-top 16/16, SceneHome 12/12, share-car expanded
+4/4, ChargeStatistics 3/3 retry [309,1307,342,85], settings_car
+18/18, сервис-заголовки T-48 класс 212×89/344×89/431×92) +
+новые экраны: логин (4 новые строки RU), parking-photos (новые
+id → heuristic-fallback по дизайну).
+
 ## v2.10.66 (10-29) — T-49: Настройки разрешений — микро-шрифт статуса → «Авторизован / Не авторизован»
 **Запрос (10-29, live):** на «Настройки разрешений» (SetPrivilegeV1Activity)
 статус «Несанкционированный» рендерится микро-шрифтом fs21 в 259px-колонке;
