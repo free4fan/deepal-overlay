@@ -537,6 +537,19 @@ public class InlineOverlayManager {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             android.graphics.PixelFormat.TRANSLUCENT);
 
+        // T-51 (11-02): the app draws edge-to-edge, so a pill node can sit
+        // in the display-cutout band (shop 商城 title: node y=128, the
+        // cutout safe inset is 153 on the Pixel 9 Pro). The default cutout
+        // mode clamps the window to y=153 — WM placed the requested
+        // (51,112) at (51,153) and the slab rendered 41px BELOW the CJK
+        // (its top poked out above the pill). A trusted overlay may opt
+        // into the cutout area; the pill is NOT_TOUCHABLE and transparent,
+        // so drawing under the camera hole is harmless.
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            params.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        }
+
         params.x = parseX(spec.key) + layout.dx;
         params.y = parseY(spec.key) + layout.dy;
         params.gravity = Gravity.TOP | Gravity.START;
