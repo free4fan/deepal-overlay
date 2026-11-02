@@ -1,0 +1,13 @@
+run=t50_v1104_20261102 dev=192.168.4.124:34371 ts=2026-11-02T07:58:31Z
+overlay=versionName=2.10.68 mode=interactive
+screen=mashina_top pills=18 a11y=141 shot=556130
+screen=mashina_scroll pills=20 a11y=115 shot=569160
+screen=trip_info pills=20 a11y=115 shot=567213
+screen=dialog_keyless pills=4 a11y=13 shot=228267
+screen=service_deepal_grid pills=14 a11y=97 shot=586025
+screen=service_acc pills=15 a11y=80 shot=534514
+screen=my_tab pills=33 a11y=127 shot=287849
+screen=settings_car pills=18 a11y=64 shot=174544
+screen=notifications pills=11 a11y=44 shot=167778
+screen=explore pills=19 a11y=127 shot=2165008
+screen=shop pills=8 a11y=48 shot=208676
