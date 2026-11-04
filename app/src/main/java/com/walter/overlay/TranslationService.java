@@ -139,6 +139,16 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     };
     private android.widget.TextView toggleButton;
     private android.view.WindowManager toggleWm;
+    // Drag state (T-53): finger position and window corner at DOWN. MOVE
+    // places the window ABSOLUTELY from this anchor (updateViewLayout
+    // applies async, so per-event deltas accumulated on the window would
+    // drift); dragMoved separates a real drag from a tap; dragBoundW/H
+    // freeze the screen bounds for the gesture (rotation mid-drag is
+    // exotic — the next setup re-clamps).
+    private float dragAnchorRawX, dragAnchorRawY;
+    private int dragAnchorWinX, dragAnchorWinY;
+    private boolean dragMoved;
+    private int dragBoundW, dragBoundH;
     private ExecutorService translateExecutor;
     private final Runnable retryRunnable = this::retryOverlaysIfNeeded;
     private long lastNotificationTime = 0;
@@ -524,6 +534,14 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
     }
 
+    // Persisted drag position (T-53): window top-left corner in px,
+    // absolute screen coords (Gravity.TOP|LEFT). Both -1 = never dragged
+    // -> default top-right spot. Saved on every drag release so the spot
+    // survives service restarts/reboots — T-52 reconnects happen often
+    // and the button must not snap back to the corner every time.
+    private static final String PREF_TOG_X = "toggle_x";
+    private static final String PREF_TOG_Y = "toggle_y";
+
     private void setupToggleButton() {
         if (!Settings.canDrawOverlays(this)) {
             Log.w(TAG, "No overlay permission, skipping toggle button");
@@ -541,28 +559,99 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                 android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 android.graphics.PixelFormat.TRANSLUCENT);
-            params.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
-            params.x = (int)(20 * dm.density);
-            params.y = (int)(120 * dm.density);
+            // Absolute coords (TOP|LEFT): a drag rewrites params.x/y
+            // directly; with the old TOP|END offsets the offset would have
+            // to be re-derived on every move.
+            params.gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
 
-            toggleButton.setOnClickListener(v -> {
-                translationEnabled = !translationEnabled;
-                updateToggleButtonAppearance();
-                getSharedPreferences("deepal", MODE_PRIVATE)
-                    .edit().putBoolean("translation_enabled", translationEnabled).apply();
-                if (!translationEnabled) {
-                    mainHandler.post(() -> {
-                        if (inlineManager != null) inlineManager.clearAll();
-                    });
-                    updateNotification("Translation OFF");
-                } else {
-                    updateNotification("Translation ON");
+            // Real screen: the service's resource context reports WINDOW
+            // metrics (system bars subtracted — see realDisplaySize),
+            // while the overlay lives in the full-display space.
+            int[] screen = new int[2];
+            realDisplaySize(screen);
+
+            // Restored drag position, clamped to the CURRENT screen
+            // (rotation / a larger screen in an older build). First run:
+            // the former spot (20dp from the right edge, 120dp from top).
+            SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+            int savedX = prefs.getInt(PREF_TOG_X, -1);
+            int savedY = prefs.getInt(PREF_TOG_Y, -1);
+            if (savedX < 0 || savedY < 0) {
+                savedX = screen[0] - size - (int)(20 * dm.density);
+                savedY = (int)(120 * dm.density);
+            }
+            params.x = Math.max(0, Math.min(savedX, screen[0] - size));
+            params.y = Math.max(0, Math.min(savedY, screen[1] - size));
+
+            // Drag + tap in one listener: a press moving beyond the slop
+            // drags the window; a press that doesn't move is the former
+            // click (toggle).
+            final int slop = (int)(10 * dm.density);
+            toggleButton.setOnTouchListener((v, ev) -> {
+                switch (ev.getActionMasked()) {
+                    case android.view.MotionEvent.ACTION_DOWN:
+                        dragAnchorRawX = ev.getRawX();
+                        dragAnchorRawY = ev.getRawY();
+                        dragAnchorWinX = params.x;
+                        dragAnchorWinY = params.y;
+                        dragMoved = false;
+                        int[] b = new int[2];
+                        realDisplaySize(b);
+                        dragBoundW = b[0];
+                        dragBoundH = b[1];
+                        return true;
+                    case android.view.MotionEvent.ACTION_MOVE: {
+                        if (!dragMoved
+                            && Math.abs(ev.getRawX() - dragAnchorRawX) < slop
+                            && Math.abs(ev.getRawY() - dragAnchorRawY) < slop) {
+                            return true;
+                        }
+                        dragMoved = true;
+                        params.x = Math.max(0, Math.min(
+                            dragAnchorWinX + (int)(ev.getRawX() - dragAnchorRawX),
+                            dragBoundW - size));
+                        params.y = Math.max(0, Math.min(
+                            dragAnchorWinY + (int)(ev.getRawY() - dragAnchorRawY),
+                            dragBoundH - size));
+                        toggleWm.updateViewLayout(toggleButton, params);
+                        return true;
+                    }
+                    case android.view.MotionEvent.ACTION_UP:
+                    case android.view.MotionEvent.ACTION_CANCEL:
+                        if (dragMoved) {
+                            // Remember the spot (already clamped in MOVE)
+                            getSharedPreferences("deepal", MODE_PRIVATE)
+                                .edit().putInt(PREF_TOG_X, params.x)
+                                .putInt(PREF_TOG_Y, params.y).apply();
+                        } else if (ev.getActionMasked() == android.view.MotionEvent.ACTION_UP) {
+                            toggleTranslation();
+                        }
+                        return true;
+                    default:
+                        return false;
                 }
             });
 
             toggleWm.addView(toggleButton, params);
         } catch (Exception e) {
             Log.e(TAG, "Toggle button failed: " + e.getMessage());
+        }
+    }
+
+    // The former click body (reached from a no-move touch on the draggable
+    // button, T-53)
+    private void toggleTranslation() {
+        translationEnabled = !translationEnabled;
+        updateToggleButtonAppearance();
+        getSharedPreferences("deepal", MODE_PRIVATE)
+            .edit().putBoolean("translation_enabled", translationEnabled).apply();
+        if (!translationEnabled) {
+            mainHandler.post(() -> {
+                if (inlineManager != null) inlineManager.clearAll();
+            });
+            updateNotification("Translation OFF");
+        } else {
+            updateNotification("Translation ON");
         }
     }
 
