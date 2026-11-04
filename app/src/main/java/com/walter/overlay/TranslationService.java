@@ -41,6 +41,12 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private static final long DEBOUNCE_MS = 350;
     private static final long[] FOLLOW_UP_SCAN_DELAYS = {400, 1200, 2500};
     private static TranslationService instance;
+    // True until the first onServiceConnected of this process. The OS
+    // kill / reboot that dies the process resets it (statics can't
+    // survive the death), so it marks "genuinely new process" for the
+    // ON->OFF reset below: a same-process service rebind must not wipe
+    // an explicit in-session toggle (T-52).
+    private static boolean firstConnectThisProcess = true;
 
     private InlineOverlayManager inlineManager;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -174,9 +180,38 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         inlineManager = new InlineOverlayManager(this, startLockedIds,
             viewProfiles, alignClassifier);
 
-        // Read saved translation state
+        // Read saved translation state. The system auto-rebinds an
+        // enabled accessibility service after a reboot or an OS process
+        // kill — no user action (the app has no other auto-start path:
+        // no BOOT receiver, alarms or WorkManager). ON is an explicit
+        // user act and must not resurrect on its own, so the state
+        // survives a restart ONLY after a clean stop:
+        //  - session_alive is set here and cleared in onDestroy. A clean
+        //    stop (Quit, a11y-settings toggle) removes it; an unclean
+        //    death (kill/reboot, no onDestroy) leaves it true.
+        //  - on the first connect of a NEW process,
+        //    session_alive && translation_enabled -> reset to OFF (T-52).
+        //    (v2.10.2 fixed only the OFF half of this contract.)
+        //  - firstConnectThisProcess keeps a same-process rebind from
+        //    wiping an explicit in-session toggle.
+        //  - app_opened_service_down is the activity's one-shot flag:
+        //    the app was opened while the service was down. Opening the
+        //    app IS the explicit enable (spec v2.10.2), so that connect
+        //    keeps ON. Consumed here, also cleared in onDestroy.
         SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+        boolean firstConnect = firstConnectThisProcess;
+        firstConnectThisProcess = false;
+        boolean appOpenedServiceDown = prefs.getBoolean("app_opened_service_down", false);
+        if (appOpenedServiceDown) prefs.edit().remove("app_opened_service_down").apply();
+        boolean prevSessionAlive = prefs.getBoolean("session_alive", false);
         translationEnabled = prefs.getBoolean("translation_enabled", false);
+        if (firstConnect && prevSessionAlive && translationEnabled && !appOpenedServiceDown) {
+            translationEnabled = false;
+            prefs.edit().putBoolean("translation_enabled", false).apply();
+            Log.i(TAG, "Service restarted by system after unclean stop: "
+                + "translation reset to OFF");
+        }
+        prefs.edit().putBoolean("session_alive", true).apply();
 
         if (translationEnabled) {
             updateNotification("Ready — open Deepal");
@@ -1267,11 +1302,20 @@ public class TranslationService extends android.accessibilityservice.Accessibili
 
     // Called from MainActivity.onResume: opening the app is the explicit
     // "turn translation back on" action (spec v2.10.2: «включён явно —
-    // открытие приложения или кнопка»). Off state survives service restarts
-    // until the user opens the app again — that is intentional, not sticky.
-    public static void reactivate() {
+    // открытие приложения или кнопка»). T-52 state contract: after an
+    // unclean service death (OS kill / reboot) the next connect resets
+    // ON -> OFF — EXCEPT when the app itself was opened while the service
+    // was down: the connect races this launch, so on instance==null we
+    // write the one-shot app_opened_service_down flag that keeps that
+    // connect's ON. While the service stays alive, ON persists across
+    // service restarts — that is intentional, not sticky.
+    public static void reactivate(android.content.Context ctx) {
         TranslationService s = instance;
-        if (s == null) return;
+        if (s == null) {
+            ctx.getSharedPreferences("deepal", android.content.Context.MODE_PRIVATE)
+                .edit().putBoolean("app_opened_service_down", true).apply();
+            return;
+        }
         if (!s.translationEnabled) {
             s.translationEnabled = true;
             s.getSharedPreferences("deepal", MODE_PRIVATE)
@@ -1306,6 +1350,14 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     public void onDestroy() {
         super.onDestroy();
         instance = null;
+        // Clean stop: the persisted translation state may survive the
+        // next connect (e.g. the user re-enabled the service in a11y
+        // settings). An unclean death (kill/reboot) never reaches here,
+        // so session_alive stays true and the next process's first
+        // connect resets ON -> OFF (T-52).
+        getSharedPreferences("deepal", MODE_PRIVATE)
+            .edit().putBoolean("session_alive", false)
+            .remove("app_opened_service_down").apply();
         mainHandler.removeCallbacks(retryRunnable);
         mainHandler.removeCallbacks(trailingScan);
         mainHandler.removeCallbacks(watchdogScan);

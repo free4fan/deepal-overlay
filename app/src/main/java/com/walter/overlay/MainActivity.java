@@ -198,7 +198,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        TranslationService.reactivate();
+        // reactivate() flags the app-open for the in-flight service
+        // connect (instance==null, T-52 race) and turns translation on
+        // when the service is already connected
+        TranslationService.reactivate(this);
         refreshStatus();
     }
 
