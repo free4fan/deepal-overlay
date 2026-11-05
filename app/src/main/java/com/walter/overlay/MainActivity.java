@@ -25,7 +25,7 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
     private MaterialButton accBtn, grantOverlayBtn, openDeepalBtn, testOverlayBtn;
-    private MaterialButton quitKeepAccBtn, quitDisableAccBtn;
+    private MaterialButton quitKeepAccBtn, quitDisableAccBtn, githubBtn;
     private MaterialCardView actionsCard;
     private ImageView accIcon, overlayIcon;
     private TextView accStatusLabel, overlayStatusLabel;
@@ -40,12 +40,14 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         ((MaterialToolbar) findViewById(R.id.toolbar)).setSubtitle("v" + BuildConfig.VERSION_NAME);
+        ((TextView) findViewById(R.id.aboutVersion)).setText("v" + BuildConfig.VERSION_NAME);
 
         accBtn = findViewById(R.id.accBtn);
         quitKeepAccBtn = findViewById(R.id.quitKeepAccBtn);
         quitDisableAccBtn = findViewById(R.id.quitDisableAccBtn);
         openDeepalBtn = findViewById(R.id.openDeepalBtn);
         testOverlayBtn = findViewById(R.id.testOverlayBtn);
+        githubBtn = findViewById(R.id.githubBtn);
         actionsCard = findViewById(R.id.actionsCard);
         grantOverlayBtn = findViewById(R.id.grantOverlayBtn);
         MaterialSwitch scanAllSwitch = findViewById(R.id.scanAllSwitch);
@@ -112,6 +114,15 @@ public class MainActivity extends AppCompatActivity {
                 }, 3000);
             } catch (Exception e) {
                 Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+
+        githubBtn.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://github.com/free4fan/deepal-overlay")));
+            } catch (Exception e) {
+                Toast.makeText(this, R.string.error_prefix + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
 

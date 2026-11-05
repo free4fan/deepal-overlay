@@ -42,4 +42,9 @@
     <string name="dark_overlay">Полупрозрачный оверлей</string>
     <string name="dark_overlay_desc">Оверлеи с коэффициентом 0.8 — мягче для глаза, CJK под пилюлей слегка просвечивает</string>
 
+    <!-- About card -->
+    <string name="about_title">О программе</string>
+    <string name="about_desc">Переводит китайский интерфейс приложения Deepal на английский или русский в реальном времени. Работает через сервис доступности: перевод рисуется плашками поверх оригинального текста; плавающую кнопку ON/OFF можно перетаскивать по экрану.</string>
+    <string name="about_github">Открыть GitHub</string>
+
 </resources>

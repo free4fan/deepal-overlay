@@ -42,4 +42,9 @@
     <string name="dark_overlay">Translucent overlay</string>
     <string name="dark_overlay_desc">Render overlays at 0.8 opacity — softer on the eyes, CJK under the pill shows through slightly</string>
 
+    <!-- About card -->
+    <string name="about_title">About</string>
+    <string name="about_desc">Translates the Chinese interface of the Deepal car app into English or Russian in real time. Runs as an accessibility service: translations are drawn as pills over the original text; the floating ON/OFF button can be dragged anywhere on the screen.</string>
+    <string name="about_github">View on GitHub</string>
+
 </resources>
