@@ -6,6 +6,29 @@
 dark_overlay=off).
 
 ## Активные
+- **Т-55. Код-ревью T-52/53/54 (ub-mode, 11-20) — ЗАКРЫТО (11-20,
+  device-верификация).** (1) Баг T-54: `R.string.error_prefix +
+  e.getMessage()` в fallback-toast = int-ресурс-ид + строка →
+  «2131558402: ...» — исправлено getString() (паттерн 116). (2) T-53:
+  окно кнопки без layoutInDisplayCutoutMode=ALWAYS (T-51 класс) — drag
+  в cutout-полосу (y<153) + рестарт → отрисовка со смещением; флаг
+  добавлен. (3) Регрессия из п.5, пойманная live: поле prefs в
+  MainActivity инициализировалось после applyTheme()/applyLocale()
+  (36-37 vs 67) → NPE на старте (FATAL); фикс — инициализация в первой
+  строке onCreate, дубль удалён. (4) Рефакторинг: чистая
+  `computeInitialState(...)` (статик, пакет-private) — решение T-52
+  «старт ON/OFF» из onServiceConnected (CRAP~22); perist/log от дельты.
+  (5) Первые unit-тесты проекта: TranslationServiceTest 6/6 (truth table
+  16/16 + именованные случаи; junit:4.13.2 оффлайн). (6) Единое поле
+  prefs (17→2 getSharedPreferences). Gates: testDebugUnitTest 6/6 PASS;
+  build 125/2.10.73 чисто (md5 `6a274d35b96cc02ac2cf15e62b890d9e`).
+  **Live (125):** краш п.3 пойман на живом (12:57 FATAL при старте) →
+  фикс → чистый старт, reactivate ON, кнопка пиксель-в-пиксель
+  [847,239] (=prefs); drag в cutout-полосу → frame [847,58] (top 58<153,
+  до фикса кламп) + toggle_y=58; нечистый килл + T-50-ребинд (флаги
+  null/0 → полная строка settings put, как в прошлый раз) →
+  `translation reset to OFF` (T-52) + открытие приложения → кнопка
+  пиксель-в-пиксель [847,58] в cutout-полосе, без смещения.
 - **Т-54. Секция «О программе» со ссылкой на GitHub (11-05, запрос
   пользователя; билд 124/2.10.72) — ЗАКРЫТО (11-05, device-верификация).**
   Новая карточка в самом низу MainActivity (под кнопками выхода — по

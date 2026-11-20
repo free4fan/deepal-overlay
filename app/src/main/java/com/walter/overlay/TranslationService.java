@@ -47,6 +47,32 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     // ON->OFF reset below: a same-process service rebind must not wipe
     // an explicit in-session toggle (T-52).
     private static boolean firstConnectThisProcess = true;
+    // One handle to the app-wide prefs file ("deepal", shared with
+    // MainActivity). Initialized in onServiceConnected before any consumer
+    // runs; the static accessors (reactivate/...) gate on instance != null,
+    // which is set right before this.
+    private SharedPreferences prefs;
+    // T-52 state contract (T-55: extracted from onServiceConnected as a
+    // pure function — the ONE decision in the ON/OFF lifecycle, now
+    // testable without a device). The OS auto-rebinds an enabled
+    // accessibility service after a reboot or a process kill with no user
+    // action, so ON may survive a restart ONLY after a clean stop:
+    //  - firstConnect: first onServiceConnected of a NEW process (the OS
+    //    death resets the static; a same-process rebind must not wipe an
+    //    explicit in-session toggle).
+    //  - sessionAlive: the previous run ended WITHOUT onDestroy (unclean
+    //    death: kill / reboot).
+    //  - enabled: persisted translation state.
+    //  - appOpenedServiceDown: the activity was launched while the service
+    //    was down — opening the app IS the explicit enable (spec v2.10.2).
+    // Returns the translation state the next connect should start with.
+    static boolean computeInitialState(boolean firstConnect, boolean sessionAlive,
+                                        boolean enabled, boolean appOpenedServiceDown) {
+        if (firstConnect && sessionAlive && enabled && !appOpenedServiceDown) {
+            return false; // unclean system restart: ON was not an explicit act
+        }
+        return enabled;
+    }
 
     private InlineOverlayManager inlineManager;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -190,34 +216,25 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         inlineManager = new InlineOverlayManager(this, startLockedIds,
             viewProfiles, alignClassifier);
 
-        // Read saved translation state. The system auto-rebinds an
-        // enabled accessibility service after a reboot or an OS process
-        // kill — no user action (the app has no other auto-start path:
-        // no BOOT receiver, alarms or WorkManager). ON is an explicit
-        // user act and must not resurrect on its own, so the state
-        // survives a restart ONLY after a clean stop:
-        //  - session_alive is set here and cleared in onDestroy. A clean
-        //    stop (Quit, a11y-settings toggle) removes it; an unclean
-        //    death (kill/reboot, no onDestroy) leaves it true.
-        //  - on the first connect of a NEW process,
-        //    session_alive && translation_enabled -> reset to OFF (T-52).
-        //    (v2.10.2 fixed only the OFF half of this contract.)
-        //  - firstConnectThisProcess keeps a same-process rebind from
-        //    wiping an explicit in-session toggle.
-        //  - app_opened_service_down is the activity's one-shot flag:
-        //    the app was opened while the service was down. Opening the
-        //    app IS the explicit enable (spec v2.10.2), so that connect
-        //    keeps ON. Consumed here, also cleared in onDestroy.
-        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
+        // T-52: the state decision lives in computeInitialState (pure,
+        // unit-tested — see T-55); the markers: session_alive is set here
+        // and cleared in onDestroy (clean stop removes it, unclean death
+        // leaves it), app_opened_service_down is the activity's one-shot
+        // flag consumed here and also cleared in onDestroy.
+        prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         boolean firstConnect = firstConnectThisProcess;
         firstConnectThisProcess = false;
         boolean appOpenedServiceDown = prefs.getBoolean("app_opened_service_down", false);
         if (appOpenedServiceDown) prefs.edit().remove("app_opened_service_down").apply();
         boolean prevSessionAlive = prefs.getBoolean("session_alive", false);
-        translationEnabled = prefs.getBoolean("translation_enabled", false);
-        if (firstConnect && prevSessionAlive && translationEnabled && !appOpenedServiceDown) {
-            translationEnabled = false;
-            prefs.edit().putBoolean("translation_enabled", false).apply();
+        boolean persistedEnabled = prefs.getBoolean("translation_enabled", false);
+        translationEnabled = computeInitialState(firstConnect, prevSessionAlive,
+            persistedEnabled, appOpenedServiceDown);
+        if (translationEnabled != persistedEnabled) {
+            // Only the T-52 reset can diverge (the function never flips
+            // OFF->ON): the system restarted the service after an unclean
+            // stop — persist the decision (idempotent: no delta, no write)
+            prefs.edit().putBoolean("translation_enabled", translationEnabled).apply();
             Log.i(TAG, "Service restarted by system after unclean stop: "
                 + "translation reset to OFF");
         }
@@ -563,6 +580,12 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             // directly; with the old TOP|END offsets the offset would have
             // to be re-derived on every move.
             params.gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
+            // T-51 class: without this the WM clamps any window whose top
+            // is above the cutout band (y<153) and renders it lower than
+            // requested — and a dragged button can be parked up there, so
+            // the restored position would render offset from the drop spot.
+            params.layoutInDisplayCutoutMode =
+                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 
             // Real screen: the service's resource context reports WINDOW
             // metrics (system bars subtracted — see realDisplaySize),
@@ -573,7 +596,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             // Restored drag position, clamped to the CURRENT screen
             // (rotation / a larger screen in an older build). First run:
             // the former spot (20dp from the right edge, 120dp from top).
-            SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
             int savedX = prefs.getInt(PREF_TOG_X, -1);
             int savedY = prefs.getInt(PREF_TOG_Y, -1);
             if (savedX < 0 || savedY < 0) {
@@ -620,7 +642,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     case android.view.MotionEvent.ACTION_CANCEL:
                         if (dragMoved) {
                             // Remember the spot (already clamped in MOVE)
-                            getSharedPreferences("deepal", MODE_PRIVATE)
+                            prefs
                                 .edit().putInt(PREF_TOG_X, params.x)
                                 .putInt(PREF_TOG_Y, params.y).apply();
                         } else if (ev.getActionMasked() == android.view.MotionEvent.ACTION_UP) {
@@ -643,7 +665,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     private void toggleTranslation() {
         translationEnabled = !translationEnabled;
         updateToggleButtonAppearance();
-        getSharedPreferences("deepal", MODE_PRIVATE)
+        prefs
             .edit().putBoolean("translation_enabled", translationEnabled).apply();
         if (!translationEnabled) {
             mainHandler.post(() -> {
@@ -752,7 +774,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     // Whether overlays may be drawn over a window of this package
     private boolean isTargetPackage(String packageName) {
         if (packageName == null) return false;
-        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         return prefs.getBoolean("scan_all", false)
             || packageName.contains("deepal")
             || packageName.contains("changan")
@@ -767,7 +788,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
             root.getPackageName().toString() : "";
         activePackage = packageName;
 
-        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         int targetLang = prefs.getInt("target_lang", 0);
         boolean wordWrap = prefs.getBoolean("word_wrap", false);
         // T-41 (DESIGN.md): the "dark_overlay" pref is now the user's
@@ -1175,7 +1195,6 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
         translating = true;
 
-        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         int targetLang = prefs.getInt("target_lang", 0);
         final String langCode = (targetLang == 0) ? "en" : "ru";
 
@@ -1212,10 +1231,9 @@ public class TranslationService extends android.accessibilityservice.Accessibili
                     // the fixed pre-request bounds are stale, don't place them
                     if (epoch != scanEpoch) return;
                     if (!isTargetPackage(activePackage)) return;
-                    SharedPreferences p = getSharedPreferences("deepal", MODE_PRIVATE);
-                    boolean ww = p.getBoolean("word_wrap", false);
+                    boolean ww = prefs.getBoolean("word_wrap", false);
                     // T-41: "dark_overlay" = translucent-mode flag → window alpha
-                    float dk = p.getBoolean("dark_overlay", false)
+                    float dk = prefs.getBoolean("dark_overlay", false)
                         ? InlineOverlayManager.ALPHA_USER_TRANSPARENT : 1.0f;
                     float density = getResources().getDisplayMetrics().density;
                     for (TextNodeInfo n : done) {
@@ -1358,7 +1376,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
         translationEnabled = false;
-        getSharedPreferences("deepal", MODE_PRIVATE)
+        prefs
             .edit().putBoolean("translation_enabled", false).apply();
         if (inlineManager != null) inlineManager.clearAll();
         if (toggleButton != null && toggleWm != null) {
@@ -1375,7 +1393,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         TranslationService s = instance;
         if (s == null) return;
         s.translationEnabled = false;
-        s.getSharedPreferences("deepal", MODE_PRIVATE)
+        s.prefs
             .edit().putBoolean("translation_enabled", false).apply();
         if (s.inlineManager != null) s.inlineManager.clearAll();
         if (s.toggleButton != null && s.toggleWm != null) {
@@ -1407,7 +1425,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         }
         if (!s.translationEnabled) {
             s.translationEnabled = true;
-            s.getSharedPreferences("deepal", MODE_PRIVATE)
+            s.prefs
                 .edit().putBoolean("translation_enabled", true).apply();
         }
         s.updateNotification("Ready — open Deepal");
@@ -1421,7 +1439,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         TranslationService s = instance;
         if (s == null) return;
         s.translationEnabled = false;
-        s.getSharedPreferences("deepal", MODE_PRIVATE)
+        s.prefs
             .edit().putBoolean("translation_enabled", false).apply();
         if (s.inlineManager != null) s.inlineManager.clearAll();
         if (s.toggleButton != null && s.toggleWm != null) {
@@ -1444,7 +1462,7 @@ public class TranslationService extends android.accessibilityservice.Accessibili
         // settings). An unclean death (kill/reboot) never reaches here,
         // so session_alive stays true and the next process's first
         // connect resets ON -> OFF (T-52).
-        getSharedPreferences("deepal", MODE_PRIVATE)
+        prefs
             .edit().putBoolean("session_alive", false)
             .remove("app_opened_service_down").apply();
         mainHandler.removeCallbacks(retryRunnable);

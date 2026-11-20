@@ -33,6 +33,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // First: the theme/locale helpers below read prefs (T-55: they
+        // dropped their local lookups for this field)
+        prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         applyTheme();
         applyLocale();
         super.onCreate(savedInstanceState);
@@ -63,8 +66,6 @@ public class MainActivity extends AppCompatActivity {
         MaterialButton themeLight = findViewById(R.id.themeLight);
         MaterialButton themeDark = findViewById(R.id.themeDark);
         MaterialButton themeSystem = findViewById(R.id.themeSystem);
-
-        prefs = getSharedPreferences("deepal", MODE_PRIVATE);
 
         // Status icons
         accIcon = findViewById(R.id.accIcon);
@@ -122,7 +123,7 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(Intent.ACTION_VIEW,
                     Uri.parse("https://github.com/free4fan/deepal-overlay")));
             } catch (Exception e) {
-                Toast.makeText(this, R.string.error_prefix + e.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, getString(R.string.error_prefix) + e.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
 
@@ -274,7 +275,6 @@ public class MainActivity extends AppCompatActivity {
     // Build the new config from the current one: a bare Configuration() (the old
     // code) zeroed densityDpi and other fields after every language switch
     private void applyLocale() {
-        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         String lang = prefs.getString("ui_lang", "en");
         Locale locale = new Locale(lang);
         Locale.setDefault(locale);
@@ -285,7 +285,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyTheme() {
-        SharedPreferences prefs = getSharedPreferences("deepal", MODE_PRIVATE);
         String themeMode = prefs.getString("theme_mode", "system");
         switch (themeMode) {
             case "light":
